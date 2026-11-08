@@ -1,0 +1,11 @@
+// 职责：hvigor 构建器自身配置；不锁定任何本机绝对路径，保证工程可移植。
+// 依赖方向：hvigor 运行时与 @ohos/hvigor-ohos-plugin 由 command-line-tools 自带的 hvigor 提供（见 hvigor/hvigor-wrapper.js）。
+// 阶段：API 26（SDK 26.0.0.105）；modelVersion 5.0.0 与根/entry 的 oh-package.json5 保持一致。
+{
+  "modelVersion": "5.0.0",
+  "dependencies": {},
+  "execution": {},
+  "logging": {},
+  "debugging": {},
+  "nodeOptions": {}
+}

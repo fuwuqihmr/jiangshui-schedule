@@ -1,0 +1,41 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import {withStudyPolicy,resolveGrade} from '../web/study.mjs';import {effectiveDay,saveOverride,createState,applySnapshot,adoptSchoolSnapshot,saveCourseSettings} from '../web/core.mjs';
+const calendar=JSON.parse(await readFile(new URL('../web/data/holidays.json',import.meta.url),'utf8'));const base=JSON.parse(await readFile(new URL('../web/data/baseline.json',import.meta.url),'utf8'));
+const fresh=()=>withStudyPolicy(structuredClone(base),{enrollmentYear:2026},calendar,{studyPolicy:{userEnabled:true}});
+const study=(s,d,m=[])=>effectiveDay(s,d,[],m).filter(r=>r.localActivity);
+test('新安装默认关闭，升级保留原先开启的晚自习，显式关闭仍生效',()=>{
+ const disabled=withStudyPolicy(base,{enrollmentYear:2026},calendar);
+ assert.equal(disabled.studyPolicy.enabled,false);
+ assert.equal(study(disabled,'2026-10-12').length,0);
+ const old=withStudyPolicy(base,{enrollmentYear:2026},calendar,{studyPolicy:{enabled:true,userDisabled:false}});
+ assert.equal(old.studyPolicy.userEnabled,true);
+ assert.equal(study(old,'2026-10-12').length,1);
+ const optedOut=withStudyPolicy(base,{enrollmentYear:2026},calendar,{studyPolicy:{enabled:true,userEnabled:false,userDisabled:true}});
+ assert.equal(study(optedOut,'2026-10-12').length,0);
+ assert.equal(study(fresh(),'2026-10-12').length,1);
+});
+test('大一周日至周四晚自习19:00–20:30，周五六不排',()=>{const s=fresh();for(const d of ['2026-10-11','2026-10-12','2026-10-13','2026-10-14','2026-10-15']){const a=study(s,d);assert.equal(a.length,1);assert.equal(a[0].startTime,'19:00');assert.equal(a[0].endTime,'20:30');assert.equal(a[0].source,'local');}assert.equal(study(s,'2026-10-16').length,0);assert.equal(study(s,'2026-10-17').length,0);});
+test('未知年级和大二不凭课程名称猜测晚自习',()=>{assert.equal(study(base,'2026-10-12').length,0);const older=withStudyPolicy(base,{enrollmentYear:2025},calendar);assert.equal(study(older,'2026-10-12').length,0);assert.equal(resolveGrade(null,'2026-10-12'),null);});
+test('法定假日和学校停课日的晚自习默认仍显示，周日也可显示',()=>{const s=fresh();s.remaps=[{id:'m',date:'2026-10-01',fromDate:'2026-09-29',mode:'replace'}];assert.equal(study(s,'2026-10-01').length,1);assert.equal(study(s,'2026-09-27').length,1);s.closedDates=['2026-10-12'];assert.equal(study(s,'2026-10-12').length,1);});
+test('周六按周二调休加入晚自习，周日按周五调休仍默认显示',()=>{const s=fresh();const maps=[{id:'m1',date:'2026-10-10',fromDate:'2026-09-29',mode:'replace'},{id:'m2',date:'2026-10-11',fromDate:'2026-10-09',mode:'replace'}];const a=study(s,'2026-10-10',maps);assert.equal(a.length,1);assert.equal(a[0].originDate,'2026-09-29');assert.equal(study(s,'2026-10-11',maps).length,1);});
+test('append调休不生成重复晚自习，撤销调休恢复原周历',()=>{const s=fresh(),m=[{id:'m',date:'2026-10-12',fromDate:'2026-10-13',mode:'append'}];assert.equal(study(s,'2026-10-12',m).length,1);assert.equal(study(s,'2026-10-12').length,1);});
+test('学期外不排，跨年保留大一但标示未核实假日',()=>{const s=fresh();assert.equal(study(s,'2026-08-30').length,0);const a=study(s,'2027-01-03');assert.equal(a.length,1);assert.equal(a[0].studyCalendarUnknown,true);assert.equal(resolveGrade({enrollmentYear:2026},'2027-01-01'),1);assert.equal(resolveGrade({enrollmentYear:2026},'2027-09-01'),2);});
+test('晚自习可单日修改撤销，来源刷新保留年级和本地规则',()=>{const s=fresh(),state=createState(s),o=study(s,'2026-10-12')[0];const modified=saveOverride(state,o,{room:'本人指定教室'});assert.equal(effectiveDay(s,'2026-10-12',modified.overrides).find(x=>x.localActivity).room,'本人指定教室');const newer=applySnapshot(modified,structuredClone(base));assert.equal(newer.snapshot.studentProfile.enrollmentYear,2026);assert.equal(effectiveDay(newer.snapshot,'2026-10-12',newer.overrides).find(x=>x.localActivity).room,'本人指定教室');});
+test('首次采用学校课表保留晚自习开关和教室，同时重建学校基线',()=>{
+ const source=fresh(), old=createState(source), studyRow=study(source,'2026-10-12')[0];
+ const saved=saveCourseSettings(old,studyRow,{room:'C303'});saved._revision=5;saved.overrides=[{id:'old'}];saved.autoCheckEnabled=false;
+ const school=structuredClone(base);school.source={kind:'school',label:'学校教务系统 · 本机读取'};
+ const incoming=withStudyPolicy(school,null,calendar,saved.snapshot);
+ const next=adoptSchoolSnapshot(saved,incoming,'2026-10-11T12:00:00.000Z');
+ assert.equal(next._revision,5);assert.equal(next.autoCheckEnabled,false);assert.equal(next.snapshot.source.kind,'school');
+ assert.equal(next.snapshot.studyPolicy.userEnabled,true);assert.equal(next.snapshot.studentProfile.enrollmentYear,2026);
+ assert.equal(effectiveDay(next.snapshot,'2026-10-12',next.overrides,next.localMaps,next.courseSettings).find(r=>r.localActivity).room,'C303');
+ assert.deepEqual(next.overrides,[]);assert.deepEqual(next.events,[]);
+});
+test('学校正式晚课优先显示，关闭晚自习后历史单日修改不会把它重新生成',()=>{
+ const snapshot=fresh();snapshot.rules.push({id:'real-night',name:'学校晚课',teacher:'教师',room:'A301',weekday:1,weeks:[7],periods:[9,10,11],startTime:'19:00',endTime:'21:10'});
+ const monday='2026-10-12';assert.deepEqual(effectiveDay(snapshot,monday).map(r=>r.name),['学校晚课']);
+ const studyRow=study(fresh(),monday)[0],edited=saveOverride(createState(snapshot),studyRow,{room:'晚自习室'});
+ assert.deepEqual(effectiveDay(snapshot,monday,edited.overrides).map(r=>r.name),['学校晚课']);
+ const off=withStudyPolicy(snapshot,snapshot.studentProfile,calendar,{studyPolicy:{userEnabled:false}});
+ assert.deepEqual(effectiveDay(off,monday,edited.overrides).map(r=>r.name),['学校晚课']);
+});

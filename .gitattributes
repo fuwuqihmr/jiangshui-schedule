@@ -1,0 +1,68 @@
+# ================================================================
+# 江水课表 · Git 属性
+# 文本统一以 LF 入库；Windows 专用脚本保持 CRLF；二进制显式标记，
+# 避免 Git 把图片/安装包当作文本做换行转换或行级 diff。
+# ================================================================
+
+# 默认：自动识别文本，统一 LF（二进制检测仍然生效）
+* text=auto eol=lf
+
+# ---------- 二进制文件 ----------
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.bmp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.pdf binary
+*.zip binary
+*.7z binary
+*.rar binary
+*.gz binary
+*.apk binary
+*.aab binary
+*.hap binary
+*.har binary
+*.hsp binary
+*.jar binary
+*.aar binary
+*.class binary
+*.so binary
+*.dll binary
+*.exe binary
+*.msi binary
+*.jks binary
+*.keystore binary
+*.p12 binary
+*.pfx binary
+
+# ---------- Windows 脚本保持 CRLF ----------
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.iss text eol=crlf
+
+# ---------- 明确文本类型 ----------
+*.ets text
+*.mjs text
+*.cjs text
+*.js text
+*.java text
+*.json text
+*.json5 text
+*.xml text
+*.html text
+*.css text
+*.md text
+*.txt text
+*.py text
+*.gradle text
+*.properties text
+*.isl text
+*.sh text
+harmony/hvigorw text eol=lf

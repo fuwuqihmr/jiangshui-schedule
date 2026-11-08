@@ -1,0 +1,157 @@
+{
+  "version": 1,
+  "snapshot": {
+    "id": "2026-2027-1",
+    "name": "2026-2027 第一学期",
+    "startDate": "2026-08-31",
+    "weeks": 18,
+    "source": { "kind": "sample", "label": "fixture-edge" },
+    "closedDates": ["2026-10-01"],
+    "remaps": [
+      { "id": "map-1", "date": "2026-10-08", "fromDate": "2026-09-28", "mode": "replace" }
+    ],
+    "exceptions": [
+      { "date": "2026-09-28", "ruleId": "r-math", "cancel": true }
+    ],
+    "rules": [
+      {
+        "id": "r-math",
+        "name": "高等数学",
+        "teacher": "李老师",
+        "room": "A101",
+        "dayOfWeek": 1,
+        "weekday": 1,
+        "startPeriod": 1,
+        "endPeriod": 2,
+        "periods": [1, 2],
+        "weeks": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+        "startTime": "08:30",
+        "endTime": "09:55",
+        "cancelled": false,
+        "source": "school"
+      },
+      {
+        "id": "r-lab",
+        "name": "物理实验",
+        "teacher": "赵老师",
+        "room": "实验楼",
+        "dayOfWeek": 4,
+        "weekday": 4,
+        "startPeriod": 5,
+        "endPeriod": 6,
+        "periods": [5, 6],
+        "weeks": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+        "startTime": "14:00",
+        "endTime": "15:25",
+        "cancelled": false,
+        "source": "school"
+      }
+    ],
+    "studyPolicy": {
+      "enabled": true,
+      "userEnabled": true,
+      "userDisabled": false,
+      "profile": { "enrollmentYear": 2026 },
+      "holidayDates": ["2026-10-01"],
+      "verifiedYears": [2026],
+      "sourceLabel": "本人设置",
+      "startTime": "19:00",
+      "endTime": "20:30"
+    }
+  },
+  "events": [],
+  "overrides": [],
+  "localMaps": [
+    { "id": "local-map-1", "date": "2026-10-09", "fromDate": "2026-10-05", "mode": "replace" }
+  ],
+  "holidaySettings": {
+    "winter": { "startDate": "2026-12-28", "endDate": "2027-01-03" },
+    "summer": { "startDate": "2027-07-05", "endDate": "2027-08-29" },
+    "days": [{ "date": "2026-10-01", "skipStudy": true }]
+  },
+  "courseSettings": { "showEveningStudy": true, "grade": "大一" },
+  "customCourses": [
+    {
+      "id": "custom-1",
+      "mode": "weekly",
+      "name": "社团活动",
+      "teacher": "张老师",
+      "room": "活动室",
+      "startTime": "16:00",
+      "endTime": "17:00",
+      "semesterId": "2026-2027-1",
+      "semesterStartDate": "2026-08-31",
+      "startWeek": 1,
+      "endWeek": 18,
+      "weekPattern": "every",
+      "weekdays": [1]
+    },
+    {
+      "id": "custom-2",
+      "mode": "once",
+      "name": "讲座",
+      "teacher": "校外老师",
+      "room": "报告厅",
+      "startTime": "18:00",
+      "endTime": "19:00",
+      "date": "2026-09-28"
+    }
+  ],
+  "theme": "system",
+  "showDayOverview": false,
+  "settingsExpanded": { "auto": true, "display": false, "leave": false, "course": false, "data": false, "about": false },
+  "calendarOptions": { "school": true, "custom": true, "study": true },
+  "notificationEnabled": false,
+  "classReminders": { "enabled": true, "leadMinutes": 30 },
+  "autoCheckEnabled": true,
+  "lastSuccess": 0,
+  "lastAttempt": 0,
+  "error": null,
+  "leaveRecords": [
+    {
+      "id": "leave-1",
+      "type": "leave",
+      "status": "approved",
+      "startDate": "2026-09-28",
+      "startTime": "08:20",
+      "endDate": "2026-09-28",
+      "endTime": "10:05",
+      "reason": "示例",
+      "approver": "辅导员",
+      "comment": "同意",
+      "rawStatus": "已通过",
+      "semesterId": "2026-2027-1",
+      "demo": true
+    },
+    {
+      "id": "leave-2",
+      "type": "leave",
+      "status": "pending",
+      "startDate": "2026-09-28",
+      "startTime": "09:00",
+      "endDate": "2026-09-28",
+      "endTime": "11:00",
+      "reason": "待审批示例",
+      "approver": "",
+      "comment": "",
+      "rawStatus": "审批中",
+      "semesterId": "2026-2027-1",
+      "demo": true
+    },
+    {
+      "id": "leave-cancel",
+      "type": "cancel",
+      "status": "approved",
+      "startDate": "2026-09-28",
+      "startTime": "08:20",
+      "endDate": "2026-09-28",
+      "endTime": "10:05",
+      "reason": "销假不应标记课程",
+      "approver": "辅导员",
+      "comment": "同意",
+      "rawStatus": "已通过",
+      "semesterId": "2026-2027-1",
+      "demo": true
+    }
+  ]
+}

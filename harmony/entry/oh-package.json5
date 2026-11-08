@@ -1,0 +1,14 @@
+// 职责：entry 模块 ohpm 描述，依赖保持为空，禁止第三方包。
+// 依赖方向：无业务代码依赖；ohpm 仅用于官方工程元数据。
+// 阶段：P0 骨架；未编译，仅静态骨架。
+// 待确认：modelVersion 与 ohpm 字段以官方 API 12 模板为准。
+{
+  "modelVersion": "5.0.0",
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "江水课表 HarmonyOS entry 模块",
+  "main": "",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {}
+}

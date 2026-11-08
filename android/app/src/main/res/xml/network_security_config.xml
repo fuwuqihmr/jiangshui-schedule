@@ -1,0 +1,1 @@
+<network-security-config><base-config cleartextTrafficPermitted="false"/><domain-config cleartextTrafficPermitted="true"><domain>portal.juwp.edu.cn</domain><domain>jiaowu.juwp.edu.cn</domain><domain>jiaowuh5.juwp.edu.cn</domain></domain-config></network-security-config>

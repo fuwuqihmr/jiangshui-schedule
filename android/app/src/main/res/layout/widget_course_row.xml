@@ -1,0 +1,17 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_row_root" android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:orientation="horizontal" android:padding="5dp" android:gravity="center_vertical"
+    android:background="@drawable/widget_course_normal">
+    <LinearLayout android:layout_width="78dp" android:layout_height="wrap_content" android:orientation="vertical">
+        <TextView android:id="@+id/widget_row_time" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textColor="#4B6E84" android:textSize="10sp" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/widget_row_status" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textColor="#287FB0" android:textSize="10sp" android:maxLines="1" android:ellipsize="end" android:textStyle="bold" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+        <TextView android:id="@+id/widget_row_name" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textColor="#213746" android:textSize="12sp" android:textStyle="bold" android:maxLines="2" android:ellipsize="end" />
+        <TextView android:id="@+id/widget_row_meta" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textColor="#4B6E84" android:textSize="10sp" android:maxLines="2" android:ellipsize="end" />
+    </LinearLayout>
+</LinearLayout>

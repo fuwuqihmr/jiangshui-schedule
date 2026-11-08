@@ -1,0 +1,129 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="8dp">
+
+    <TextView
+        android:id="@+id/widget_brand"
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:background="@drawable/widget_header"
+        android:gravity="center_vertical"
+        android:paddingStart="9dp"
+        android:paddingEnd="9dp"
+        android:text="江水课表"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_date"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="今天"
+        android:textColor="#63819A"
+        android:textSize="10sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <TextView
+        android:id="@+id/widget_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="下节课"
+        android:textColor="#287FB0"
+        android:textStyle="bold"
+        android:textSize="11sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <LinearLayout
+        android:id="@+id/widget_content"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="center_vertical">
+
+        <LinearLayout
+            android:id="@+id/widget_current_block"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/widget_current_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="课程进行中"
+                android:textColor="#287FB0"
+                android:textStyle="bold"
+                android:textSize="11sp"
+                android:maxLines="1" />
+            <TextView
+                android:id="@+id/widget_current_course"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="课程名称"
+                android:textColor="#213746"
+                android:textStyle="bold"
+                android:textSize="12sp"
+                android:maxLines="2"
+                android:ellipsize="end" />
+            <TextView
+                android:id="@+id/widget_current_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="10:15–11:40&#10;B301&#10;[REDACTED-NAME]"
+                android:textColor="#4B6E84"
+                android:textSize="10sp"
+                android:maxLines="3"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_wide_divider"
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:layout_marginTop="4dp"
+            android:layout_marginBottom="4dp"
+            android:background="@drawable/widget_divider" />
+
+        <LinearLayout
+            android:id="@+id/widget_next_block"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/widget_next_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="下节课"
+                android:textColor="#63819A"
+                android:textStyle="bold"
+                android:textSize="11sp"
+                android:maxLines="1" />
+            <TextView
+                android:id="@+id/widget_next_course"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="课程名称"
+                android:textColor="#213746"
+                android:textStyle="bold"
+                android:textSize="12sp"
+                android:maxLines="2"
+                android:ellipsize="end" />
+            <TextView
+                android:id="@+id/widget_next_meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="15:45–17:10&#10;B301&#10;[REDACTED-NAME]"
+                android:textColor="#6F8797"
+                android:textSize="10sp"
+                android:maxLines="3"
+                android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

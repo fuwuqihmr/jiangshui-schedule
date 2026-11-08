@@ -1,0 +1,26 @@
+<resources>
+  <string name="webapp_file_result_lost">文件选择已返回，但页面已不再接收该附件，请重新选择附件</string>
+  <string name="webapp_file_state_expired">文件选择状态已失效，请重新选择附件</string>
+  <string name="webapp_restore_failed">请假页面未能恢复，请重新打开</string>
+  <string name="webapp_renderer_reloaded">页面已重新加载，请重新操作</string>
+  <string name="webapp_renderer_closed">请假页面连续崩溃，已关闭，请重新打开</string>
+  <string name="webapp_login_loading">正在加载学校登录页面…</string>
+  <string name="webapp_file_chooser_timeout">选择附件超时，请重试</string>
+  <string name="geo_service_off_title">系统定位未开启</string>
+  <string name="geo_service_off_message">系统定位未开启，无法获取当前位置。请到系统设置开启定位服务后重试。</string>
+  <string name="geo_service_off_note">系统定位未开启，无法获取当前位置</string>
+  <string name="geo_settings">去设置</string>
+  <string name="geo_cancel">取消</string>
+  <string name="geo_coarse_title">仅授予大致位置</string>
+  <string name="geo_coarse_message">当前仅授予大致位置，定位可能失败；如需精确位置，请到系统设置将位置权限改为精确。</string>
+  <string name="geo_coarse_continue">继续使用大致位置</string>
+  <string name="geo_coarse_enabled_note">已允许大致位置，正在等待学校页面读取位置…</string>
+  <string name="geo_fine_enabled_note">已允许定位，正在等待学校页面读取位置…</string>
+  <string name="geo_permission_denied_title">定位权限未开启</string>
+  <string name="geo_permission_denied_message">请在系统设置中允许“位置信息”后重试；若已拒绝且不再提示，请到应用详情手动开启。</string>
+  <string name="geo_callback_failed">定位授权结果回传失败，请重试</string>
+  <string name="webapp_school_read_leave_open">请假页面打开中，已暂缓核对课表；离开请假页面后可再次核对</string>
+  <string name="school_read_start_failed">读取未能启动，请重试</string>
+  <string name="school_read_cancelled">已取消读取，保留原课表</string>
+  <string name="geo_troubleshoot_mock">若定位仍失败，且用过模拟定位工具：仅关闭模拟位置开关可能无效，请停用或卸载后重启手机再试。</string>
+</resources>

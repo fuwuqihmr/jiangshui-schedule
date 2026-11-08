@@ -1,0 +1,93 @@
+:root{--bg:#ffffff;--surface:#ffffff;--surface-soft:#fafafa;--ink:#171717;--muted:#626262;--line:#e3e3e3;--accent:#171717;--accent-soft:#f3f3f3;--on-accent:#ffffff;--hero-a:#ffffff;--hero-b:#ffffff;--vacant-bg:#e8e8e8;--vacant-ink:#686868}
+html[data-theme=blue]{--bg:#f5f9fc;--surface:#ffffff;--surface-soft:#f7fbfd;--accent:#287fb0;--accent-soft:#e7f4fc;--hero-a:#e8f6ff;--hero-b:#fbfdff;--line:#dbe6ed;--ink:#233d52;--muted:#637b8c}
+html[data-theme=purple]{--bg:#f5f6fa;--surface-soft:#f8f9fc;--ink:#293343;--muted:#707b8d;--line:#dce1e9;--accent:#6960ca;--accent-soft:#eeebff;--hero-a:#edecff;--hero-b:#faf8ff}
+html[data-theme=dark]{--bg:#000000;--surface:#121212;--surface-soft:#1b1b1b;--ink:#f5f5f5;--muted:#b3b3b3;--line:#383838;--accent:#ffffff;--accent-soft:#272727;--on-accent:#000000;--hero-a:#121212;--hero-b:#121212;--vacant-bg:#242424;--vacant-ink:#aaaaaa;--red:#ff939e;--green:#7ad4b3}
+html,body{background:var(--bg);color:var(--ink)}
+.sidebar,.panel,.button,.icon-button,.event,.modal,.agreement-card,.search,.day-selector input,.week-controls select,.settings-grid input,.settings-grid select,.modal input,.modal select{background:var(--surface);color:var(--ink);border-color:var(--line)}
+.sidebar{background:var(--surface)}.nav button.active{background:var(--accent-soft);color:var(--accent)}.button.primary{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}.nav .count{background:var(--accent);color:var(--on-accent)}.side-note,.scope{background:var(--surface-soft);color:var(--muted)}.side-note strong,.notice-box strong,.empty strong,.detail-row strong{color:var(--ink)}
+.hero{background:var(--hero-a);border-color:var(--line)}.hero p,.hero-count span{color:var(--muted)}.hero-count{border-color:var(--line)}.hero-count strong{color:var(--accent)}.badge.purple{background:var(--accent-soft);color:var(--accent)}
+.week-heading,.week-time{background:var(--surface);color:var(--muted);border-color:var(--line)}.week-heading strong{color:var(--ink)}.week-heading.is-today strong{background:transparent;color:var(--accent);outline:none;border-radius:0;width:auto;height:auto;line-height:1.6;margin:3px auto 0;text-decoration:underline double currentColor;text-underline-offset:4px;text-decoration-thickness:1px}.week-cell,.week-cell.is-empty{background:var(--surface);border-color:var(--line)}.week-heading{border-left:1px solid var(--line)}.week-date-strip{grid-column:1/-1;display:grid;grid-template-columns:inherit;touch-action:pan-y;user-select:none}
+.week-heading.is-selected{background:var(--accent);color:var(--on-accent);border-top:2px solid var(--accent)}.week-heading.is-selected strong{background:transparent;color:var(--on-accent);outline-color:var(--on-accent)}.week-cell.is-selected{border-left:2px solid var(--accent);border-right:2px solid var(--accent)}.week-cell.is-selected.last-slot{border-bottom:2px solid var(--accent)}
+.week-heading .date-month{font-size:9px;opacity:.8}.day-swipe{touch-action:pan-y}.swipe-hint{font-size:10px;color:var(--muted);padding:9px 15px;border-bottom:1px solid var(--line)}.quick-tools{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:18px}.quick-tools .button{flex:none}.settings-entry{padding:14px 16px!important}.theme-options{display:flex;gap:8px;flex-wrap:wrap}.theme-choice{border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:10px 12px;border-radius:10px;display:flex;align-items:center;gap:7px}.theme-choice[aria-pressed=true]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--accent-soft)}.theme-swatch{width:14px;height:14px;border-radius:50%;border:1px solid #9aa4b5}.course-wide-label{font-size:10px;color:var(--accent);margin-top:6px}.settings-list{display:grid;gap:8px;margin-top:14px}.settings-list button{text-align:left;width:100%}
+.agreement-screen{background:var(--bg)}.agreement-body{color:var(--ink)}.agreement-version,.settings-grid label,.modal label,.detail-row,.notice-box,.vacancy-note{color:var(--muted)}.stat-line,.detail-row{border-color:var(--line)}
+.course-card.vacant{background:var(--vacant-bg);border-color:var(--line);color:var(--vacant-ink)}.course-card.vacant h3,.course-card.vacant .vacancy-note{color:var(--vacant-ink)}
+html[data-theme=dark] .course-card:not(.vacant),html[data-theme=dark] .detail-hero{background:var(--card-dark-bg,#302a43);color:var(--card-dark-ink,#e3d9ff);--card-ink:var(--card-dark-ink,#e3d9ff)!important}.course-card.vacant .badge{background:var(--surface-soft);color:var(--vacant-ink)}
+html[data-theme=dark] .badge:not(.purple){background:#303030;color:#dedede}html[data-theme=dark] .badge.amber{background:#473a26;color:#ffcf83}html[data-theme=dark] .badge.red{background:#442c36;color:#ff9ca9}html[data-theme=dark] .badge.green{background:#203e35;color:#87e2be}html[data-theme=dark] .conflict-panel{background:#3b3023;border-color:#786343;color:#f5d59b}.disabled-note{color:var(--muted)}button:focus-visible,input:focus-visible,select:focus-visible{outline-color:var(--accent)}
+@media(max-width:720px){.quick-tools{gap:7px}.quick-tools .button{padding:10px 12px;font-size:11px}.week-heading.is-selected{border-top-width:2px}.week-heading .date-month{font-size:8px}.week-heading.is-today strong{width:auto;height:auto;line-height:1.6;margin:3px auto 0}.week-cell.is-selected{border-left-width:2px;border-right-width:2px}.week-date-strip .week-heading{min-width:0}.swipe-hint{font-size:9px}.theme-options{gap:7px}.theme-choice{padding:9px;font-size:11px}.settings-entry{padding:12px!important}}
+
+.app-title{display:flex;align-items:center;gap:10px}.mobile-app-icon{display:none}
+html[data-theme=blue] .hero-count strong{color:#287fb0}
+@media(max-width:720px){.mobile-app-icon{display:block;width:36px;height:36px;object-fit:contain;border-radius:10px;flex:none;background:#e8f6ff}.app-title h1{font-size:24px}.topbar{gap:9px}.hero{background:var(--hero-a);}.hero h2{line-height:1.4}}
+
+/* Course summary uses one flat theme color. */
+.hero{background:var(--hero-a)}
+/* Keep the selected theme; use neutral colors only for the day summary. */
+html[data-theme=blue] .hero{background:#fff;border-color:#e0e5eb;color:#293343;box-shadow:none}
+html[data-theme=blue] .hero h2{color:#293343;font-weight:600}
+html[data-theme=blue] .hero p,html[data-theme=blue] .hero-count span{color:#707b8b}
+html[data-theme=blue] .hero-count{border-color:#e0e5eb}
+html[data-theme=blue] .hero-count strong{color:#293343}
+html[data-theme=blue] .hero .badge.purple{background:#e8f4fc;color:#466b86}
+
+.sample-mode-entry{margin-top:22px}
+.sample-mode-entry h2{margin-bottom:10px}
+.sample-mode-entry .button{margin-top:16px}
+.sample-mode-banner{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;border:1px solid var(--line);border-radius:12px;background:var(--accent-soft);margin-bottom:20px}
+.sample-mode-banner strong{font-size:14px;color:var(--accent)}
+.sample-mode-banner p{font-size:12px;color:var(--muted);line-height:1.7;margin-top:5px}
+.sample-mode-banner .button{flex-shrink:0}
+@media(max-width:720px){.sample-mode-banner{align-items:flex-start;flex-wrap:wrap}}
+
+
+.custom-mode-choice,.modal fieldset[data-custom-fields]{min-width:0;border:1px solid var(--line);border-radius:12px;padding:12px;margin:16px 0}
+.modal fieldset legend{font-size:12px;color:var(--muted);padding:0 5px}
+.custom-mode-choice{display:flex;gap:14px;flex-wrap:wrap}
+.custom-mode-choice label,.custom-weekdays label{display:flex;align-items:center;gap:7px;margin:5px 0;color:var(--ink)}
+.custom-mode-choice input,.custom-weekdays input{display:inline-block;width:auto;margin:0;accent-color:var(--accent)}
+.custom-weekdays{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.custom-course-list{display:grid;gap:14px;margin-top:18px}
+.custom-course-record{border-top:1px solid var(--line);padding-top:14px;overflow-wrap:anywhere}
+.custom-course-record strong{font-size:13px}.custom-course-record p{margin:8px 0}
+.modal fieldset[hidden]{display:none}
+
+.custom-time{font-size:11px;color:var(--card-ink);margin-bottom:7px}.week-cell .custom-time{font-size:9px}@media(max-width:720px){.week-cell .custom-time{font-size:8px}}
+
+.class-reminder-card{margin-bottom:18px;padding:20px;border:1px solid var(--line);border-radius:24px;background:var(--surface);color:var(--ink);box-shadow:0 6px 22px #16384b0a}
+.class-reminder-main{display:flex;align-items:flex-start;gap:14px}.class-reminder-main h2{flex:1;min-width:0;margin:0;font-size:22px;line-height:1.45;overflow-wrap:anywhere}.class-reminder-main h2>span{white-space:nowrap}.class-reminder-main img{flex:none;border-radius:11px}
+.class-reminder-course{margin-top:8px;font-size:17px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}.class-reminder-teacher{margin-top:4px;font-size:13px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.class-reminder-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px;padding-top:14px;border-top:2px dotted var(--line)}
+.class-reminder-countdown{font-size:19px;line-height:1.4;color:#007ea8}.class-reminder-footer .button{flex:none;padding:9px 14px;font-size:12px;border:0;border-radius:22px;background:#e8f4fa;color:#203b49}
+.class-reminder-expiry{margin-top:9px;font-size:11px;line-height:1.5;color:var(--muted)}
+html[data-theme=dark] .class-reminder-countdown{color:#61cff5}html[data-theme=dark] .class-reminder-footer .button{background:#304552;color:#f2f7fa}
+@media(max-width:390px){.class-reminder-card{padding:16px}.class-reminder-main h2{font-size:19px}.class-reminder-countdown{font-size:16px}.class-reminder-footer{gap:8px}.class-reminder-footer .button{padding:8px 11px}}
+.reminder-intro{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;margin-bottom:18px;border:1px solid #acd9f0;border-left:5px solid #287fb0;border-radius:14px;background:#e9f6ff;color:var(--ink);box-shadow:0 7px 22px #287fb01c}
+.reminder-intro-content{display:flex;align-items:flex-start;gap:12px}.reminder-intro-content>svg{width:22px;height:22px;margin-top:1px;color:#287fb0}.reminder-intro strong{font-size:15px}.reminder-intro p{margin-top:5px;font-size:12px;line-height:1.65;color:var(--muted)}
+.reminder-intro .reminder-intro-button{flex:none;background:#287fb0;border-color:#287fb0;color:#fff;font-size:13px;font-weight:700;padding:9px 18px}
+.local-undo-banner{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:18px 0 0;padding:15px 18px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:13px;background:var(--surface);color:var(--ink)}
+.local-undo-banner strong{font-size:14px}.local-undo-banner p{margin-top:4px;font-size:12px;line-height:1.6;color:var(--muted)}.local-undo-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;flex:none}
+.local-undo-actions .button{color:var(--accent);border-color:var(--accent);font-weight:650}
+html[data-theme=dark] .reminder-intro{background:#21374c;border-color:#4089b0}html[data-theme=dark] .reminder-intro p{color:#c1d5e5}
+@media(max-width:720px){.reminder-intro,.local-undo-banner{align-items:flex-start;flex-direction:column}.reminder-intro .reminder-intro-button{align-self:flex-end}.local-undo-actions{justify-content:flex-start;flex:none;width:100%}.local-undo-actions .button{max-width:100%;white-space:normal;text-align:left}}
+
+/* Themes control page chrome; course cards retain their identifying colors. */
+html[data-theme=light] .nav button.active{background:#171717;color:#ffffff}
+html[data-theme=dark] .nav button.active{background:#ffffff;color:#000000}
+input[type=checkbox],input[type=radio]{accent-color:var(--accent)}
+
+.time-label,.time-label small,.nav button,.empty svg{color:var(--muted)}
+html[data-theme=dark] .modal-backdrop,html[data-theme=light] .modal-backdrop{background:#00000070}
+
+.course-card::before{content:none;display:none}
+.course-tags:empty{display:none}
+
+/* ===== 1.2.1 UI consistency pass — theme tokens (visual only) ===== */
+/* Water-blue / purple secondary text was below WCAG AA on the page background
+   (4.18:1 and 3.96:1). Darken --muted slightly without changing the theme hue. */
+html[data-theme=blue]{--muted:#566c7c}
+html[data-theme=purple]{--muted:#5f6a7d}
+html[data-theme=blue] .hero p,html[data-theme=blue] .hero-count span{color:#5f6a7c}
+
+/* Destructive controls: a faint red surface only in the dark theme (light
+   themes inherit the value from style.css). */
+html[data-theme=dark]{--danger-soft:#3a2226;--danger-line:#6b3b42}
+

@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# HarmonyOS hvigor wrapper shim (project-local, portable).
+# Resolves a Node runtime and delegates to hvigor/hvigor-wrapper.js.
+set -e
+HERE=$(cd "$(dirname "$0")" && pwd)
+if [ -n "$DEVECO_NODE_HOME" ] && [ -x "$DEVECO_NODE_HOME/node" ]; then
+  NODE_BIN="$DEVECO_NODE_HOME/node"
+elif [ -n "$DEVECO_NODE_HOME" ] && [ -x "$DEVECO_NODE_HOME/node.exe" ]; then
+  NODE_BIN="$DEVECO_NODE_HOME/node.exe"
+elif command -v node >/dev/null 2>&1; then
+  NODE_BIN=$(command -v node)
+elif [ -n "$DEVECO_CLI_HOME" ] && [ -x "$DEVECO_CLI_HOME/tool/node/node.exe" ]; then
+  NODE_BIN="$DEVECO_CLI_HOME/tool/node/node.exe"
+else
+  echo "[hvigorw] ERROR: Node.js not found (set DEVECO_NODE_HOME or put node on PATH)." >&2
+  exit 127
+fi
+exec "$NODE_BIN" "$HERE/hvigor/hvigor-wrapper.js" "$@"

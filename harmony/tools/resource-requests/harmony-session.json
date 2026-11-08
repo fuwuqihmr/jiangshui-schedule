@@ -1,0 +1,9 @@
+{
+  "web_office_refresh": "刷新",
+  "web_office_save_failed": "请假记录已显示，但写入本地失败，请重试。",
+  "school_login_required_hint": "请先登录教务系统，再读取课表。",
+  "login_session_clear_action": "清除登录会话数据",
+  "login_session_clear_hint": "只清理本机保存的学校会话、CAS 票据授权 cookie 与网页数据，不会退出学校服务器上的登录；已保存的学校密码需到系统设置 > 隐私和安全 > 密码保险箱中删除。",
+  "login_session_clear_success": "已清除本地登录会话，下次读取课表需重新登录教务",
+  "login_session_clear_failed": "清除登录会话数据失败，请重试。"
+}

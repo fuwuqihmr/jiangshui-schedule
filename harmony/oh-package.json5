@@ -1,0 +1,14 @@
+// 职责：鸿蒙工程根 ohpm 描述，依赖保持为空，禁止引入第三方包。
+// 依赖方向：无业务代码依赖；构建工具由 DevEco/命令行工具锁定。
+// 阶段：P0 骨架；未编译，仅静态骨架。
+// 待确认：modelVersion 与 ohpm 字段以官方 API 12 模板为准。
+{
+  "modelVersion": "5.0.0",
+  "name": "jiangshui-schedule-harmony",
+  "version": "1.0.0",
+  "description": "江水课表 HarmonyOS 原生工程骨架",
+  "main": "",
+  "author": "",
+  "license": "GPL-3.0-or-later",
+  "dependencies": {}
+}

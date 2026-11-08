@@ -1,0 +1,228 @@
+{
+  "color": [
+    {
+      "name": "background",
+      "value": "#0F141B"
+    },
+    {
+      "name": "surface",
+      "value": "#18212B"
+    },
+    {
+      "name": "text_primary",
+      "value": "#EEF3F8"
+    },
+    {
+      "name": "text_secondary",
+      "value": "#A9B7C6"
+    },
+    {
+      "name": "border",
+      "value": "#2A3644"
+    },
+    {
+      "name": "primary",
+      "value": "#6E9BFF"
+    },
+    {
+      "name": "on_primary",
+      "value": "#08111D"
+    },
+    {
+      "name": "color_background",
+      "value": "#000000"
+    },
+    {
+      "name": "color_surface",
+      "value": "#121212"
+    },
+    {
+      "name": "color_surface_soft",
+      "value": "#1B1B1B"
+    },
+    {
+      "name": "color_text_primary",
+      "value": "#F5F5F5"
+    },
+    {
+      "name": "color_text_secondary",
+      "value": "#B3B3B3"
+    },
+    {
+      "name": "color_text_disabled",
+      "value": "#8A8A8A"
+    },
+    {
+      "name": "color_border",
+      "value": "#383838"
+    },
+    {
+      "name": "color_control_border",
+      "value": "#6A6A6A"
+    },
+    {
+      "name": "color_accent",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "color_accent_button",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "color_accent_soft",
+      "value": "#272727"
+    },
+    {
+      "name": "color_on_accent",
+      "value": "#000000"
+    },
+    {
+      "name": "color_link",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "color_success",
+      "value": "#87E2BE"
+    },
+    {
+      "name": "color_success_soft",
+      "value": "#203E35"
+    },
+    {
+      "name": "color_warning",
+      "value": "#FFCF83"
+    },
+    {
+      "name": "color_warning_soft",
+      "value": "#473A26"
+    },
+    {
+      "name": "color_danger",
+      "value": "#FF939E"
+    },
+    {
+      "name": "color_danger_soft",
+      "value": "#3A2226"
+    },
+    {
+      "name": "color_danger_line",
+      "value": "#6B3B42"
+    },
+    {
+      "name": "color_neutral",
+      "value": "#D0D0D0"
+    },
+    {
+      "name": "color_neutral_soft",
+      "value": "#272727"
+    },
+    {
+      "name": "color_leave_muted_bg",
+      "value": "#242424"
+    },
+    {
+      "name": "color_leave_muted_text",
+      "value": "#D0D0D0"
+    },
+    {
+      "name": "color_leave_muted_line",
+      "value": "#6A6A6A"
+    },
+    {
+      "name": "color_pending_amber",
+      "value": "#FFCF83"
+    },
+    {
+      "name": "color_pending_amber_bg",
+      "value": "#473A26"
+    },
+    {
+      "name": "color_pending_border",
+      "value": "#FFCF83"
+    },
+    {
+      "name": "color_scrim",
+      "value": "#99000000"
+    },
+    {
+      "name": "color_shadow",
+      "value": "#1A000000"
+    },
+    {
+      "name": "color_nav_active_bg",
+      "value": "#26313D"
+    },
+    {
+      "name": "color_nav_active_text",
+      "value": "#F5F5F5"
+    },
+    {
+      "name": "color_nav_inactive",
+      "value": "#9AA6B2"
+    },
+    {
+      "name": "color_focus_ring",
+      "value": "#FFFFFF"
+    },
+    {
+      "name": "color_course_1_bg",
+      "value": "#302A43"
+    },
+    {
+      "name": "color_course_1_accent",
+      "value": "#877EC3"
+    },
+    {
+      "name": "color_course_1_ink",
+      "value": "#E3D9FF"
+    },
+    {
+      "name": "color_course_2_bg",
+      "value": "#203449"
+    },
+    {
+      "name": "color_course_2_accent",
+      "value": "#71A2C7"
+    },
+    {
+      "name": "color_course_2_ink",
+      "value": "#CEE6FF"
+    },
+    {
+      "name": "color_course_3_bg",
+      "value": "#233B30"
+    },
+    {
+      "name": "color_course_3_accent",
+      "value": "#7BAD93"
+    },
+    {
+      "name": "color_course_3_ink",
+      "value": "#D0EFDB"
+    },
+    {
+      "name": "color_course_4_bg",
+      "value": "#432F23"
+    },
+    {
+      "name": "color_course_4_accent",
+      "value": "#D6A279"
+    },
+    {
+      "name": "color_course_4_ink",
+      "value": "#FFDFC4"
+    },
+    {
+      "name": "color_course_5_bg",
+      "value": "#422B37"
+    },
+    {
+      "name": "color_course_5_accent",
+      "value": "#C389A3"
+    },
+    {
+      "name": "color_course_5_ink",
+      "value": "#F6D5E5"
+    }
+  ]
+}

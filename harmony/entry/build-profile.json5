@@ -1,0 +1,11 @@
+// 职责：entry 模块构建配置，stage 模型，ArkTS 严格检查由工具链默认开启。
+// 依赖方向：无业务代码依赖；构建参数由 DevEco/命令行工具解释。
+// 阶段：P1 可编译；已删除 buildOption（arkOptions.strictMode 在 hvigor 6.26.8 中非法）。
+{
+  "apiType": "stageMode",
+  "targets": [
+    {
+      "name": "default"
+    }
+  ]
+}

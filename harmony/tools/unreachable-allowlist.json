@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "note": "本轮不清理；build-gate --strict 的完整性等式：进入编译的 .ets + 白名单不可达（12 条）= 全树 .ets。test-only 4 条（SnapshotValidator、SchoolReaderImpl、MemoryPreferencesStore、MemoryStateFileStore）只被测试引用，不等于被产品使用；其余 8 条为 next-round-cleanup。FilePortMessages.ets 已由 features/export/ExportPanel.ets:48 实引，故从白名单移除。每条 decision=lead-approved-2026-10-30。",
+  "entries": [
+    {
+      "path": "platform/background/DailyCheckScheduler.ets",
+      "reason": "P3 后台检查旧骨架；真实调度为 platform/system/BackgroundScheduler.ets，全树无 import 引用",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "next-round-cleanup"
+    },
+    {
+      "path": "platform/diagnostics/DiagnosticsServiceUnavailable.ets",
+      "reason": "旧降级 stub；无 DiagnosticsService 工厂或装配引用",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "next-round-cleanup"
+    },
+    {
+      "path": "platform/files/FileSaveService.ets",
+      "reason": "P0 旧桩；platform/files/NAV.md:16 明示无消费者，新实现已取代",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "next-round-cleanup"
+    },
+    {
+      "path": "platform/network/HttpGatewayUnavailable.ets",
+      "reason": "降级 stub；无工厂/canIUse 引用，仅 README 与注释提及",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "next-round-cleanup"
+    },
+    {
+      "path": "platform/notify/NotificationGateway.ets",
+      "reason": "旧通知网关；真实实现为 platform/system/NotificationKitGateway.ets",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "next-round-cleanup"
+    },
+    {
+      "path": "platform/reminder/ClassReminderGateway.ets",
+      "reason": "旧提醒网关；真实实现为 platform/system/ReminderKitGateway.ets",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "next-round-cleanup"
+    },
+    {
+      "path": "platform/web/WebCookieStoreUnavailable.ets",
+      "reason": "旧降级 stub；真实实现为 platform/web/WebCookieStore.ets 与 PlatformWebCookieStore",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "next-round-cleanup"
+    },
+    {
+      "path": "core/validate/SnapshotValidator.ets",
+      "reason": "test-only：产品路径未被 import（core/export/Backup.ets:8 注释说明校验逻辑有意重复实现），仅 tools/tests/core-export-backup-strict.test.mjs:11 直接测试它；test-only 不等于被产品使用。P2：Backup.ets 与 SnapshotValidator.ets 双份校验逻辑，下一轮合并为单一实现。",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "test-only"
+    },
+    {
+      "path": "data/SchoolReaderImpl.ets",
+      "reason": "test-only：仅 tools/tests/core-p4.test.mjs:16 导入的旧重复实现；Index.ets:20/:261 使用 platform/school/SchoolReader.ets:123 同名实现。下一轮删除 data 版并把测试迁到 platform 版。test-only 不等于被产品使用。",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "test-only"
+    },
+    {
+      "path": "theme/ThemeTokens.ets",
+      "reason": "222 行 token 表无消费者；仅 components/CourseCard.ets:3 注释提及，页面直接用 $r",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "next-round-cleanup"
+    },
+    {
+      "path": "data/MemoryPreferencesStore.ets",
+      "reason": "test-only：Node 测试 tools/tests/core-logic.test.mjs:17 与 ohosTest StateRepository.test.ets:7 注入用内存 PreferencesStore，主 HAP 无引用（test-only 不等于被产品使用）",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "test-only"
+    },
+    {
+      "path": "data/MemoryStateFileStore.ets",
+      "reason": "test-only：Node 测试 tools/tests/core-logic.test.mjs:18 与 ohosTest StateRepository.test.ets:8 注入用内存 StateFileStore，主 HAP 无引用（test-only 不等于被产品使用）",
+      "decision": "lead-approved-2026-10-30",
+      "disposition": "test-only"
+    }
+  ]
+}

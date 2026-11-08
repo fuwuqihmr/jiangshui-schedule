@@ -1,0 +1,8 @@
+# 构建与本地环境产物，不提交
+.hvigor/
+.idea/
+build/
+oh_modules/
+local.properties
+*.hap
+*.har

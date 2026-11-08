@@ -1,0 +1,42 @@
+// 职责：鸿蒙工程根构建配置，声明 default 产品、API 26 与单 entry HAP。
+// 依赖方向：无代码依赖；签名配置留空，由发布流程注入。
+// 阶段：P6 可编译；已按 hvigor 6.26.8 迁移（compileSdkVersion 由工具链按 API 26 推导，
+//       compatible/targetSdkVersion 显式声明 "26.0.0"，与 SDK apiVersion 26 对齐）。
+{
+  "app": {
+    "signingConfigs": [],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "",
+        "compatibleSdkVersion": "26.0.0",
+        "targetSdkVersion": "26.0.0",
+        "runtimeOS": "HarmonyOS",
+        "versionCode": 49,
+        "versionName": "1.3.1"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

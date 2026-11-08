@@ -1,0 +1,46 @@
+# ================================================================
+# 允许进入公开仓库的路径（白名单，供 tools/check-upload-scope.mjs 读取）
+#
+# - 每行一个 glob，相对仓库根；# 开头为注释
+# - 以 ! 开头的行表示“排除”，优先于放行（用于放行目录中的内部记录）
+# - * 不跨目录，** 跨目录；行尾 / 表示该目录下全部文件
+# - 未列入的文件一旦出现在暂存区/待提交区，守卫脚本以退出码 1 拒绝
+# - 修改后请同步 .gitignore，并运行：
+#     node tools/check-upload-scope.mjs
+# ================================================================
+
+# 根级配置与文档（仅公开说明；内部决策/变更/归档说明见 .gitignore）
+/.gitignore
+/.gitattributes
+/package.json
+/package-lock.json
+/NOTIFICATIONS.md
+/XIAOMI-NOTIFICATIONS.md
+/README.md
+/SECURITY.md
+/LICENSE
+/NOTICE
+
+# 源码目录
+/web/**
+/desktop/**
+/android/**
+/harmony/**
+/harmony/tools/resource-requests/*.json
+!/harmony/README-Harmony.md
+!/harmony/deveco-setup.md
+!/harmony/**/NAV.md
+/assets/**
+/tests/**
+
+# tools：只放构建相关文件与守卫自身；QA/采集脚本与探针不入库
+/tools/build-android.ps1
+/tools/build-windows-installer.ps1
+/tools/verify-manifest.ps1
+/tools/windows-installer.iss
+/tools/export-client-icons.cjs
+/tools/ChineseSimplified.isl
+/tools/check-upload-scope.mjs
+/tools/upload-allowlist.txt
+/tools/package-apk.py
+/tools/package-windows.cjs

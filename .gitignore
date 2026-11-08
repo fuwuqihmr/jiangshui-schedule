@@ -1,0 +1,126 @@
+# ================================================================
+# 江水课表 · 公开仓库忽略规则（白名单模式）
+#
+# 目标：默认任何文件都不进入版本库，只有下面显式放行的源码/文档才会被
+#       git add 收集；交付物（output/、安装包、构建产物）、本地环境、
+#       采集数据与日志一律不进公开仓库。
+#
+# 规则顺序（git 后写的规则优先）：
+#   1) *            忽略一切文件与目录
+#   2) !*/          重新允许遍历所有目录（否则无法进入目录找放行文件）
+#   3) !/...        显式放行源码目录与根文件
+#   4) 再排除        在已放行目录内二次排除构建产物/数据导出/敏感文件
+#
+# 改规则时请同步维护 tools/upload-allowlist.txt，并运行：
+#   node tools/check-upload-scope.mjs
+# ================================================================
+
+# ---------- 1. 默认全忽略 ----------
+*
+!*/
+
+# ---------- 2. 根级文件放行 ----------
+!/.gitignore
+!/.gitattributes
+!/package.json
+!/package-lock.json
+!/*.md
+
+# ---------- 3. 源码目录放行 ----------
+!/web/**
+!/desktop/**
+!/android/**
+!/harmony/**
+!/assets/**
+!/tests/**
+!/tools/**
+
+# ---------- 4. 已放行目录内的二次排除（后写优先） ----------
+# 依赖与构建缓存
+node_modules/
+.gradle/
+.hvigor/
+oh_modules/
+build/
+dist/
+release/
+coverage/
+.nyc_output/
+*.iml
+.idea/
+.vscode/
+# 交付物与安装包（output/ 永不入库）
+output/
+*.zip
+*.7z
+*.rar
+*.apk
+*.aab
+*.hap
+*.har
+*.hsp
+*.jar
+*.aar
+*.exe
+*.msi
+*.dll
+*.so
+*.class
+# 本地环境与签名材料
+local.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+.env
+.env.*
+# 日志、评审记录与采集数据（tools 下 probe 脚本的产物）
+*.log
+review-*.txt
+android/widget-test/
+tools/probe-edge-log.json
+tools/jsxsd-data.html
+tools/jsxsd-week.html
+tools/jsxsd-kb.html
+tools/jsxsd-rows.json
+# 系统与编辑器杂项
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# ---------- 5. 内部过程记录与 QA 脚本（2026-11-08 审计收窄） ----------
+# 内部过程记录不进公开仓库
+/DECISIONS.md
+/ANDROID-CHANGELOG.md
+/README-归档说明-归档入口.md
+/MOBILE_ONLY.md
+/RELEASE-POLICY.md
+/harmony/README-Harmony.md
+/harmony/deveco-setup.md
+/harmony/**/NAV.md
+/tools/probe*.cjs
+/tools/qzTable.js
+/tools/verify-jsxsd.mjs
+/tools/extract_samples.py
+# tools 仅保留构建相关文件（其余 QA/探针/采集脚本整体不入库）
+/tools/*
+!/tools/build-android.ps1
+!/tools/build-windows-installer.ps1
+!/tools/verify-manifest.ps1
+!/tools/windows-installer.iss
+!/tools/export-client-icons.cjs
+!/tools/ChineseSimplified.isl
+!/tools/check-upload-scope.mjs
+!/tools/upload-allowlist.txt
+!/tools/package-apk.py
+!/tools/package-windows.cjs
+
+# ---------- 6. 公开法律/说明文件（2026-11-08 并行新增） ----------
+!/LICENSE
+!/NOTICE

@@ -1,0 +1,469 @@
+{
+  "schemaVersion": 1,
+  "semester": {
+    "id": "2026-2027-1",
+    "name": "2026—2027 · 第一学期",
+    "startDate": "2026-08-31",
+    "weeks": 18
+  },
+  "source": {
+    "kind": "sample",
+    "label": "合成示例数据",
+    "exportedAt": "2026-09-18"
+  },
+  "rules": [
+    {
+      "id": "course-1",
+      "name": "课程F",
+      "teacher": "教师C",
+      "room": "A103",
+      "weekday": 1,
+      "periods": [
+        3,
+        4
+      ],
+      "startTime": "10:15",
+      "endTime": "11:40",
+      "weeks": [
+        14,
+        15,
+        16
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-2",
+      "name": "课程B",
+      "teacher": "教师A",
+      "room": "B301",
+      "weekday": 1,
+      "periods": [
+        7,
+        8
+      ],
+      "startTime": "15:45",
+      "endTime": "17:10",
+      "weeks": [
+        6,
+        8,
+        10,
+        12,
+        14
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-3",
+      "name": "课程B",
+      "teacher": "教师A",
+      "room": "B303",
+      "weekday": 2,
+      "periods": [
+        1,
+        2
+      ],
+      "startTime": "08:30",
+      "endTime": "09:55",
+      "weeks": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-4",
+      "name": "课程I",
+      "teacher": "教师B",
+      "room": "B204",
+      "weekday": 2,
+      "periods": [
+        3,
+        4
+      ],
+      "startTime": "10:15",
+      "endTime": "11:40",
+      "weeks": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-5",
+      "name": "课程A",
+      "teacher": "教师E",
+      "room": "B101",
+      "weekday": 2,
+      "periods": [
+        5,
+        6
+      ],
+      "startTime": "14:00",
+      "endTime": "15:25",
+      "weeks": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "exam": "考查"
+    },
+    {
+      "id": "course-6",
+      "name": "课程G",
+      "teacher": "教师D,教师C",
+      "room": "A101",
+      "weekday": 2,
+      "periods": [
+        7,
+        8
+      ],
+      "startTime": "15:45",
+      "endTime": "17:10",
+      "weeks": [
+        5,
+        6
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-7",
+      "name": "课程C",
+      "teacher": "教师G",
+      "room": "A102",
+      "weekday": 2,
+      "periods": [
+        7,
+        8
+      ],
+      "startTime": "15:45",
+      "endTime": "17:10",
+      "weeks": [
+        8,
+        17
+      ],
+      "exam": "考查"
+    },
+    {
+      "id": "course-8",
+      "name": "课程H",
+      "teacher": "教师F",
+      "room": "A202",
+      "weekday": 2,
+      "periods": [
+        7,
+        8
+      ],
+      "startTime": "15:45",
+      "endTime": "17:10",
+      "weeks": [
+        9,
+        11,
+        13,
+        15
+      ],
+      "exam": "考查"
+    },
+    {
+      "id": "course-9",
+      "name": "课程D",
+      "teacher": "教师H",
+      "room": "—",
+      "weekday": 3,
+      "periods": [
+        5,
+        6
+      ],
+      "startTime": "14:00",
+      "endTime": "15:25",
+      "weeks": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-10",
+      "name": "课程A",
+      "teacher": "教师E",
+      "room": "B204",
+      "weekday": 4,
+      "periods": [
+        1,
+        2
+      ],
+      "startTime": "08:30",
+      "endTime": "09:55",
+      "weeks": [
+        16,
+        17
+      ],
+      "exam": "考查"
+    },
+    {
+      "id": "course-11",
+      "name": "课程G",
+      "teacher": "教师D,教师C",
+      "room": "B102",
+      "weekday": 4,
+      "periods": [
+        5,
+        6
+      ],
+      "startTime": "14:00",
+      "endTime": "15:25",
+      "weeks": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-12",
+      "name": "课程I",
+      "teacher": "教师B",
+      "room": "B101",
+      "weekday": 4,
+      "periods": [
+        7,
+        8
+      ],
+      "startTime": "15:45",
+      "endTime": "17:10",
+      "weeks": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-13",
+      "name": "课程E",
+      "teacher": "教师I",
+      "room": "B204",
+      "weekday": 5,
+      "periods": [
+        1,
+        2
+      ],
+      "startTime": "08:30",
+      "endTime": "09:55",
+      "weeks": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ],
+      "exam": "考查"
+    },
+    {
+      "id": "course-14",
+      "name": "课程F",
+      "teacher": "教师C",
+      "room": "B102",
+      "weekday": 5,
+      "periods": [
+        3,
+        4
+      ],
+      "startTime": "10:15",
+      "endTime": "11:40",
+      "weeks": [
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-15",
+      "name": "课程B",
+      "teacher": "教师A",
+      "room": "B205",
+      "weekday": 5,
+      "periods": [
+        7,
+        8
+      ],
+      "startTime": "15:45",
+      "endTime": "17:10",
+      "weeks": [
+        5,
+        6
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-16",
+      "name": "课程J",
+      "teacher": "教师J",
+      "room": "B103",
+      "weekday": 6,
+      "periods": [
+        5,
+        6
+      ],
+      "startTime": "14:00",
+      "endTime": "15:25",
+      "weeks": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "exam": "考试"
+    },
+    {
+      "id": "course-17",
+      "name": "课程J",
+      "teacher": "教师J",
+      "room": "B101",
+      "weekday": 7,
+      "periods": [
+        1,
+        2
+      ],
+      "startTime": "08:30",
+      "endTime": "09:55",
+      "weeks": [
+        15,
+        16,
+        17
+      ],
+      "exam": "考试"
+    }
+  ],
+  "closedDates": [
+    "2026-09-25",
+    "2026-09-26",
+    "2026-09-27",
+    "2026-09-28",
+    "2026-09-29",
+    "2026-09-30",
+    "2026-10-01",
+    "2026-10-02",
+    "2026-10-03",
+    "2026-10-04",
+    "2026-10-05",
+    "2026-10-06",
+    "2026-10-07"
+  ],
+  "remaps": [
+    {
+      "id": "holiday-2026-10-10",
+      "date": "2026-10-10",
+      "fromDate": "2026-09-29",
+      "mode": "append"
+    },
+    {
+      "id": "holiday-2026-10-17",
+      "date": "2026-10-17",
+      "fromDate": "2026-09-30",
+      "mode": "append"
+    },
+    {
+      "id": "holiday-2026-10-24",
+      "date": "2026-10-24",
+      "fromDate": "2026-10-06",
+      "mode": "append"
+    },
+    {
+      "id": "holiday-2026-10-31",
+      "date": "2026-10-31",
+      "fromDate": "2026-10-07",
+      "mode": "append"
+    }
+  ],
+  "exceptions": [],
+  "unscheduled": [
+    {
+      "name": "课程K",
+      "teacher": "教师K",
+      "weeks": "5—18 周"
+    },
+    {
+      "name": "课程L",
+      "teacher": "教师L",
+      "weeks": "3—4 周"
+    },
+    {
+      "name": "课程M",
+      "teacher": "教师M",
+      "weeks": "5—18 周"
+    }
+  ]
+}
