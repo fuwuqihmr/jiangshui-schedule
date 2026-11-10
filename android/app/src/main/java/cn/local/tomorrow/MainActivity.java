@@ -957,6 +957,8 @@ public class MainActivity extends Activity {
             case "runtimeStatus":result(id,CheckScheduler.status(MainActivity.this));break;
             case "requestExactAlarm":openExactAlarmSettings();result(id,object("ok",true));break;
             case "batterySettings":openBatterySettings();result(id,object("ok",true));break;
+            case "feedbackInfo":{FeedbackConfig cfg=FeedbackConfig.load(MainActivity.this);JSONObject info=object("enabled",cfg.enabled);info.put("title",cfg.title);info.put("intro",cfg.intro);info.put("url",cfg.enabled?cfg.url:"");result(id,info);break;}
+            case "openFeedback":{FeedbackConfig cfg=FeedbackConfig.load(MainActivity.this);if(!cfg.enabled)throw new Exception(getString(R.string.feedback_not_configured));log("feedback open");Intent feedbackIntent=new Intent(MainActivity.this,FeedbackActivity.class);feedbackIntent.putExtra(FeedbackActivity.EXTRA_DARK,appDark);startActivity(feedbackIntent);result(id,object("ok",true));break;}
             case "openSchool":if(p.optBoolean("mobile")){openSchool(true);result(id,object("ok",true));}else beginSchoolRead(id,true);break;
             case "openWebApp":openWebApp(p.optString("url"),p.isNull("warmupUrl")?null:p.optString("warmupUrl"));result(id,object("ok",true));break;
             case "leaveRecordSync":beginLeaveRecordSync(id);break;

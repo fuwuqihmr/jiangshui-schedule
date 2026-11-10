@@ -25,6 +25,7 @@
 !/package.json
 !/package-lock.json
 !/*.md
+!/FEEDBACK.md
 
 # ---------- 3. 源码目录放行 ----------
 !/web/**
@@ -124,3 +125,8 @@ desktop.ini
 # ---------- 6. 公开法律/说明文件（2026-11-08 并行新增） ----------
 !/LICENSE
 !/NOTICE
+
+# ---------- 7. GitHub Actions 工作流（2026-11-09 新增） ----------
+!/.github/
+!/.github/workflows/
+!/.github/workflows/*.yml

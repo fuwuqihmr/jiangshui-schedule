@@ -16,6 +16,7 @@ import {THEMES,applyTheme,themePreference,resolvedTheme,onThemeChanged} from './
 import {LEAVE_SERVICES,openLeaveService,XGXT_ORIGIN} from './leave.mjs';
 import {normalizeLeaveStatusCache,sampleLeaveRecords,getLeaveRecordsProvider as moduleLeaveRecordsProvider,createSchoolRecordsProvider,leaveMarkForCourse,matchLeaveMarks,leaveRecordsForDate,sortLeaveRecords,leaveStatusLabel,leaveTypeLabel,leaveStatusSummary,leaveCancelState,cancelStatusLabel,visibleLeaveRecords,CANCEL_COPY,shouldRefreshCancelAfterLeave,normalizeManualCancelMarks,applyManualCancel,markManualCancel,unmarkManualCancel,manualCancelDateLabel} from './leave-status.mjs';
 import {buildCalendarEvents,normalizeCalendarOptions} from './calendar-events.mjs';
+import {loadFeedbackInfo,openFeedback,feedbackPanel} from './feedback.mjs';
 const icons={tomorrow:'M8 2v4m8-4v4M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2zM8 13h3v3H8',week:'M3 3h18v18H3zM3 9h18M9 3v18M15 3v18M3 15h18',changes:'M18 8a7 7 0 1 0 1 8M18 3v5h-5M12 8v5l3 2',settings:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M4 9l-2 1v4l2 1 2 3v2h4l2-2 2 2h4v-3l2-2 2-1v-4l-2-1-2-3V3h-4l-2 2-2-2H6v3z',refresh:'M20 6v5h-5M4 18v-5h5M19 10a7 7 0 0 0-12-5L4 8m1 6a7 7 0 0 0 12 5l3-3',left:'M15 5l-7 7 7 7',right:'M9 5l7 7-7 7',pin:'M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0zM12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6',person:'M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M4 21v-3a8 8 0 0 1 16 0v3',check:'M5 12l4 4L19 6',close:'M5 5l14 14M19 5L5 19',bell:'M18 8a6 6 0 0 0-12 0v6l-2 3h16l-2-3zM9 21h6',arrow:'M4 12h16M14 6l6 6-6 6',moon:'M20 15A9 9 0 0 1 9 3a9 9 0 1 0 11 12',file:'M5 2h9l5 5v15H5zM14 2v6h5M8 13h8M8 17h6'};
 const icon=n=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[n]||icons.file}"/></svg>`;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -38,6 +39,7 @@ function displayState(){return sampleState||state;}
 let exportingTimetable=false,exportCancelRequested=false,leaveOpening=false;
 let leaveView=null,leaveRefreshPromise=null,cancelRefreshPromise=null,lastLeaveAttemptAt=0,lastLeaveSuccessDate=null,leaveAutoTimer=null,leaveModalOpen=false,leaveEpoch=0,leaveFocusPending=null,leaveScrollPending=0,leavePageOpen=false,leavePageFilter='all',leavePageExpanded=new Set(),leavePageReturnFocus=null,leavePagePushed=false;
 let state,tab='tomorrow',selectedDate=today(),selectedWeek=1,weekSelectedDate=today(),filter='',busy=false,progressLabel='',progressStarted=0,progressTimer=null,readFeedback=null,readEpoch=0;
+let feedbackInfo=null;
 let autoUpdateLastAt=0,leaveNoticeOpen=false,leaveNoticeTimer=null,leaveNoticeSeconds=0,leaveNoticeKey='leave',leaveNoticeReturnFocus=null;
 let calendarInfo=globalThis.Android?null:{available:false,writable:false,permission:'prompt',calendarId:null,lastSyncAt:null,lastEventCount:0,lastSemesterId:null},calendarBusy=false,calendarError=null;
 function visibleWeek(snapshot,date=today()){return Math.max(1,Math.min(snapshot.semester.weeks,weekOf(snapshot,date)));}
@@ -452,7 +454,7 @@ function renderSettings(){
  ${settingsGroup('请假与调休',leaveServicePanel()+holidayPanel())}
  ${settingsGroup('课程与提醒',studyPanel()+customCoursesPanel()+classReminderPanel()+notificationPanel()+permissionPanel())}
  ${settingsGroup('数据与同步',schoolPanel()+calendarPanel()+timetableLocalPanel()+sourcePanel())}
- ${settingsGroup('关于与隐私',privacyPanel(),'about')}
+ ${settingsGroup('关于与隐私',feedbackPanel(feedbackInfo)+privacyPanel(),'about')}
  </div>${sampleModeEntry()}`;
 }
 function customCourseForm(id=null){
@@ -640,6 +642,7 @@ if(a==='sample-mode'){if(busy)return;modal('<h3>进入示例模式？</h3><p cla
 if(a==='sample-confirm'){await enterSampleMode();return;}
 if(a==='sample-exit'){await exitSampleMode();return;}
 if(a==='study-settings'){studySettings();return;}else if(a==='course-manager'){courseManager();return;}else if(a==='course-settings'){courseSettingsForm(el.dataset.name);return;}else if(a==='theme-settings'){modal('<h3>外观主题</h3>'+themeOptions());return;}else if(a==='set-theme'){state.theme=el.dataset.theme;applyTheme(state.theme);await save();if(document.querySelector('.modal .theme-options'))modal('<h3>外观主题</h3>'+themeOptions());return;}else if(a==='clear-course-settings'){const row=el.dataset.name==='晚自习'?{name:'晚自习',localActivity:true}:state.snapshot.rules.find(r=>r.name===el.dataset.name);if(row)delete state.courseSettings[courseSettingKey(row)];await save();close();render();return;}else if(a==='select-week-date'){weekSelectedDate=date;render();return;}
+if(a==='feedback'){await openFeedback(feedbackInfo);return;}
 if(a==='agreement'){modal(`<h3>${esc(agreement.title)}</h3><div class="agreement-body agreement-review">${agreementContent()}</div><button class="button primary" data-action="close">关闭</button>`);return;}else if(a==='battery-settings'){await call('batterySettings');return;}else if(a==='request-exact-alarm'){await call('requestExactAlarm');return;}else if(a==='cancel-read'){if(busy){readEpoch++;endRead();render();}try{await call('cancelRead');}catch{}return;}else if(a==='nav'){tab=el.dataset.tab;if(tab==='changes')markLeaveRead();if(tab==='tomorrow')selectedDate=today();render();if(tab==='settings'&&globalThis.Android){refreshPermissionStatus();void refreshCalendarStatus();}}else if(a==='close'){if(exportingTimetable)exportCancelRequested=true;close();}else if(a==='detail')detail(key,date);else if(a==='edit')edit(key,date);else if(a==='remap')remap();else if(a==='holiday-settings')holidaySettingsForm();
 else if(a==='study-skip'){const row=dayList(date).find(r=>r.key===key&&r.localActivity);if(!row)throw Error('这天没有晚自习');state=saveOverride(state,row,{cancelled:true});await save();close();render();toast('已取消这天晚自习');}
 else if(a==='study-restore'){state.overrides=state.overrides.filter(o=>o.key!==key);await save();close();render();toast('已恢复这天晚自习');}
@@ -714,6 +717,8 @@ globalThis.addEventListener('pagehide',()=>{if(leaveNoticeOpen)cancelLeaveNotice
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(leavePageOpen){closeLeavePage();return;}if(leaveNoticeOpen){e.preventDefault();return;}if(exportingTimetable&&document.querySelector('#timetable-export-progress'))exportCancelRequested=true;close();}if(e.key==='Tab'){const trap=document.querySelector('#leave-notice-root')||document.querySelector('.modal')||(leavePageOpen?document.querySelector('#leave-page'):null);if(!trap)return;const nodes=[...trap.querySelectorAll('button,input,select,a')].filter(n=>!n.disabled);if(!nodes.length){e.preventDefault();trap.focus({preventScroll:true});return;}if(e.shiftKey&&document.activeElement===nodes[0]){e.preventDefault();nodes.at(-1)?.focus();}else if(!e.shiftKey&&document.activeElement===nodes.at(-1)){e.preventDefault();nodes[0]?.focus();}}});
 globalThis.addEventListener('popstate',syncLeavePageFromLocation);
 globalThis.addEventListener('hashchange',syncLeavePageFromLocation);
+// 反馈通道配置取自 web/feedback.json；未配置时入口不出现。
+loadFeedbackInfo().then(info=>{feedbackInfo=info;if(tab==='settings')render();}).catch(()=>{});
 render();
 if(location.hash==='#leave-status')openLeavePage({fromHistory:true});
 refreshReminders();

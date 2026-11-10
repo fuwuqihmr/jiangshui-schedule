@@ -222,7 +222,7 @@ export function buildSemesterOverviewModel(state){
 }
 
 export const PAGE_WIDTH=2520,PAGE_HEIGHT=1782;
-const MARGIN=68,TIME_WIDTH=126,HEADER_BOTTOM=316,GRID_BOTTOM=1610;
+const MARGIN=68,TIME_WIDTH=180,HEADER_BOTTOM=316,GRID_BOTTOM=1610;
 const COL_WIDTH=(PAGE_WIDTH-MARGIN*2-TIME_WIDTH)/7;
 const FONT='"Microsoft YaHei","Noto Sans CJK SC","Noto Sans SC",sans-serif';
 const PALETTE=[['#edf3ff','#305b9d'],['#eff7f1','#356f4b'],['#f4f0fc','#6e5796'],['#fff5eb','#946129'],['#edf7fa','#2d6f83']];
@@ -264,8 +264,56 @@ function courseLines(ctx,course,density=1){
   }
   return {course,lines,height:lines.reduce((n,l)=>n+l.height,0)+22};
 }
+// A course occupies every band its effective time overlaps. Adjacent bands
+// connected by one spanning course merge into a single row, matching the
+// weekly grid (week-layout.mjs): the course is shown once, across its span.
+function bandRangeOf(course){
+  let first=null,last=null;
+  BAND_DEFS.forEach((band,index)=>{
+    if(course.startTime<band.end&&course.endTime>band.start){if(first===null)first=index;last=index;}
+  });
+  if(first===null){
+    const index=BAND_DEFS.findIndex(band=>course.startTime>=band.start&&course.startTime<band.end);
+    if(index>=0)return {first:index,last:index};
+  }
+  return first===null?null:{first,last};
+}
+function mergedBand(start,end,items){
+  const first=BAND_DEFS[start],last=BAND_DEFS[end],span=end-start+1;
+  if(span===1)return {...first,span};
+  let from=null,to=null;
+  for(const item of items){
+    const course=item.course;
+    if(from===null||course.startTime<from)from=course.startTime;
+    if(to===null||course.endTime>to)to=course.endTime;
+  }
+  const titles=[...new Set(BAND_DEFS.slice(start,end+1).map(band=>band.title))];
+  return {start:from??first.start,end:to??last.end,title:titles.join('–'),time:`${from??first.start}–${to??last.end}`,optional:false,span};
+}
+function bandRows(model,buildCell){
+  const days=model.days.map(day=>day.courses.map(course=>({course,range:bandRangeOf(course)})).filter(item=>item.range));
+  const rows=[];
+  for(let start=0;start<BAND_DEFS.length;){
+    let end=start;
+    for(let row=start;row<=end;row++)
+      for(const list of days)
+        for(const item of list)
+          if(item.range.first<=row&&item.range.last>=row)end=Math.max(end,item.range.last);
+    const items=days.map(list=>list.filter(item=>item.range.last>=start&&item.range.first<=end));
+    const band=mergedBand(start,end,items.flat());
+    rows.push({...band,cells:items.map(list=>buildCell(list,band))});
+    start=end+1;
+  }
+  return rows;
+}
+// Pure layout for tests: which band rows a week model produces, before text wrapping.
+export function weekBandRows(model){
+  return bandRows(model,items=>items.map(item=>item.course));
+}
+const WEEK_BAND_MIN=188;
+function bandMinHeight(band){return WEEK_BAND_MIN*(band.span||1);}
 function bandLayouts(ctx,model,density=1){
-  return BAND_DEFS.map(band=>({...band,cells:model.days.map(day=>day.courses.filter(r=>r.startTime>=band.start&&r.startTime<band.end).map(r=>courseLines(ctx,r,density)))}))
+  return bandRows(model,items=>items.map(item=>courseLines(ctx,item.course,density)))
     .filter(band=>!band.optional||band.cells.some(cell=>cell.length));
 }
 function cellHeight(cell){return cell.reduce((sum,card)=>sum+card.height+10,0)+20;}
@@ -287,18 +335,18 @@ function takeBandSegment(band,queues,maxHeight,continuation){
     }
     return result;
   });
-  return {...band,cells,continuation,height:Math.max(188,...cells.map(cellHeight))};
+  return {...band,cells,continuation,height:Math.max(bandMinHeight(band),...cells.map(cellHeight))};
 }
 function paginate(bands){
   const available=GRID_BOTTOM-HEADER_BOTTOM,pages=[];let current=[],used=0;
   const nextPage=()=>{if(current.length)pages.push(current);current=[];used=0;};
   for(const band of bands){
     const queues=band.cells.map(cell=>cell.map(card=>({...card,lines:[...card.lines]})));
-    let continuation=false;
+    let continuation=false;const rowMin=bandMinHeight(band);
     do{
-      const needed=Math.max(188,...queues.map(cellHeight));
+      const needed=Math.max(rowMin,...queues.map(cellHeight));
       // Avoid splitting an ordinary card just because the previous row filled the page.
-      if(current.length&&(available-used<188||(needed<=available&&needed>available-used)))nextPage();
+      if(current.length&&(available-used<rowMin||(needed<=available&&needed>available-used)))nextPage();
       const row=takeBandSegment(band,queues,available-used,continuation);
       current.push(row);used+=row.height;continuation=true;
       if(queues.some(queue=>queue.length))nextPage();
@@ -309,6 +357,34 @@ function paginate(bands){
 function text(ctx,value,x,y,size=28,weight=400,color='#24394f',maxWidth){
   font(ctx,size,weight);ctx.fillStyle=color;
   if(maxWidth)ctx.fillText(value,x,y,maxWidth);else ctx.fillText(value,x,y);
+}
+// Row headers share one width budget: the label area ends before the first
+// weekday cell (MARGIN+TIME_WIDTH). Fitting by measured width keeps merged
+// spans such as 08:30–15:25 / 上午–午间–下午 fully readable instead of
+// letting the white cell below paint over their tail.
+const ROW_TITLE_X=MARGIN+28,ROW_TIME_X=MARGIN+12,ROW_HEADER_PAD=8;
+function fitFontSize(ctx,value,maxWidth,size,minSize){
+  let current=size;
+  while(current>minSize){
+    font(ctx,current);
+    if(ctx.measureText(value).width<=maxWidth)return current;
+    current=Math.max(minSize,current-1);
+  }
+  font(ctx,minSize);return minSize;
+}
+// Pure header metrics used by both the weekly image and the semester overview.
+// Tests feed a real-shaped measureText and assert every label fits its budget.
+export function rowHeaderMetrics(ctx,row,{titleSize=28,timeSize=22,timeWidth=TIME_WIDTH}={}){
+  const titleText=String(row&&row.title!=null?row.title:'');
+  const timeText=String(row&&row.time!=null?row.time:'');
+  const titleMax=timeWidth-(ROW_TITLE_X-MARGIN)-ROW_HEADER_PAD;
+  const timeMax=timeWidth-(ROW_TIME_X-MARGIN)-ROW_HEADER_PAD;
+  const fittedTitle=fitFontSize(ctx,titleText,titleMax,titleSize,10);
+  const fittedTime=fitFontSize(ctx,timeText,timeMax,timeSize,8);
+  font(ctx,fittedTitle);const titleWidth=ctx.measureText(titleText).width;
+  font(ctx,fittedTime);const timeWidthMeasured=ctx.measureText(timeText).width;
+  return {title:{text:titleText,size:fittedTitle,width:titleWidth,available:titleMax,limit:ROW_TITLE_X+titleMax,x:ROW_TITLE_X},
+          time:{text:timeText,size:fittedTime,width:timeWidthMeasured,available:timeMax,limit:ROW_TIME_X+timeMax,x:ROW_TIME_X}};
 }
 function rectangle(ctx,x,y,w,h,fill,stroke){ctx.fillStyle=fill;ctx.fillRect(x,y,w,h);if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=2;ctx.strokeRect(x,y,w,h);}}
 function baseCanvas(model,pageNumber,pageCount,createCanvas){
@@ -331,7 +407,7 @@ function baseCanvas(model,pageNumber,pageCount,createCanvas){
 function weekCanvasPages(model,createCanvas=()=>document.createElement('canvas')){
   const measuring=createCanvas();const ctx=measuring.getContext('2d');if(!ctx)throw Error('设备不支持课表图片导出');
   let bands=bandLayouts(ctx,model);
-  const totalHeight=items=>items.reduce((sum,band)=>sum+Math.max(188,...band.cells.map(cellHeight)),0),available=GRID_BOTTOM-HEADER_BOTTOM;
+  const totalHeight=items=>items.reduce((sum,band)=>sum+Math.max(bandMinHeight(band),...band.cells.map(cellHeight)),0),available=GRID_BOTTOM-HEADER_BOTTOM;
   // A slightly smaller card font keeps an ordinary busy week on one landscape page.
   if(totalHeight(bands)>available&&totalHeight(bands)<=available*1.35){
     for(const density of [.92,.84]){bands=bandLayouts(ctx,model,density);if(totalHeight(bands)<=available)break;}
@@ -351,7 +427,8 @@ function weekCanvasPages(model,createCanvas=()=>document.createElement('canvas')
     for(const row of rows){
       const height=row.height+spare/rows.length;
       rectangle(ctx,MARGIN,y,TIME_WIDTH,height,'#f8fafc','#cfdae5');
-      text(ctx,row.title,MARGIN+28,y+32,28,600);text(ctx,row.time,MARGIN+12,y+76,22,400,'#61748b');
+      const header=rowHeaderMetrics(ctx,row);
+      text(ctx,header.title.text,header.title.x,y+32,header.title.size,600);text(ctx,header.time.text,header.time.x,y+76,header.time.size,400,'#61748b');
       if(row.continuation)text(ctx,'续',MARGIN+46,y+112,22,400,'#61748b');
       for(let d=0;d<7;d++){
         const x=MARGIN+TIME_WIDTH+d*COL_WIDTH;
@@ -472,29 +549,26 @@ function overviewCompactGroup(ctx,cards,totalWeeks,density=1){
 }
 function overviewBandLayouts(ctx,model,density=1,level='full'){
   let compactUsed=false;
-  const bands=BAND_DEFS.map(band=>{
-    const cells=model.days.map(day=>{
-      const cards=day.courses.filter(card=>card.startTime>=band.start&&card.startTime<band.end);
-      if(cards.length>=OVERVIEW_COMPACT_THRESHOLD){
-        compactUsed=true;
-        const groups=new Map();
-        for(const card of cards){
-          const key=`${card.startTime}\u0000${card.endTime}`;
-          if(!groups.has(key))groups.set(key,[]);
-          groups.get(key).push(card);
-        }
-        return [...groups.values()].map(group=>overviewCompactGroup(ctx,group,model.totalWeeks,density));
+  const bands=bandRows(model,items=>{
+    const cards=items.map(item=>item.course);
+    if(cards.length>=OVERVIEW_COMPACT_THRESHOLD){
+      compactUsed=true;
+      const groups=new Map();
+      for(const card of cards){
+        const key=`${card.startTime}\u0000${card.endTime}`;
+        if(!groups.has(key))groups.set(key,[]);
+        groups.get(key).push(card);
       }
-      return cards.map(card=>overviewCourseLines(ctx,card,model.totalWeeks,density,level));
-    });
-    return {...band,cells};
+      return [...groups.values()].map(group=>overviewCompactGroup(ctx,group,model.totalWeeks,density));
+    }
+    return cards.map(card=>overviewCourseLines(ctx,card,model.totalWeeks,density,level));
   }).filter(band=>band.cells.some(cell=>cell.length));
   return {bands,compactUsed,gap:overviewGap(density)};
 }
 function overviewCellHeight(cell,gap){return cell.reduce((sum,block)=>sum+block.height+gap,0)+20;}
 function overviewMeasure(ctx,model,density,level){
   const {bands,compactUsed,gap}=overviewBandLayouts(ctx,model,density,level);
-  const rows=bands.map(band=>({...band,height:Math.max(OVERVIEW_ROW_MIN,...band.cells.map(cell=>overviewCellHeight(cell,gap)))}));
+  const rows=bands.map(band=>({...band,height:Math.max(OVERVIEW_ROW_MIN*(band.span||1),...band.cells.map(cell=>overviewCellHeight(cell,gap)))}));
   const contentH=rows.reduce((sum,row)=>sum+row.height,0);
   return {bands:rows,contentH,compactUsed,gap,density,level,natural:HEADER_BOTTOM+contentH+OVERVIEW_FOOTER_RESERVE};
 }
@@ -594,8 +668,9 @@ export function renderSemesterOverviewPage(model,createCanvas=()=>document.creat
   for(const row of layout.bands){
     const heightOfRow=row.height*scaleY+(layout.bands.length?spare/layout.bands.length:0);
     rectangle(draw,MARGIN,y,TIME_WIDTH,heightOfRow,'#f8fafc','#cfdae5');
-    text(draw,row.title,MARGIN+28,y+32*scaleY,Math.max(10,Math.round(28*scaleY)),600);
-    text(draw,row.time,MARGIN+12,y+76*scaleY,Math.max(8,Math.round(22*scaleY)),400,'#61748b');
+    const header=rowHeaderMetrics(draw,row,{titleSize:28*scaleY,timeSize:22*scaleY});
+    text(draw,header.title.text,header.title.x,y+32*scaleY,Math.max(10,Math.round(header.title.size)),600);
+    text(draw,header.time.text,header.time.x,y+76*scaleY,Math.max(8,Math.round(header.time.size)),400,'#61748b');
     for(let d=0;d<7;d++){
       const x=MARGIN+TIME_WIDTH+d*COL_WIDTH;
       rectangle(draw,x,y,COL_WIDTH,heightOfRow,'#ffffff','#cfdae5');

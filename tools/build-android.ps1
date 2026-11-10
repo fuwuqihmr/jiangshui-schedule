@@ -1,7 +1,15 @@
-param([string]$OutputDirectory,[string]$BuildDirectory,[string]$XiaomiAppId)
+param(
+    [string]$OutputDirectory,
+    [string]$BuildDirectory,
+    [string]$XiaomiAppId,
+    [string]$ToolchainRoot,
+    [ValidateRange(1, 2147483647)][int]$VersionCode = 50,
+    [ValidateNotNullOrEmpty()][string]$VersionName = '1.3.2'
+)
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path $PSScriptRoot -Parent
-$toolchainRoot=Join-Path (Split-Path $projectRoot -Parent) 'toolchain'
+if($ToolchainRoot){$toolchainRoot=[IO.Path]::GetFullPath($ToolchainRoot)}else{$toolchainRoot=Join-Path (Split-Path $projectRoot -Parent) 'toolchain'}
+if($VersionName -notmatch '^[0-9A-Za-z][0-9A-Za-z._+-]*$'){throw "VersionName contains unsupported characters: $VersionName"}
 $sdkRoot=Join-Path $toolchainRoot 'android-sdk'
 $buildTools=Join-Path $sdkRoot 'build-tools\35.0.0'
 $platformJar=Join-Path $sdkRoot 'platforms\android-35\android.jar'
@@ -22,7 +30,7 @@ if($XiaomiAppId){
  $manifest=$manifest.Replace('</application>',$focusMetadata+'</application>')
 }
 [System.IO.File]::WriteAllText("$buildRoot\AndroidManifest.xml",$manifest,$utf8)
-& "$buildTools\aapt2.exe" link -o "$buildRoot\unsigned.apk" -I $platformJar --manifest "$buildRoot\AndroidManifest.xml" --java "$buildRoot\gen" --min-sdk-version 26 --target-sdk-version 35 --version-code 49 --version-name '1.3.1-rc2' "$buildRoot\resources.zip"
+& "$buildTools\aapt2.exe" link -o "$buildRoot\unsigned.apk" -I $platformJar --manifest "$buildRoot\AndroidManifest.xml" --java "$buildRoot\gen" --min-sdk-version 26 --target-sdk-version 35 --version-code $VersionCode --version-name $VersionName "$buildRoot\resources.zip"
 Assert-Step
 $javaSources=Get-ChildItem -LiteralPath "$projectRoot\android\app\src\main\java\cn\local\tomorrow" -Filter *.java | ForEach-Object { $_.FullName }
 & javac -encoding UTF-8 -source 8 -target 8 -classpath $platformJar -d "$buildRoot\classes" $javaSources "$buildRoot\gen\cn\local\tomorrow\R.java"

@@ -96,6 +96,8 @@ const MUST_NOT_IGNORE = [
   'SECURITY.md',
   'LICENSE',
   'NOTICE',
+  '.github/workflows/android.yml',
+  'FEEDBACK.md',
   'tools/package-apk.py',
   'tools/package-windows.cjs',
   'harmony/tools/check-harmony.mjs',

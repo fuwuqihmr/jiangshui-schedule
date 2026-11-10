@@ -9,6 +9,9 @@
 #     node tools/check-upload-scope.mjs
 # ================================================================
 
+# GitHub Actions 工作流
+/.github/workflows/*.yml
+
 # 根级配置与文档（仅公开说明；内部决策/变更/归档说明见 .gitignore）
 /.gitignore
 /.gitattributes
@@ -20,6 +23,7 @@
 /SECURITY.md
 /LICENSE
 /NOTICE
+/FEEDBACK.md
 
 # 源码目录
 /web/**
