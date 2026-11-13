@@ -6,7 +6,7 @@
 
 项目**没有服务器**：不运营后台，不提供账号体系、云同步或远程推送。数据留在你自己的设备上，换设备就是重新登录、重新读取。
 
-**[下载 Android 安装包](https://github.com/fuwuqihmr/jiangshui-schedule/releases/latest)** —— 当前正式版 v1.3.2，Android 8.0 及以上。
+**[下载 Android 安装包](https://github.com/fuwuqihmr/jiangshui-schedule/releases/latest)** —— 当前稳定版 v1.3.2；预发布测试版 v1.3.4-rc2 见 [Releases](https://github.com/fuwuqihmr/jiangshui-schedule/releases)，Android 8.0 及以上。
 
 - 许可：GPL-3.0-or-later，全文见 [LICENSE](LICENSE)
 - 第三方组件、名称与图标说明：[NOTICE](NOTICE)
@@ -83,11 +83,11 @@ assets/     应用图标源文件
 
 ## 下载与安装
 
-安装包发布在 GitHub 的 [Releases](https://github.com/fuwuqihmr/jiangshui-schedule/releases) 页面，当前正式版是 **v1.3.2**。
+安装包发布在 GitHub 的 [Releases](https://github.com/fuwuqihmr/jiangshui-schedule/releases) 页面：当前稳定版是 **v1.3.2**，预发布测试版是 **v1.3.4-rc2**。
 
 - 每个版本提供 Android APK，旁边附一个同名的 `.sha256` 校验文件；下载后可以自己核对摘要（Windows 用 `certutil -hashfile 文件名 SHA256`，macOS / Linux 用 `sha256sum 文件名`）。
 - 需要 Android 8.0（API 26）及以上；第一次安装要在系统设置里允许「安装未知应用」。
-- 正式包由 CI 用与早期 rc 构建相同的证书签名，装过 v1.3.1-rc1 / rc2 的可以直接覆盖升级，本机数据保留。
+- 正式包由 CI 用与早期 rc 构建相同的证书签名，装过 v1.3.1-rc1 / rc2 的可以直接覆盖升级，本机数据保留；装过 v1.3.4-rc1（versionCode 52）测试包的也可以直接覆盖升级到 v1.3.4-rc2（versionCode 53）。
 - 如果你装过早期的反馈测试包，它用的是另一张证书（安装包校验值以 `81d9` 开头），需要先卸载再安装本版本；卸载会清除本机的课表、登录状态与设置。
 - 系统集成行为（通知、桌面小组件、日历写入、意见反馈页渲染）仍需要在设备上逐项确认，不保证在所有机型上都一致；遇到问题请用应用内「意见反馈」报告。
 - HarmonyOS 版暂不提供安装包，需要自行用 DevEco Studio 构建并签名（见下文「自己构建」）。

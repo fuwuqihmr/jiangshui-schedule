@@ -45,6 +45,7 @@
 /tools/export-client-icons.cjs
 /tools/ChineseSimplified.isl
 /tools/check-upload-scope.mjs
+/tools/check-data-gate.mjs
 /tools/upload-allowlist.txt
 /tools/package-apk.py
 /tools/package-windows.cjs
