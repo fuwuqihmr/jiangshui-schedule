@@ -6,14 +6,14 @@ const manifest=readFileSync(new URL('../android/app/src/main/AndroidManifest.xml
 const java=readFileSync(new URL('../android/app/src/main/java/cn/local/tomorrow/MainActivity.java',import.meta.url),'utf8');
 const app=readFileSync(new URL('../web/app.mjs',import.meta.url),'utf8');
 
-test('AndroidManifest：加定位与读写日历权限，权限总数 12，不含存储/后台定位/QUERY_ALL',()=>{
+test('AndroidManifest：加定位与读写日历权限，权限总数 13，不含存储/后台定位/QUERY_ALL',()=>{
  const permissions=[...manifest.matchAll(/<uses-permission[^>]*android:name="([^"]+)"/g)].map(match=>match[1]);
  assert(permissions.includes('android.permission.ACCESS_FINE_LOCATION'),'必须声明精确位置');
  assert(permissions.includes('android.permission.ACCESS_COARSE_LOCATION'),'必须声明粗略位置');
  const forbidden=['READ_EXTERNAL_STORAGE','WRITE_EXTERNAL_STORAGE','MANAGE_EXTERNAL_STORAGE','ACCESS_BACKGROUND_LOCATION','ACCESS_MEDIA_LOCATION','READ_MEDIA_IMAGES','READ_MEDIA_VIDEO','READ_MEDIA_AUDIO','QUERY_ALL_PACKAGES','CAMERA','RECORD_AUDIO','READ_CONTACTS','READ_PHONE_STATE','GET_ACCOUNTS'];
  for(const name of forbidden)assert.equal(permissions.some(permission=>permission.endsWith('.'+name)),false,'不得声明 '+name);
- const expected=['INTERNET','ACCESS_NETWORK_STATE','ACCESS_COARSE_LOCATION','ACCESS_FINE_LOCATION','POST_NOTIFICATIONS','RECEIVE_BOOT_COMPLETED','SCHEDULE_EXACT_ALARM','FOREGROUND_SERVICE','FOREGROUND_SERVICE_DATA_SYNC','REQUEST_IGNORE_BATTERY_OPTIMIZATIONS','READ_CALENDAR','WRITE_CALENDAR'].map(name=>'android.permission.'+name);
- assert.equal(permissions.length,12,'权限总数必须为 12 项');
+ const expected=['INTERNET','ACCESS_NETWORK_STATE','ACCESS_COARSE_LOCATION','ACCESS_FINE_LOCATION','POST_NOTIFICATIONS','RECEIVE_BOOT_COMPLETED','SCHEDULE_EXACT_ALARM','FOREGROUND_SERVICE','FOREGROUND_SERVICE_DATA_SYNC','REQUEST_IGNORE_BATTERY_OPTIMIZATIONS','READ_CALENDAR','WRITE_CALENDAR','REQUEST_INSTALL_PACKAGES'].map(name=>'android.permission.'+name);
+ assert.equal(permissions.length,13,'权限总数必须为 13 项');
  assert(permissions.includes('android.permission.READ_CALENDAR')&&permissions.includes('android.permission.WRITE_CALENDAR'),'必须声明读写日历权限');
  assert.deepEqual([...permissions].sort(),[...expected].sort(),'权限集合必须最小化');
 });

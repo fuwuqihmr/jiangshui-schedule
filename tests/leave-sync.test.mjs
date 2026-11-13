@@ -126,7 +126,7 @@ test('真实 provider 接线：默认 school、request 调 leaveRecordSync、示
  assert.match(app,/\$\{esc\(leaveView\.error\.message\|\|'读取假条失败'\)\}/,'provider 中文错误需展示到面板');
 });
 
-test('隐私与权限静态检查：不打印 cookie/响应原文，权限为 12 项含日历',()=>{
+test('隐私与权限静态检查：不打印 cookie/响应原文，权限为 13 项含日历',()=>{
  const java=readFileSync(new URL('../android/app/src/main/java/cn/local/tomorrow/MainActivity.java',import.meta.url),'utf8');
  const fetchBlock=/JSONObject fetchLeaveRecords\(\)\{[\s\S]*?\n    \}/.exec(java)?.[0]||'';
  assert(fetchBlock.length>0,'找不到 fetchLeaveRecords');
@@ -136,8 +136,8 @@ test('隐私与权限静态检查：不打印 cookie/响应原文，权限为 12
  assert.match(java,/case "leaveRecordSync":beginLeaveRecordSync\(id\);break;/);
  const manifest=readFileSync(new URL('../android/app/src/main/AndroidManifest.xml',import.meta.url),'utf8');
  const permissions=[...manifest.matchAll(/<uses-permission[^>]*android:name="([^"]+)"/g)].map(match=>match[1]);
- assert.equal(permissions.length,12,'权限必须为 12 项');
- const expected=['INTERNET','ACCESS_NETWORK_STATE','ACCESS_COARSE_LOCATION','ACCESS_FINE_LOCATION','POST_NOTIFICATIONS','RECEIVE_BOOT_COMPLETED','SCHEDULE_EXACT_ALARM','FOREGROUND_SERVICE','FOREGROUND_SERVICE_DATA_SYNC','REQUEST_IGNORE_BATTERY_OPTIMIZATIONS','READ_CALENDAR','WRITE_CALENDAR'].map(name=>'android.permission.'+name);
+ assert.equal(permissions.length,13,'权限必须为 13 项');
+ const expected=['INTERNET','ACCESS_NETWORK_STATE','ACCESS_COARSE_LOCATION','ACCESS_FINE_LOCATION','POST_NOTIFICATIONS','RECEIVE_BOOT_COMPLETED','SCHEDULE_EXACT_ALARM','FOREGROUND_SERVICE','FOREGROUND_SERVICE_DATA_SYNC','REQUEST_IGNORE_BATTERY_OPTIMIZATIONS','READ_CALENDAR','WRITE_CALENDAR','REQUEST_INSTALL_PACKAGES'].map(name=>'android.permission.'+name);
  assert(permissions.includes('android.permission.READ_CALENDAR')&&permissions.includes('android.permission.WRITE_CALENDAR'),'清单必须含 READ/WRITE_CALENDAR');
  assert.deepEqual([...permissions].sort(),[...expected].sort());
  assert.doesNotMatch(manifest,/BACKGROUND_LOCATION|READ_EXTERNAL|WRITE_EXTERNAL|QUERY_ALL_PACKAGES/);

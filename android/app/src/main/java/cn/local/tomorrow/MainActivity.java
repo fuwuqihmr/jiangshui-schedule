@@ -30,6 +30,7 @@ import java.util.ArrayList;
 
 public class MainActivity extends Activity {
     WebView web, school;
+    UpdateChecker updates;
     FrameLayout mainLayout;
     LinearLayout schoolLayout; TextView schoolNote;
     String notificationRequest, documentRequest;
@@ -128,6 +129,7 @@ public class MainActivity extends Activity {
         if(Build.VERSION.SDK_INT>=30)getWindow().setDecorFitsSystemWindows(false);
         if(Build.VERSION.SDK_INT>=28){WindowManager.LayoutParams params=getWindow().getAttributes();params.layoutInDisplayCutoutMode=WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;getWindow().setAttributes(params);}
         web=new WebView(this); configure(web); web.addJavascriptInterface(new Bridge(),"Android");
+        updates=new UpdateChecker(this,payload->{WebView target=web;if(target!=null&&!isFinishing()&&!isDestroyed()){try{target.evaluateJavascript("window.onNativeUpdateProgress&&window.onNativeUpdateProgress("+payload.toString()+")",null);}catch(Exception ignored){}}});
         web.setWebChromeClient(new WebChromeClient(){
             @Override public boolean onConsoleMessage(ConsoleMessage message){
                 try{String msg=message==null?null:message.message();if(msg!=null&&msg.startsWith("[trace]"))StateStore.log(MainActivity.this,msg.length()>500?msg.substring(0,500):msg);}catch(Exception ignored){}
@@ -959,6 +961,13 @@ public class MainActivity extends Activity {
             case "batterySettings":openBatterySettings();result(id,object("ok",true));break;
             case "feedbackInfo":{FeedbackConfig cfg=FeedbackConfig.load(MainActivity.this);JSONObject info=object("enabled",cfg.enabled);info.put("title",cfg.title);info.put("intro",cfg.intro);info.put("url",cfg.enabled?cfg.url:"");result(id,info);break;}
             case "openFeedback":{FeedbackConfig cfg=FeedbackConfig.load(MainActivity.this);if(!cfg.enabled)throw new Exception(getString(R.string.feedback_not_configured));log("feedback open");Intent feedbackIntent=new Intent(MainActivity.this,FeedbackActivity.class);feedbackIntent.putExtra(FeedbackActivity.EXTRA_DARK,appDark);startActivity(feedbackIntent);result(id,object("ok",true));break;}
+            case "updateInfo":if(updates==null)throw new Exception("更新服务不可用");result(id,updates.info());break;
+            case "updateSettings":if(updates==null)throw new Exception("更新服务不可用");result(id,updates.setEnabled(p.optBoolean("enabled",true)));break;
+            case "updateCheck":{if(updates==null)throw new Exception("更新服务不可用");String updateCheckId=id;boolean manual=p.optBoolean("manual",false);updates.check(manual,value->result(updateCheckId,value));break;}
+            case "updateDownload":{if(updates==null)throw new Exception("更新服务不可用");String updateDownloadId=id;updates.download(value->result(updateDownloadId,value));break;}
+            case "updateCancel":if(updates==null)throw new Exception("更新服务不可用");updates.cancel();result(id,object("ok",true));break;
+            case "updateSkip":if(updates==null)throw new Exception("更新服务不可用");result(id,updates.skip(p.optString("version","")));break;
+            case "updateInstall":{if(updates==null)throw new Exception("更新服务不可用");String updateInstallId=id;updates.install(value->result(updateInstallId,value));break;}
             case "openSchool":if(p.optBoolean("mobile")){openSchool(true);result(id,object("ok",true));}else beginSchoolRead(id,true);break;
             case "openWebApp":openWebApp(p.optString("url"),p.isNull("warmupUrl")?null:p.optString("warmupUrl"));result(id,object("ok",true));break;
             case "leaveRecordSync":beginLeaveRecordSync(id);break;
@@ -1059,7 +1068,7 @@ public class MainActivity extends Activity {
         if(saved==null||webAppTargetUrl!=null)return;
         restoreWebAppState(saved);
     }
-    @Override protected void onResume(){super.onResume();if(pendingFileCallback!=null&&fileChooserStartedAt>0L&&SystemClock.elapsedRealtime()-fileChooserStartedAt>FILE_CHOOSER_TIMEOUT_MS){finishFileChooser(null);setWebAppNote(getString(R.string.webapp_file_chooser_timeout));}else if(pendingFileRequest!=0&&pendingFileCallback==null&&webAppVisible)handleRestoredFileRequest();dispatchSystemTheme();applyWindowTheme();ScheduleWidgetProvider.updateAll(this);XiaomiFocus.invalidate();ClassReminders.reconcile(this);if(web!=null)web.evaluateJavascript("window.onNativeResume&&window.onNativeResume()",null);}
+    @Override protected void onResume(){super.onResume();if(updates!=null)updates.onResume();if(pendingFileCallback!=null&&fileChooserStartedAt>0L&&SystemClock.elapsedRealtime()-fileChooserStartedAt>FILE_CHOOSER_TIMEOUT_MS){finishFileChooser(null);setWebAppNote(getString(R.string.webapp_file_chooser_timeout));}else if(pendingFileRequest!=0&&pendingFileCallback==null&&webAppVisible)handleRestoredFileRequest();dispatchSystemTheme();applyWindowTheme();ScheduleWidgetProvider.updateAll(this);XiaomiFocus.invalidate();ClassReminders.reconcile(this);if(web!=null)web.evaluateJavascript("window.onNativeResume&&window.onNativeResume()",null);}
     void handleRestoredFileRequest(){
         final int restored=pendingFileRequest;
         webAppHandler.postDelayed(()->{
@@ -1071,7 +1080,7 @@ public class MainActivity extends Activity {
         },2000L);
     }
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.getBooleanExtra("open_changes",false)){if(pageReady)openChanges(web);else openChangesOnLoad=true;}else if(intent.getBooleanExtra("open_today",false)){String date=intent.getStringExtra("open_date");if(pageReady)openSchedule(web,date);else{openTodayOnLoad=true;openDateOnLoad=date;}}}
-    @Override protected void onDestroy(){cancelLeaveSync();cancelCalendarAction();calendarExecutor.shutdownNow();leaveExecutor.shutdownNow();destroyWebApp();if(schoolClient!=null)schoolClient.destroy();schoolClient=null;readState.finish();if(web!=null){web.removeJavascriptInterface("Android");web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){if(updates!=null){updates.shutdown();updates=null;}cancelLeaveSync();cancelCalendarAction();calendarExecutor.shutdownNow();leaveExecutor.shutdownNow();destroyWebApp();if(schoolClient!=null)schoolClient.destroy();schoolClient=null;readState.finish();if(web!=null){web.removeJavascriptInterface("Android");web.destroy();web=null;}super.onDestroy();}
     @Override public void onBackPressed(){
         WebView target=web;
         if(target==null){handleNativeBack();return;}

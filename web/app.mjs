@@ -17,6 +17,7 @@ import {LEAVE_SERVICES,openLeaveService,XGXT_ORIGIN} from './leave.mjs';
 import {normalizeLeaveStatusCache,sampleLeaveRecords,getLeaveRecordsProvider as moduleLeaveRecordsProvider,createSchoolRecordsProvider,leaveMarkForCourse,matchLeaveMarks,leaveRecordsForDate,sortLeaveRecords,leaveStatusLabel,leaveTypeLabel,leaveStatusSummary,leaveCancelState,cancelStatusLabel,visibleLeaveRecords,CANCEL_COPY,shouldRefreshCancelAfterLeave,normalizeManualCancelMarks,applyManualCancel,markManualCancel,unmarkManualCancel,manualCancelDateLabel} from './leave-status.mjs';
 import {buildCalendarEvents,normalizeCalendarOptions} from './calendar-events.mjs';
 import {loadFeedbackInfo,openFeedback,feedbackPanel} from './feedback.mjs';
+import {normalizeUpdateInfo,normalizeRelease,releaseTitle,releaseTag,updateErrorText} from './update.mjs';
 const icons={tomorrow:'M8 2v4m8-4v4M3 9h18M5 4h14a2 2 0 0 1 2 2v14H3V6a2 2 0 0 1 2-2zM8 13h3v3H8',week:'M3 3h18v18H3zM3 9h18M9 3v18M15 3v18M3 15h18',changes:'M18 8a7 7 0 1 0 1 8M18 3v5h-5M12 8v5l3 2',settings:'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8M4 9l-2 1v4l2 1 2 3v2h4l2-2 2 2h4v-3l2-2 2-1v-4l-2-1-2-3V3h-4l-2 2-2-2H6v3z',refresh:'M20 6v5h-5M4 18v-5h5M19 10a7 7 0 0 0-12-5L4 8m1 6a7 7 0 0 0 12 5l3-3',left:'M15 5l-7 7 7 7',right:'M9 5l7 7-7 7',pin:'M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0zM12 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6',person:'M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M4 21v-3a8 8 0 0 1 16 0v3',check:'M5 12l4 4L19 6',close:'M5 5l14 14M19 5L5 19',bell:'M18 8a6 6 0 0 0-12 0v6l-2 3h16l-2-3zM9 21h6',arrow:'M4 12h16M14 6l6 6-6 6',moon:'M20 15A9 9 0 0 1 9 3a9 9 0 1 0 11 12',file:'M5 2h9l5 5v15H5zM14 2v6h5M8 13h8M8 17h6'};
 const icon=n=>`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${icons[n]||icons.file}"/></svg>`;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -40,6 +41,7 @@ let exportingTimetable=false,exportCancelRequested=false,leaveOpening=false;
 let leaveView=null,leaveRefreshPromise=null,cancelRefreshPromise=null,lastLeaveAttemptAt=0,lastLeaveSuccessDate=null,leaveAutoTimer=null,leaveModalOpen=false,leaveEpoch=0,leaveFocusPending=null,leaveScrollPending=0,leavePageOpen=false,leavePageFilter='all',leavePageExpanded=new Set(),leavePageReturnFocus=null,leavePagePushed=false;
 let state,tab='tomorrow',selectedDate=today(),selectedWeek=1,weekSelectedDate=today(),filter='',busy=false,progressLabel='',progressStarted=0,progressTimer=null,readFeedback=null,readEpoch=0;
 let feedbackInfo=null;
+let appUpdateInfo=null,appUpdateBusy=false,appUpdateLatest=null,appUpdatePrompted="",appUpdateRun=0;
 let autoUpdateLastAt=0,leaveNoticeOpen=false,leaveNoticeTimer=null,leaveNoticeSeconds=0,leaveNoticeKey='leave',leaveNoticeReturnFocus=null;
 let calendarInfo=globalThis.Android?null:{available:false,writable:false,permission:'prompt',calendarId:null,lastSyncAt:null,lastEventCount:0,lastSemesterId:null},calendarBusy=false,calendarError=null;
 function visibleWeek(snapshot,date=today()){return Math.max(1,Math.min(snapshot.semester.weeks,weekOf(snapshot,date)));}
@@ -446,6 +448,74 @@ function studyPanel(){return `<section class="panel"><h2>晚自习与课程设�
 function timetableLocalPanel(){return `<section class="panel"><h2>课表与本地修改</h2><p>导入或导出本机课表快照。导出文件不含学校凭据；分享前请确认其中的课程信息。</p><div class="actions"><button class="button" data-action="import">${icon('file')}导入课表 JSON</button><button class="button" data-action="export">导出课表 JSON</button></div><div class="tiny-rule"></div><div class="stat-line"><span>已保存修改 / 调休</span><strong>${state.overrides.length} / ${state.localMaps.length}</strong></div><div class="actions"><button class="button danger" data-action="restore">还原来源课表</button></div></section>`;}
 function privacyPanel(){return `<section class="panel"><h2>用户协议与隐私</h2><p>学校 TGC 与教务 Cookie 仅保存在本机；Android 版使用 Keystore 加密保存恢复副本，不上传至开发者或第三方云端。</p><button class="button" data-action="agreement">查看用户协议与 Cookie 授权</button><div class="tiny-rule"></div><button class="button danger" data-action="logout">注销并删除本机数据</button><p class="disabled-note">可通过“注销并删除本机数据”撤回授权。</p></section>`;}
 function sourcePanel(){return `<section class="panel"><h2>来源与冲突</h2><p>学校更新与本地修改冲突时，突出学校版本，保留本地版本与待处理标记。单点修改只影响指定日期。</p></section>`;}
+function updateCheckedAt(value){
+ const time=Number(value);if(!Number.isFinite(time)||time<=0)return '尚未检查';
+ try{return new Date(time).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});}catch{return '尚未检查';}
+}
+function appUpdatePanel(){
+ if(!globalThis.Android)return '';
+ const info=appUpdateInfo||{enabled:true,currentVersion:'',lastAutoCheckAt:0};
+ const current=info.currentVersion?releaseTag(info.currentVersion):'未知';
+ return `<section class="panel" id="app-update-panel"><h2>应用版本</h2><p>检查 GitHub Release 中的新版本；下载后在本机校验文件摘要与签名证书，再交给系统安装器。不上传设备信息。</p><div class="stat-line"><span>当前版本</span><strong>${esc(current)}</strong></div><div class="stat-line"><span>最近自动检查</span><strong>${esc(updateCheckedAt(info.lastAutoCheckAt))}</strong></div><label class="switch"><input type="checkbox" id="update-enabled" ${info.enabled?'checked':''}>自动检查更新</label><p class="disabled-note">每天最多检查一次；自动检查只提示，不会擅自安装。测试版会明确标注预发布。</p><div class="actions"><button class="button primary" data-action="update-check" ${appUpdateBusy?'disabled':''}>${appUpdateBusy?'正在检查…':'检查更新'}</button></div></section>`;
+}
+function showUpdateDialog(result){
+ appUpdateLatest=result;
+ const version=releaseTag(result.latestVersion);
+ modal(`<h3>${esc(releaseTitle(result.latestVersion))}</h3>${result.prerelease?'<p class="update-prerelease" role="status">这是预发布版本，可能不稳定。</p>':''}<p class="scope">当前版本 ${esc(releaseTag(result.currentVersion)||'未知')} · 最新版本 ${esc(version)}</p><div class="update-notes-box"><strong>更新说明</strong><pre id="update-notes"></pre></div><div class="actions"><button class="button primary" data-action="update-download">下载并安装</button><button class="button" data-action="update-skip" data-version="${esc(result.latestVersion)}">跳过此版本</button><button class="button" data-action="close">稍后提醒</button></div>`);
+ const notes=document.querySelector('#update-notes');if(notes)notes.textContent=result.notes||'该版本没有提供更新说明。';
+}
+function showUpdateDownloadDialog(){
+ const version=appUpdateLatest?.latestVersion||'';
+ modal(`<h3>正在下载 ${esc(releaseTag(version)||'更新')}</h3><p class="scope">下载完成后会在本机校验 SHA-256 与签名证书；校验不通过不会安装，也不会保留文件。</p><div class="update-progress"><progress id="update-progress" max="100" value="0"></progress><p id="update-progress-text" role="status" aria-live="polite">准备下载…</p></div><div class="actions"><button class="button" data-action="update-cancel">取消下载</button></div>`);
+}
+globalThis.onNativeUpdateProgress=payload=>{
+ if(!payload||typeof payload!=='object')return;
+ const bar=document.querySelector('#update-progress'),text=document.querySelector('#update-progress-text');
+ const percent=Math.max(0,Math.min(100,Number(payload.percent)||0));
+ if(bar)bar.value=percent;
+ if(text){text.classList.remove('update-error');text.textContent=payload.phase==='verify'?'正在校验安装包…':payload.phase==='download'?`正在下载 · ${percent}%`:'准备下载…';}
+};
+async function checkAppUpdate(manual=false){
+ if(!globalThis.Android||appUpdateBusy)return;
+ appUpdateBusy=true;if(manual)render();
+ try{
+  const result=normalizeRelease(await call('updateCheck',{manual}));
+  if(!result.ok){if(manual)toast(updateErrorText(result.errorCode,result.message),{tone:'error'});return;}
+  if(result.updateAvailable){
+   if(!manual&&(result.skipped||appUpdatePrompted===result.latestVersion))return;
+   appUpdatePrompted=result.latestVersion;showUpdateDialog(result);
+  }else if(manual){toast('当前已是最新版本',{detail:result.currentVersion?'v'+result.currentVersion:'',tone:'neutral'});}
+ }catch(error){if(manual)toast(updateErrorText('network',error?.message),{tone:'error'});}
+ finally{appUpdateBusy=false;if(manual)render();}
+}
+async function downloadAppUpdate(){
+ if(appUpdateBusy)return;
+ appUpdateBusy=true;const run=++appUpdateRun;showUpdateDownloadDialog();
+ try{
+  const result=await call('updateDownload')||{};
+  if(run!==appUpdateRun)return;
+  if(result.ok===false)throw Object.assign(Error(result.message||''),{code:result.errorCode});
+  close();toast(result.message||'安装包已校验，正在打开系统安装器');
+ }catch(error){
+  if(run!==appUpdateRun)return;
+  close();toast(updateErrorText(error?.code,error?.message),{tone:'error'});
+ }finally{if(run===appUpdateRun){appUpdateBusy=false;render();}}
+}
+async function skipAppUpdate(version){
+ try{await call('updateSkip',{version});close();toast('已跳过 '+(releaseTag(version)||version)+'，有新版本时会再提示');}
+ catch(error){toast(updateErrorText('version',error?.message),{tone:'error'});}
+}
+async function cancelAppUpdate(){
+ appUpdateRun++;appUpdateBusy=false;
+ const text=document.querySelector('#update-progress-text');if(text)text.textContent='正在取消…';
+ try{await call('updateCancel');}catch{}
+ close();render();toast('已取消下载',{tone:'neutral'});
+}
+async function loadAppUpdateInfo(){
+ if(!globalThis.Android){appUpdateInfo=null;return;}
+ try{appUpdateInfo=normalizeUpdateInfo(await call('updateInfo'));}catch{appUpdateInfo=normalizeUpdateInfo({enabled:false});}
+ if(tab==='settings')render();
+}
 function renderSettings(){
  if(sampleState)return `<section class="panel panel-pad"><h2>正在查看示例课表</h2><p class="subtle">示例仅供浏览。个人课程、调休、晚自习设置和登录状态继续保存在本机。</p></section>${sampleModeEntry()}`;
  return `${quickTools()}<div class="settings-groups">${settingsGroupControls()}
@@ -454,7 +524,7 @@ function renderSettings(){
  ${settingsGroup('请假与调休',leaveServicePanel()+holidayPanel())}
  ${settingsGroup('课程与提醒',studyPanel()+customCoursesPanel()+classReminderPanel()+notificationPanel()+permissionPanel())}
  ${settingsGroup('数据与同步',schoolPanel()+calendarPanel()+timetableLocalPanel()+sourcePanel())}
- ${settingsGroup('关于与隐私',feedbackPanel(feedbackInfo)+privacyPanel(),'about')}
+ ${settingsGroup('关于与隐私',appUpdatePanel()+feedbackPanel(feedbackInfo)+privacyPanel(),'about')}
  </div>${sampleModeEntry()}`;
 }
 function customCourseForm(id=null){
@@ -642,6 +712,10 @@ if(a==='sample-mode'){if(busy)return;modal('<h3>进入示例模式？</h3><p cla
 if(a==='sample-confirm'){await enterSampleMode();return;}
 if(a==='sample-exit'){await exitSampleMode();return;}
 if(a==='study-settings'){studySettings();return;}else if(a==='course-manager'){courseManager();return;}else if(a==='course-settings'){courseSettingsForm(el.dataset.name);return;}else if(a==='theme-settings'){modal('<h3>外观主题</h3>'+themeOptions());return;}else if(a==='set-theme'){state.theme=el.dataset.theme;applyTheme(state.theme);await save();if(document.querySelector('.modal .theme-options'))modal('<h3>外观主题</h3>'+themeOptions());return;}else if(a==='clear-course-settings'){const row=el.dataset.name==='晚自习'?{name:'晚自习',localActivity:true}:state.snapshot.rules.find(r=>r.name===el.dataset.name);if(row)delete state.courseSettings[courseSettingKey(row)];await save();close();render();return;}else if(a==='select-week-date'){weekSelectedDate=date;render();return;}
+if(a==='update-check'){await checkAppUpdate(true);return;}
+if(a==='update-download'){await downloadAppUpdate();return;}
+if(a==='update-skip'){await skipAppUpdate(el.dataset.version||appUpdateLatest?.latestVersion||'');return;}
+if(a==='update-cancel'){await cancelAppUpdate();return;}
 if(a==='feedback'){await openFeedback(feedbackInfo);return;}
 if(a==='agreement'){modal(`<h3>${esc(agreement.title)}</h3><div class="agreement-body agreement-review">${agreementContent()}</div><button class="button primary" data-action="close">关闭</button>`);return;}else if(a==='battery-settings'){await call('batterySettings');return;}else if(a==='request-exact-alarm'){await call('requestExactAlarm');return;}else if(a==='cancel-read'){if(busy){readEpoch++;endRead();render();}try{await call('cancelRead');}catch{}return;}else if(a==='nav'){tab=el.dataset.tab;if(tab==='changes')markLeaveRead();if(tab==='tomorrow')selectedDate=today();render();if(tab==='settings'&&globalThis.Android){refreshPermissionStatus();void refreshCalendarStatus();}}else if(a==='close'){if(exportingTimetable)exportCancelRequested=true;close();}else if(a==='detail')detail(key,date);else if(a==='edit')edit(key,date);else if(a==='remap')remap();else if(a==='holiday-settings')holidaySettingsForm();
 else if(a==='study-skip'){const row=dayList(date).find(r=>r.key===key&&r.localActivity);if(!row)throw Error('这天没有晚自习');state=saveOverride(state,row,{cancelled:true});await save();close();render();toast('已取消这天晚自习');}
@@ -674,6 +748,7 @@ document.addEventListener('change',async e=>{
   try{await save();}catch(error){state.calendarOptions=previous;e.target.checked=!e.target.checked;toast(error.message||'未能保存日历选项');return;}
   calendarError=null;updateCalendarPanel();return;
  }const id=e.target.id;
+ if(id==='update-enabled'){if(!globalThis.Android)return;const enabled=e.target.checked;try{const result=await call('updateSettings',{enabled});appUpdateInfo=normalizeUpdateInfo({...(appUpdateInfo||{}),enabled:result?.enabled!==false});}catch(error){e.target.checked=!enabled;toast(error.message||'未能保存更新设置',{tone:'error'});return;}render();return;}
  if(sampleState&&['study-grade','auto-update','leave-notice-enabled','notifications','show-day-overview'].includes(id)){render();toast('请先退出示例模式再修改个人数据');return;}
  if(id==='auto-update'){
   if(!e.target.checked){
@@ -719,6 +794,7 @@ globalThis.addEventListener('popstate',syncLeavePageFromLocation);
 globalThis.addEventListener('hashchange',syncLeavePageFromLocation);
 // 反馈通道配置取自 web/feedback.json；未配置时入口不出现。
 loadFeedbackInfo().then(info=>{feedbackInfo=info;if(tab==='settings')render();}).catch(()=>{});
+void (async()=>{await loadAppUpdateInfo();if(appUpdateInfo?.enabled)setTimeout(()=>{void checkAppUpdate(false);},2500);})();
 render();
 if(location.hash==='#leave-status')openLeavePage({fromHistory:true});
 refreshReminders();
@@ -736,7 +812,7 @@ globalThis.__dsjOnBack=__dsjOnBack;
 globalThis.openToday=async(date='')=>{delete globalThis.__openChangesRequest;delete globalThis.__openScheduleRequest;if(sampleState)await exitSampleMode();tab='tomorrow';selectedDate=/^\d{4}-\d{2}-\d{2}$/.test(date)?date:today();await refreshReminders();render();};
 globalThis.openChanges=async()=>{delete globalThis.__openScheduleRequest;delete globalThis.__openChangesRequest;if(sampleState)await exitSampleMode();markLeaveRead();tab='changes';render();};
 globalThis.onLeaveServiceReturn=()=>{if(!sampleState)void refreshLeaveStatus({reason:'leave-return',force:true});scheduleLeaveDailyCheck();};
-globalThis.onNativeResume=async()=>{refreshCourseStatus();if(!globalThis.Android)return;await refreshPermissionStatus();void refreshCalendarStatus();if(busy)return;await saveQueue.catch(()=>{});try{const latest=await call('loadState');if(latest&&Number(latest._revision||0)>Number(state._revision||0)&&!document.querySelector('.modal')){const beforeMarks=(state.manualLeaveCancels?.marks||[]).length;state=latest;state.manualLeaveCancels=normalizeManualCancelMarks(state.manualLeaveCancels);state.courseLastSuccess??=state.lastSuccess??null;state.leaveLastSuccess??=state.leaveStatus?.fetchedAt??null;render();const afterMarks=(state.manualLeaveCancels?.marks||[]).length;if(afterMarks!==beforeMarks)console.debug('[trace] event=restore source=native rev='+(state._revision??0)+' marks='+afterMarks);}}catch{}await autoUpdateNow();await refreshReminders();scheduleLeaveDailyCheck();};
+globalThis.onNativeResume=async()=>{refreshCourseStatus();if(!globalThis.Android)return;await refreshPermissionStatus();void refreshCalendarStatus();if(busy)return;await saveQueue.catch(()=>{});try{const latest=await call('loadState');if(latest&&Number(latest._revision||0)>Number(state._revision||0)&&!document.querySelector('.modal')){const beforeMarks=(state.manualLeaveCancels?.marks||[]).length;state=latest;state.manualLeaveCancels=normalizeManualCancelMarks(state.manualLeaveCancels);state.courseLastSuccess??=state.lastSuccess??null;state.leaveLastSuccess??=state.leaveStatus?.fetchedAt??null;render();const afterMarks=(state.manualLeaveCancels?.marks||[]).length;if(afterMarks!==beforeMarks)console.debug('[trace] event=restore source=native rev='+(state._revision??0)+' marks='+afterMarks);}}catch{}await autoUpdateNow();void checkAppUpdate(false);await refreshReminders();scheduleLeaveDailyCheck();};
 
 if(globalThis.__openChangesRequest)globalThis.openChanges();else if(globalThis.__openScheduleRequest)globalThis.openToday(globalThis.__openScheduleRequest.date);
 

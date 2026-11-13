@@ -23,7 +23,7 @@ test('自动更新：默认开、设置第一项、关闭二次确认/取消保�
  assert.match(app,/if\(a==='auto-update-off'\)\{const previous=state\.autoUpdate;state\.autoUpdate=false;/);
  assert.match(app,/async function autoUpdateNow\(\)\{if\(!autoUpdateEnabled\(\)/,'关闭后不得自动读取');
  assert.match(app,/if\(state\.snapshot\.source\.kind==='school'\)void autoUpdateNow\(\);/,'冷启动自动核对候选');
- assert.match(app,/await autoUpdateNow\(\);await refreshReminders\(\);scheduleLeaveDailyCheck\(\);\};/,'回前台自动核对候选');
+ assert.match(app,/await autoUpdateNow\(\);void checkAppUpdate\(false\);await refreshReminders\(\);scheduleLeaveDailyCheck\(\);\};/,'回前台自动核对候选');
 });
 
 test('每日核对 UI/调度移除，但上课提醒与通知/权限入口保留',()=>{
