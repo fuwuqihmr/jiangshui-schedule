@@ -17,7 +17,7 @@
 
 ## 3. 应用图标
 
-- 仓库内的图标文件（`assets/app-icon.png`、`assets/app-icon.ico`、`web/assets/app-icon.png`，以及 `android/`、`harmony/` 各密度资源中的同名图标）均由仓库内脚本 `tools/export-client-icons.cjs` 依据内联 SVG 图形生成，随源代码一起按 GPL-3.0-or-later 分发。
+- 仓库内的图标文件（`assets/app-icon.png`、`assets/app-icon.ico`、`web/assets/app-icon.png`，以及 `android/`、`harmony/` 各密度资源中的同名图标）的源图由项目维护者提供，经 `work/docs/icon-1.3.4/generate-icons.py` 生成多端资源，随源代码一起按 GPL-3.0-or-later 分发。
 - **需要说明的一点**：项目早期设计曾参考一份形象素材，该参考图不在本仓库中，其来源与授权**尚未确认**。如果相关权利人认为使用不当，请通过 Issue 联系，我们会更换或移除相关图形。
 - 界面中的「江水蓝」等配色取自该图标，不构成对任何第三方商标、形象或角色授权的使用。
 
@@ -27,7 +27,7 @@
 | --- | --- | --- |
 | Electron | 桌面外壳（`desktop/`，已停止维护）与部分界面回归检查 | MIT |
 | @electron/packager | 桌面端打包 | BSD-2-Clause |
-| Playwright | 界面回归检查与图标导出 | Apache-2.0 |
+| Playwright | 界面回归检查 | Apache-2.0 |
 | Inno Setup 简体中文语言包（`tools/ChineseSimplified.isl`） | Windows 安装包中文化 | 第三方贡献译文（文件头保留维护者与上游来源说明），请勿删除其版权注释；Inno Setup 本身按其作者发布的条款使用 |
 | 节假日数据（`web/data/holidays.json`） | 调休与放假判断 | 依据国务院办公厅关于 2026 年部分节假日安排的通知（国办发明电〔2025〕7 号），文件内保留来源链接 |
 
