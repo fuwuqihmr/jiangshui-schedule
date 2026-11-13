@@ -99,8 +99,8 @@ test('Android：SharedPreferences 键按规格为 calendar-sync，事件字段�
  assert.match(app,/call\('calendarSync',\{semesterId:state\.snapshot\.semester\.id,events:built\.events\}\)/);
  assert.match(app,/call\('calendarRemove'\)/);
  const gradle=read('android/app/build.gradle');
- assert.match(gradle,/versionCode 53/);
- assert.match(gradle,/versionName '1\.3\.4-rc2'/);
+ assert.match(gradle,/versionCode 54/);
+ assert.match(gradle,/versionName '1\.3\.4'/);
 });
 test('设置分组收起态摘要：六组常量齐全',()=>{
  const summaries={'自动更新':'打开应用自动核对学校课表','课表与显示':'外观主题 · 首页显示 · 完整课表','请假与调休':'请假服务 · 调休安排 · 休假设置','课程与提醒':'上课提醒 · 晚自习 · 自定义课程','数据与同步':'<b>写入系统日历</b> · 教务系统 · 导出与排查日志','关于与隐私':'版本信息 · 用户协议 · 开源与致谢'};

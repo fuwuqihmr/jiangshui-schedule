@@ -1,7 +1,7 @@
 {
   "name": "course-change",
   "productName": "江水课表",
-  "version": "1.3.4-rc2",
+  "version": "1.3.4",
   "private": true,
   "license": "GPL-3.0-or-later",
   "description": "江水课表 · 今日课程与课表变化提醒",

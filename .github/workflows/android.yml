@@ -9,11 +9,11 @@ on:
       version_code:
         description: Android versionCode (must match android/app/build.gradle)
         required: true
-        default: '53'
+        default: '54'
       version_name:
         description: Android versionName without leading v (must match android/app/build.gradle)
         required: true
-        default: '1.3.4-rc2'
+        default: '1.3.4'
 
 permissions:
   contents: write
