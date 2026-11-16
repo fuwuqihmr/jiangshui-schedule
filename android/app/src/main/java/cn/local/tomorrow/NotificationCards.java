@@ -41,6 +41,23 @@ final class NotificationCards {
   Notification publicView=new Notification.Builder(c,ClassReminders.CHANNEL).setSmallIcon(R.drawable.ic_calendar).setContentTitle(headline).setContentText(course).setContentIntent(open).setVisibility(Notification.VISIBILITY_PUBLIC).setShowWhen(false).setStyle(new Notification.BigTextStyle().bigText(r.name+"\n时间："+r.start+"–"+r.end+"\n地点："+room+"\n老师："+teacher)).build();
   b.setPublicVersion(publicView);XiaomiFocus.attach(c,b,e,now,open,updating);return b;
  }
+ /** Standard-style Live Update card shown only while the class is in session.
+  *  It must never set a custom content view, colour, group or a RemoteViews countdown: those
+  *  disqualify a notification from Android 16 promotion. The system chronometer counts down to
+  *  the class end while the determinate progress advances in 5-minute steps. */
+ static Notification.Builder live(Context c,ClassReminderPlan.Event e,long now,PendingIntent open){
+  ScheduleWidgetData.Item r=e.course;
+  String room=ClassReminders.field(r.room,"地点待确认"),teacher=ClassReminders.field(r.teacher,r.localActivity?"无任课老师":"老师待确认");
+  String name=r.name==null||r.name.trim().isEmpty()?"上课中":r.name;
+  String title=name+" · 剩 "+ClassReminderPlan.liveRemaining(e,now)+" 分";
+  String body=r.start+"–"+r.end+"  "+room+"  "+teacher;
+  Notification.Builder b=new Notification.Builder(c,LiveUpdate.CHANNEL)
+   .setSmallIcon(R.drawable.ic_calendar).setContentTitle(title).setContentText(body).setContentIntent(open)
+   .setSubText("上课中").setStyle(new Notification.BigTextStyle().bigText(body))
+   .setVisibility(Notification.VISIBILITY_PUBLIC)
+   .setProgress((int)ClassReminderPlan.liveTotal(e),(int)ClassReminderPlan.liveElapsed(e,now),false);
+  LiveUpdate.apply(b,e.endAt,now);return b;
+ }
  static PendingIntent openApp(Context c,int request){
   return PendingIntent.getActivity(c,request,new Intent(c,MainActivity.class).putExtra("open_changes",request==1001).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP),PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
  }

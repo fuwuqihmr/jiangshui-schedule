@@ -40,12 +40,32 @@ final class ClassReminderPlan {
   Collections.sort(result,Comparator.comparingLong((Event e)->e.startAt).thenComparing(e->e.id));return result;
  }
  static String fingerprint(Event e,long now,String mode){
-  String value=e.id+"|"+e.course.name+"|"+e.course.room+"|"+e.course.teacher+"|"+e.course.start+"|"+e.course.end+"|"+e.showAt+"|"+e.startAt+"|"+e.endAt+"|"+e.expiresAt+"|"+phase(e,now)+"|"+mode+"|beta8";
+  return digest(e.id+"|"+e.course.name+"|"+e.course.room+"|"+e.course.teacher+"|"+e.course.start+"|"+e.course.end+"|"+e.showAt+"|"+e.startAt+"|"+e.endAt+"|"+e.expiresAt+"|"+phase(e,now)+"|"+mode+"|beta8");
+ }
+ static String digest(String value){
   try{byte[] bytes=java.security.MessageDigest.getInstance("SHA-256").digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));StringBuilder hash=new StringBuilder();for(byte b:bytes)hash.append(String.format(java.util.Locale.ROOT,"%02x",b&255));return hash.toString();}catch(java.security.NoSuchAlgorithmException impossible){throw new IllegalStateException(impossible);}
  }
+ // Live Update helpers: progress advances in fixed 5-minute steps, the chronometer does the
+ // second-by-second countdown. All values are course-derived scalars, never persisted.
+ static final long LIVE_REFRESH=5*60000L;
+ static long liveTotal(Event e){return Math.max(1L,(e.endAt-e.startAt)/60000L);}
+ static long liveElapsed(Event e,long now){return Math.min(liveTotal(e),Math.max(0L,(now-e.startAt)/60000L)/5*5);}
+ static long liveRemaining(Event e,long now){return Math.max(0L,(e.endAt-now+59999L)/60000L);}
+ static String liveSignature(Event e,long now){
+  return digest(e.id+"|"+e.course.name+"|"+e.course.room+"|"+e.course.teacher+"|"+e.course.start+"|"+e.course.end+"|"+e.startAt+"|"+e.endAt+"|"+liveElapsed(e,now)+"|"+liveRemaining(e,now)+"|live");
+ }
  static String phase(Event event,long now){return now<event.startAt?"即将上课":now<event.endAt?"课程进行中":"课程已结束";}
- static long next(List<Event> events,long now){
+ static long next(List<Event> events,long now){return next(events,now,false);}
+ // live=true adds the class boundaries and the 5-minute refresh chain that the promoted card needs;
+ // with live=false the schedule is byte-for-byte the previous one.
+ static long next(List<Event> events,long now,boolean live){
   long next=Instant.ofEpochMilli(now).atZone(ZONE).toLocalDate().plusDays(1).atStartOfDay(ZONE).toInstant().toEpochMilli();
-  for(Event e:events){if(e.showAt>now)next=Math.min(next,e.showAt);if(e.active(now)){if(e.startAt>now)next=Math.min(next,e.startAt);if(e.endAt>now)next=Math.min(next,e.endAt);}if(e.expiresAt>now)next=Math.min(next,e.expiresAt);}return next;
+  for(Event e:events){
+   if(e.showAt>now)next=Math.min(next,e.showAt);
+   if(e.active(now)){if(e.startAt>now)next=Math.min(next,e.startAt);if(e.endAt>now)next=Math.min(next,e.endAt);}
+   if(e.expiresAt>now)next=Math.min(next,e.expiresAt);
+   if(live){if(e.startAt>now)next=Math.min(next,e.startAt);if(e.endAt>now)next=Math.min(next,e.endAt);if(e.startAt<=now&&now<e.endAt)next=Math.min(next,now+LIVE_REFRESH);}
+  }
+  return next;
  }
 }
