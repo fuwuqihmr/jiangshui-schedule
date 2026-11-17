@@ -1,4 +1,6 @@
 // Runs only inside the authenticated timetable origin. All requests are read-only and serial.
+// The exam list is read from the same origin (GET only) right after the timetable. A broken or
+// expired exam section must never discard a timetable that was already read successfully.
 (async () => {
   const id = window.__tomorrowRequestId;
   const result = window.__tomorrowRead = {id, stage: 'weeks', done: false};
@@ -20,8 +22,8 @@
     } catch { return false; }
   };
   let networkTimer;
-  const read = async url => {
-    networkTimer = setTimeout(() => controller.abort(), 20000);
+  const read = async (url,timeoutMs) => {
+    networkTimer = setTimeout(() => controller.abort(), timeoutMs ?? 20000);
     try {
       const response = await fetch(url, {credentials:'include', signal:controller.signal, cache:'no-store'});
       if (!response.ok) {if(response.status===401)throw Object.assign(Error('学校会话已失效'),{login:true});throw Object.assign(Error('学校课表接口返回 HTTP '+response.status+'，原课表已保留。可在设置页导出排查日志'),{httpStatus:response.status,kind:'http'});}
@@ -29,6 +31,21 @@
       if (loginPage(text)) throw Object.assign(Error('学校会话已失效'), {login:true});
       return text;
     } finally { clearTimeout(networkTimer); }
+  };
+  // Hard-coded same-origin path and parameters: the reader never accepts a caller-provided URL.
+  const EXAM_PAGE_SIZE = 20, EXAM_MAX_PAGES = 5;
+  const examPageUrl = (sem,page) => '/jsxsd/xsks/xsksap_list?'+new URLSearchParams({pageNum:String(page),pageSize:String(EXAM_PAGE_SIZE),xnxqid:sem,xqlb:''});
+  const readExams = async sem => {
+    const rows=[];
+    for (let page=1;page<=EXAM_MAX_PAGES;page++){
+      const payload=JSON.parse(await read(examPageUrl(sem,page),8000));
+      if (!payload || payload.code!==0 || !Array.isArray(payload.data)) throw Object.assign(Error('考试安排格式变化'),{kind:'format'});
+      rows.push(...payload.data);
+      const total=Number(payload.count);
+      // count 缺失或已读全：首屏不足 pageSize 即止，不盲目翻页。
+      if (!Number.isFinite(total) || total<=rows.length || payload.data.length<EXAM_PAGE_SIZE) break;
+    }
+    return rows;
   };
   try {
     if (location.origin !== 'http://jiaowu.juwp.edu.cn:8080' || !location.pathname.startsWith('/jsxsd/xskb/')) throw Error('读取页面来源不符，已保留上次课表');
@@ -49,10 +66,20 @@
     const data=JSON.parse(await read('/jsxsd/xskb/xskb_list.do?'+params));
     if (!Array.isArray(data.data)||!data.data.length||data.code!==0) throw Error('学校课表数据不完整，已保留上次课表');
     const rows=data.data.map(r=>({kc_mc:r.kc_mc,jg0101mc:r.jg0101mc,sktime:r.sktime,skddmc:r.skddmc,jx0404id:r.jx0404id,kch:r.kch}));
-    if (current()) {window.__tomorrowCalendar={sem,mode,weeks,at:Date.now()};finish({sem,weeks,rows,calendarCached,modeKnown:!!mode});}
+    if (!current()) return;
+    // Exam list: optional secondary data source. Failures are isolated in examError so the
+    // timetable above is still delivered; the web layer keeps the previous exam snapshot.
+    result.stage='exams';
+    let exams=null, examFetchedAt=null, examError=null, examHttpStatus=0;
+    try { exams=await readExams(sem); examFetchedAt=new Date().toISOString(); }
+    catch (examFailure) {
+      if (!current()) return;
+      examError=examFailure.login?'session':examFailure.kind==='http'?'http':examFailure.name==='AbortError'?'timeout':examFailure.name==='SyntaxError'?'format':'other';
+      examHttpStatus=Number(examFailure.httpStatus)||0;
+    }
+    if (current()) {window.__tomorrowCalendar={sem,mode,weeks,at:Date.now()};finish({sem,weeks,rows,calendarCached,modeKnown:!!mode,...(examError?{examError,examHttpStatus}:{exams,examFetchedAt})});}
   } catch (error) {
     if (window.__tomorrowRead !== result) return;
     Object.assign(result,{done:true,login:!!error.login,httpStatus:Number(error.httpStatus)||0,kind:error.kind|| (error.login?'session':error.name==='AbortError'?'timeout':error.name==='SyntaxError'?'format':'other'),error:error.name==='AbortError'?'学校响应超时或读取已取消，保留上次课表':error.name==='SyntaxError'?'学校响应格式变化，已保留上次课表':error.message});
   }
 })();
-

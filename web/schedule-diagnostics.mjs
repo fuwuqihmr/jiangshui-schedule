@@ -2,7 +2,8 @@ import {addDays,weekday,weekOf,sourceDay,timetableDay,today,validDate} from './c
 
 // Export only dates, periods, counts and origin categories. Never serialize a rule,
 // school response, course name, location, teacher or credential into diagnostics.
-const kind = value => ['school','sample','local'].includes(value) ? value : 'other';
+const kind = value => ['school','sample','local','exam'].includes(value) ? value : 'other';
+const examState = value => ['http','session','timeout','format','other'].includes(value) ? value : 'unknown';
 const safeDate = value => {try{return validDate(value)?value:null;}catch{return null;}};
 const safeTime = value => typeof value==='string' && /^\d{2}:\d{2}$/.test(value) ? value : '--:--';
 const stamp = value => typeof value==='string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value) && !Number.isNaN(Date.parse(value)) ? new Date(value).toISOString().slice(0,19)+'Z' : 'unknown';
@@ -29,15 +30,15 @@ export function appendScheduleTrace(before,after,mode,at=new Date().toISOString(
 export function scheduleDiagnosticLines(state,date=today()) {
  if(!state?.snapshot || !safeDate(date))return [];
  try {
-  const s=state.snapshot,monday=addDays(date,1-weekday(date)),lines=[
-   `快照：来源=${kind(s.source?.kind)} 学期起始=${safeDate(s.semester?.startDate)||'unknown'} 总周数=${Number.isInteger(s.semester?.weeks)?s.semester.weeks:0} 规则数=${count(s.rules)} 上次成功=${stamp(state.lastSuccess)} 上次尝试=${stamp(state.lastAttempt)} 状态=${state.error?'failed':'ok'}`,
+  const s=state.snapshot,examIds=new Set((Array.isArray(s.exams?.items)?s.exams.items:[]).map(item=>item&&item.id).filter(id=>typeof id==='string')),monday=addDays(date,1-weekday(date)),lines=[
+   `快照：来源=${kind(s.source?.kind)} 学期起始=${safeDate(s.semester?.startDate)||'unknown'} 总周数=${Number.isInteger(s.semester?.weeks)?s.semester.weeks:0} 规则数=${count(s.rules)} 考试数=${count(s.exams?.items)} 考试跳过=${count(s.exams?.skipped)} 考试截至=${stamp(s.exams?.fetchedAt)} 考试状态=${s.exams?.error?examState(s.exams.error):'ok'} 上次成功=${stamp(state.lastSuccess)} 上次尝试=${stamp(state.lastAttempt)} 状态=${state.error?'failed':'ok'}`,
    `本地修改：单次=${count(state.overrides)} 调休=${count(state.localMaps)} 自定义=${count(state.customCourses)} 课程设置=${Object.keys(state.courseSettings||{}).length}`
   ];
   for(let i=0;i<7;i++){
    const day=addDays(monday,i),base=sourceRows(state,day),shown=dayRows(state,day),active=shown.filter(r=>!r.cancelled);
    lines.push(`日期=${day} 周次=${weekOf(s,day)} 来源课=${base.length} 显示课=${active.length} 停课或空位=${shown.length-active.length} 时段=${slots(state,day)}`);
    for(const r of shown){
-    const origin=r.localActivity?'study':r.customCourse?'custom':kind(r.source),inSource=base.some(x=>x.ruleId===r.ruleId&&x.originDate===r.originDate);
+    const origin=r.localActivity?'study':r.customCourse?'custom':r.exam===true?'exam':kind(r.source),inSource=r.exam===true?examIds.has(r.examId):base.some(x=>x.ruleId===r.ruleId&&x.originDate===r.originDate);
     lines.push(`课程位置=${day}/${slot(r)} 来源=${origin} 学校快照内=${inSource?'yes':'no'} 状态=${r.vacant?'vacant':r.cancelled?'cancelled':'active'} 覆盖=${r.overrideId?'yes':'no'} 调休=${r.remapId?'yes':'no'} 冲突=${r.conflict?'yes':'no'}`);
    }
   }
