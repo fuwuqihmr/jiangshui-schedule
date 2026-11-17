@@ -23,7 +23,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/** Native, dependency-free resolver for the data already stored by the WebView app. */
+/**
+ * Native, dependency-free resolver for the data already stored by the WebView app.
+ * Mirrors web/core.mjs effectiveDay, including A2 holiday semantics: three holiday kinds cancel the
+ * whole day (evening study included), holidaySettings.restoreDates restores one day, exams stay fixed.
+ */
 final class ScheduleWidgetData {
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     private static final String DASH = "—";
@@ -192,18 +196,26 @@ final class ScheduleWidgetData {
 
     static List<Item> effectiveDay(JSONObject state, JSONObject snapshot, String date) throws Exception {
         List<Item> list = new ArrayList<>();
+        // A2 口径 b（与 web/core.mjs effectiveDay 一致）：休假、寒暑假与学校停课日默认取消当天全部
+        // 课程（含晚自习）；holidaySettings.restoreDates 命中的日期按正常日重算（恢复学校停课日时只在
+        // 本次计算内忽略该日 closedDates，不改快照）；考试始终按固定日期注入（CORE-026/CORE-043）。
+        JSONObject holidaySettings = state.optJSONObject("holidaySettings");
         boolean holiday = isHoliday(state, date);
+        boolean restored = isRestoredDate(holidaySettings, date);
+        boolean holidayCancelled = holiday && !restored;
+        boolean closedDate = contains(snapshot.optJSONArray("closedDates"), date);
+        boolean closed = closedDate && !restored;
         boolean movedOut = hasOutgoingMap(snapshot.optJSONArray("remaps"), date) || hasOutgoingMap(state.optJSONArray("localMaps"), date);
-        if (!holiday) {
-            if (!movedOut && !contains(snapshot.optJSONArray("closedDates"), date)) list.addAll(baseDay(snapshot, date));
+        if (!holidayCancelled) {
+            if (!movedOut && !closed) list.addAll(baseDay(snapshot, date));
             applyMaps(snapshot.optJSONArray("remaps"), snapshot, date, list, false);
             applyMaps(state.optJSONArray("localMaps"), snapshot, date, list, true);
             applyExceptions(snapshot.optJSONArray("exceptions"), date, list);
-            addCustomCourses(state, snapshot, date, list);
+            addCustomCourses(state, snapshot, date, list, closed);
         }
-        addEveningStudy(state, snapshot, date, list);
+        addEveningStudy(state, snapshot, date, list, holiday, restored, closedDate);
         applyCourseSettings(state.optJSONObject("courseSettings"), list);
-        applyOverrides(state.optJSONArray("overrides"), date, list, holiday || movedOut || hasIncomingMap(state.optJSONArray("localMaps"), date));
+        applyOverrides(state.optJSONArray("overrides"), date, list, holidayCancelled || movedOut || hasIncomingMap(state.optJSONArray("localMaps"), date));
         addExams(snapshot, date, list);
         list.removeIf(item -> item.localActivity && list.stream().anyMatch(other ->
                 other != item && !other.localActivity && !other.cancelled &&
@@ -216,7 +228,9 @@ final class ScheduleWidgetData {
         List<Item> result = new ArrayList<>();
         LocalDate target = LocalDate.parse(date);
         LocalDate start = LocalDate.parse(snapshot.getJSONObject("semester").getString("startDate"));
-        int week = (int) (ChronoUnit.DAYS.between(start, target) / 7) + 1;
+        // floorDiv 与 web/core.mjs weekOf 一致：学期开始前的日期必须落到 <1 周，不能因整数截断
+        // 被算成第 1 周（否则“恢复学期开始前某个休假日期”会凭空出现第 1 周课程）。
+        int week = (int) Math.floorDiv(ChronoUnit.DAYS.between(start, target), 7) + 1;
         if (week < 1 || week > snapshot.getJSONObject("semester").optInt("weeks", 0)) return result;
         int weekday = target.getDayOfWeek().getValue();
         JSONArray rules = snapshot.optJSONArray("rules");
@@ -248,6 +262,27 @@ final class ScheduleWidgetData {
         }
         return null;
     }
+    /**
+     * holidaySettings.restoreDates：本机“单日恢复上课”标记（与 web/holiday-settings.mjs 一致）。
+     * 旧 state 没有该字段、字段不是数组时一律视为无恢复；数组内非字符串/非法日期项因无法与合法日期
+     * 相等而被自然忽略；重复项不影响结果。只判断标记本身，是否生效由 effectiveDay/addEveningStudy
+     * 在“当天确实被取消”的前提下决定（HOL-008/HOL-010）。
+     */
+    private static boolean isRestoredDate(JSONObject settings, String date) {
+        if (settings == null || !validDate(date)) return false;
+        JSONArray dates = settings.optJSONArray("restoreDates");
+        if (dates == null) return false;
+        for (int i = 0; i < dates.length(); i++) if (date.equals(dates.optString(i))) return true;
+        return false;
+    }
+
+    /** YYYY-MM-DD 且为真实日历日；用于忽略 restoreDates 里的损坏值，不抛异常。 */
+    private static boolean validDate(String value) {
+        if (value == null || !value.matches("\\d{4}-\\d{2}-\\d{2}")) return false;
+        try { return LocalDate.parse(value).toString().equals(value); }
+        catch (RuntimeException ignored) { return false; }
+    }
+
     private static boolean hasIncomingMap(JSONArray maps, String date) {
         if (maps == null) return false;
         for (int i = 0; i < maps.length(); i++) {
@@ -297,10 +332,10 @@ final class ScheduleWidgetData {
         }
     }
 
-    private static void addCustomCourses(JSONObject state, JSONObject snapshot, String date, List<Item> list) throws Exception {
+    private static void addCustomCourses(JSONObject state, JSONObject snapshot, String date, List<Item> list, boolean closed) throws Exception {
         JSONArray courses = state.optJSONArray("customCourses");
         if (courses == null) return;
-        List<Item> custom = contains(snapshot.optJSONArray("closedDates"), date) ? new ArrayList<>() : regularCustomDay(courses, snapshot, date);
+        List<Item> custom = closed ? new ArrayList<>() : regularCustomDay(courses, snapshot, date);
         JSONArray[] groups = {snapshot.optJSONArray("remaps"), state.optJSONArray("localMaps")};
         for (int group = 0; group < groups.length; group++) {
             JSONArray maps = groups[group];
@@ -343,12 +378,15 @@ final class ScheduleWidgetData {
         }
         return result;
     }
-    private static void addEveningStudy(JSONObject state, JSONObject snapshot, String date, List<Item> list) throws Exception {
+    private static void addEveningStudy(JSONObject state, JSONObject snapshot, String date, List<Item> list, boolean holiday, boolean restored, boolean closedDate) throws Exception {
         JSONObject policy = snapshot.optJSONObject("studyPolicy");
         if (policy == null || !policy.optBoolean("userEnabled", false) || !policy.optBoolean("enabled", false) || !isFirstYear(snapshot, date)) return;
         JSONObject semester = snapshot.getJSONObject("semester");
         LocalDate day = LocalDate.parse(date), start = LocalDate.parse(semester.getString("startDate"));
         if (day.isBefore(start) || !day.isBefore(start.plusWeeks(semester.optInt("weeks")))) return;
+        // A2 口径 b：未恢复的休假/寒暑假/学校停课日不生成晚自习（web/study.mjs STD-004）。
+        if (!restored && (holiday || closedDate)) return;
+        // 恢复日的旧字段 skipStudy 仍压制晚自习：恢复上课但晚自习不上（web/study.mjs STD-008）。
         JSONObject exception = holidayDay(state.optJSONObject("holidaySettings"), date);
         if (exception != null && exception.optBoolean("skipStudy")) return;
         String origin = date;
