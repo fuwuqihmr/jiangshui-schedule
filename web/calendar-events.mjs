@@ -4,6 +4,8 @@ export const CALENDAR_EVENT_LIMIT = 5000;
 export const DEFAULT_CALENDAR_OPTIONS = Object.freeze({school:true,custom:true,study:true});
 
 const SOURCE_LABEL={school:'学校课程',custom:'自定义课程',study:'晚自习',exam:'学校考试'};
+// 系统日历里考试与同名课程必须可区分：标题加前缀、描述以「考试」开头并写清考场（座位号仍不写入）。
+export const EXAM_TITLE_PREFIX='【考试】';
 const WEEKDAY_LABEL=['一','二','三','四','五','六','日'];
 
 export function normalizeCalendarOptions(value){
@@ -60,17 +62,23 @@ export function buildCalendarEvents(state, options = DEFAULT_CALENDAR_OPTIONS){
         eventKey=`${baseKey}#${suffix}`;
       }
       seenKeys.add(eventKey);
+      const isExam=row.exam===true;
+      const location=clipped(row.room||'未填写教室',200);
+      const description=isExam
+        ? `考试 · 考场：${location} · 教师：${row.teacher||'未填写'} · 第${week}周（周${day}） · 来源：${SOURCE_LABEL.exam} · 由江水课表写入`
+        : `教师：${row.teacher||'未填写'} · 第${week}周（周${day}） · 来源：${SOURCE_LABEL[source]} · 由江水课表写入`;
       events.push({
         key:eventKey,
-        title:clipped(row.name,200),
-        location:clipped(row.room||'未填写教室',200),
-        description:clipped(`教师：${row.teacher||'未填写'} · 第${week}周（周${day}） · 来源：${SOURCE_LABEL[source]} · 由江水课表写入`,1000),
+        title:clipped((isExam?EXAM_TITLE_PREFIX:'')+row.name,200),
+        location,
+        description:clipped(description,1000),
         startMillis,
         endMillis,
         startDate:date,
         startTime:row.startTime,
         endTime:row.endTime,
         source,
+        exam:isExam,
       });
     }
   }
