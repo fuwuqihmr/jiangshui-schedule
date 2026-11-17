@@ -16,15 +16,12 @@ import android.provider.Settings;
 import android.net.Uri;
 import android.webkit.*;
 import android.widget.*;
-import android.security.keystore.*;
 import android.util.Base64;
 import android.view.View;
 import org.json.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
-import javax.crypto.*;
-import javax.crypto.spec.GCMParameterSpec;
 import java.util.Set;
 import java.util.ArrayList;
 
@@ -208,30 +205,6 @@ public class MainActivity extends Activity {
     File logFile(){File dir=getExternalFilesDir(null);return dir==null?new File(getFilesDir(),"applog.txt"):new File(dir,"applog.txt");}
     void log(String msg){try{File f=logFile();File dir=f.getParentFile();if(dir!=null&&!dir.exists())dir.mkdirs();String line=new java.text.SimpleDateFormat("MM-dd HH:mm:ss",java.util.Locale.US).format(new java.util.Date())+" "+msg+"\n";try(FileOutputStream out=new FileOutputStream(f,true)){out.write(line.getBytes(StandardCharsets.UTF_8));}}catch(Exception ignored){}}
     byte[] readLimited(InputStream in,int limit)throws IOException {ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[8192];int n;while((n=in.read(buf))!=-1){out.write(buf,0,n);if(out.size()>limit)throw new IOException("文件过大");}return out.toByteArray();}
-    String unprotect()throws Exception {KeyStore store=KeyStore.getInstance("AndroidKeyStore");store.load(null);JSONObject envelope;try(FileInputStream in=openFileInput("school.enc")){envelope=new JSONObject(new String(readLimited(in,100000),StandardCharsets.UTF_8));}Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.DECRYPT_MODE,store.getKey("school-session",null),new GCMParameterSpec(128,Base64.decode(envelope.getString("iv"),Base64.NO_WRAP)));return new String(cipher.doFinal(Base64.decode(envelope.getString("data"),Base64.NO_WRAP)),StandardCharsets.UTF_8);}
-    JSONArray schoolRequest(String endpoint,String query,String token)throws Exception {
-        if(!java.util.Arrays.asList("/teachingWeek","/Get_sjkbms","/student/curriculum").contains(endpoint))throw new Exception("不允许的学校请求");
-        java.net.HttpURLConnection conn=(java.net.HttpURLConnection)new java.net.URL("http://jiaowuh5.juwp.edu.cn/njwhd"+endpoint+query).openConnection();
-        conn.setRequestMethod("POST");conn.setInstanceFollowRedirects(false);conn.setConnectTimeout(20000);conn.setReadTimeout(20000);conn.setRequestProperty("token",token);
-        try{if(conn.getResponseCode()!=200)throw new Exception("学校读取失败，请重新确认登录");try(InputStream in=conn.getInputStream()){JSONObject data=new JSONObject(new String(readLimited(in,2000000),StandardCharsets.UTF_8));if(!(data.opt("data") instanceof JSONArray))throw new Exception("学校会话失效或响应结构变化，请重新登录");return data.getJSONArray("data");}}finally{conn.disconnect();}
-    }
-    String extract(String cookies,String name){if(cookies==null)return null;for(String kv:cookies.split(";")){String[]p=kv.trim().split("=",2);if(p.length==2&&p[0].equals(name))return p[1];}return null;}
-    String grab(String text,String regex){java.util.regex.Matcher m=java.util.regex.Pattern.compile(regex).matcher(text);return m.find()?m.group(1):null;}
-    String selectedOption(String html,String id){
-        java.util.regex.Matcher block=java.util.regex.Pattern.compile("<select[^>]*id=\""+id+"\"[\\s\\S]*?</select>").matcher(html);
-        if(!block.find())return null;
-        String s=block.group();
-        java.util.regex.Matcher m=java.util.regex.Pattern.compile("<option[^>]*selected[^>]*value=\"([^\"]+)\"").matcher(s);
-        if(m.find())return m.group(1);
-        m=java.util.regex.Pattern.compile("<option[^>]*value=\"([^\"]+)\"[^>]*selected").matcher(s);
-        return m.find()?m.group(1):null;
-    }
-    String httpGet(String pathQuery,String cookie)throws Exception{
-        String shortPath=pathQuery.split("\\?")[0];
-        java.net.HttpURLConnection conn=(java.net.HttpURLConnection)new java.net.URL("http://jiaowu.juwp.edu.cn:8080/jsxsd"+pathQuery).openConnection();
-        conn.setConnectTimeout(20000);conn.setReadTimeout(20000);conn.setInstanceFollowRedirects(false);conn.setRequestProperty("Cookie",cookie);
-        try{int code=conn.getResponseCode();if(code!=200){log("httpGet "+shortPath+" status="+code);throw new Exception("学校读取失败，请重新确认登录");}try(InputStream in=conn.getInputStream()){String text=new String(readLimited(in,4000000),StandardCharsets.UTF_8);log("httpGet "+shortPath+" len="+text.length()+" login="+(text.contains("LoginToXk")||text.contains("userAccount")));return text;}}catch(Exception e){log("httpGet-err "+shortPath+" "+e.getMessage());throw e;}finally{conn.disconnect();}
-    }
     SchoolClient schoolClient; final SchoolReadState readState=new SchoolReadState();
     String deferredSchoolResultId=null;JSONObject deferredSchoolResultData=null;String deferredSchoolFailure=null;
     void ensureSchool(){if(schoolClient!=null)return;schoolClient=new SchoolClient(this,new SchoolClient.Listener(){
@@ -717,7 +690,6 @@ public class MainActivity extends Activity {
         try{startActivity(new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));}
         catch(Exception ignored){openAppDetails();}
     }
-    void protect(String value)throws Exception {KeyStore store=KeyStore.getInstance("AndroidKeyStore");store.load(null);if(!store.containsAlias("school-session")){KeyGenerator gen=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");gen.init(new KeyGenParameterSpec.Builder("school-session",KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT).setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build());gen.generateKey();}Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,store.getKey("school-session",null));JSONObject envelope=object("iv",Base64.encodeToString(cipher.getIV(),Base64.NO_WRAP));envelope.put("data",Base64.encodeToString(cipher.doFinal(value.getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP));try(FileOutputStream out=openFileOutput("school.enc",MODE_PRIVATE)){out.write(envelope.toString().getBytes(StandardCharsets.UTF_8));}}
     String queryParameter(Uri uri,String name){try{String value=uri.getQueryParameter(name);return value==null?"":value.trim();}catch(Exception e){return "";}}
     void rememberLeaveSession(String url){
         // 在任意学工表单页记忆会话参数；请假与销假表单路径可能不同，不能只认 apply.html。不保存 cookie、账号或密码。
@@ -956,7 +928,6 @@ public class MainActivity extends Activity {
             case "notificationSettings":try{startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE,getPackageName()));}catch(Exception e){openAppDetails();}result(id,object("ok",true));break;
             case "permissionStatus":result(id,permissionStatus());break;
             case "autostartSettings":openAutostartSettings();result(id,object("ok",true));break;
-            case "runtimeStatus":result(id,CheckScheduler.status(MainActivity.this));break;
             case "requestExactAlarm":openExactAlarmSettings();result(id,object("ok",true));break;
             case "batterySettings":openBatterySettings();result(id,object("ok",true));break;
             case "feedbackInfo":{FeedbackConfig cfg=FeedbackConfig.load(MainActivity.this);JSONObject info=object("enabled",cfg.enabled);info.put("title",cfg.title);info.put("intro",cfg.intro);info.put("url",cfg.enabled?cfg.url:"");result(id,info);break;}

@@ -225,13 +225,10 @@ test('attachExamPayload：成功替换，失败保留旧数据并写 error/lastA
  assert.equal(legacy.exams,undefined);
 });
 
-test('接线：app/background 使用 attachExamPayload，旧考试值传 state.snapshot.exams（P2-1）',()=>{
+test('接线：app 使用 attachExamPayload，旧考试值传 state.snapshot.exams（P2-1）',()=>{
  const app=readFileSync(new URL('../web/app.mjs',import.meta.url),'utf8');
- const background=readFileSync(new URL('../web/background.mjs',import.meta.url),'utf8');
  assert.match(app,/attachExamPayload\([^;]*state\.snapshot\?\.exams/,'前台必须传旧 exams 对象');
- assert.match(background,/attachExamPayload\([^;]*state\.snapshot\?\.exams/,'后台必须传旧 exams 对象');
  assert.doesNotMatch(app,/attachExams\(/,'旧的本地 attachExams 实现应已移除');
- assert.doesNotMatch(background,/attachExams\(/);
 });
 
 test('座位号单独变化：生成“换座位”事件且字段为 seat（P2-5）',()=>{

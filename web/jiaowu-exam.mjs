@@ -173,7 +173,7 @@ export function examSummary(exams) {
   return { count: items.length, fetchedAt, stale: !Number.isFinite(age) || age > EXAM_CACHE_TTL_MS, error: typeof exams?.error === 'string' ? exams.error : null };
 }
 
-// 把 reader/Java 返回的考试 payload 挂到快照（app.mjs / background.mjs 共用，避免重复实现）：
+// 把 reader/Java 返回的考试 payload 挂到快照：
 // - exams 数组：规范化后全量替换（容忍型跳过照常替换）；硬失败时保留旧数据并写 error/lastAttempt/本轮 skipped；
 // - examError：考试段失败类别，保留同学期旧数据并写入可见失败标记；
 // - 两者都没有（旧原生版本不带该字段）：不动快照，交由 core.applySnapshot 保留旧 exams。
