@@ -71,10 +71,12 @@ public class MainActivity extends Activity {
     static final String LEAVE_PREFS="leave-session";
     static final String LEAVE_FORM_ID="278616";
     static final String CANCEL_FORM_ID="278615";
+    static final String RENEW_FORM_ID="278618";
     static final String LEAVE_LIST_URL=XGXT_ORIGIN+"/office/data/approve/apps/forms/fore/user/list";
     static class LeaveFetchContext{final String formId;final String prefsFormId;final String type;LeaveFetchContext(String formId,String prefsFormId,String type){this.formId=formId;this.prefsFormId=prefsFormId;this.type=type;}}
     final ThreadLocal<LeaveFetchContext> leaveFetchContext=new ThreadLocal<>();
     final java.util.concurrent.ExecutorService leaveExecutor=java.util.concurrent.Executors.newSingleThreadExecutor();
+    final java.util.concurrent.ExecutorService renewExecutor=java.util.concurrent.Executors.newSingleThreadExecutor();
     final Object leaveSyncLock=new Object();
     String leaveSyncId=null;
     boolean leaveSyncActive=false;
@@ -747,7 +749,7 @@ public class MainActivity extends Activity {
         return text;
     }
     String leaveSubmittedAt(JSONObject item,JSONObject fields){
-        String formValue=leaveFormValue(fields,"请假申请时间","销假申请时间","申请时间");
+        String formValue=leaveFormValue(fields,"请假申请时间","销假申请时间","续假申请时间","申请时间");
         if(!formValue.isEmpty())return leaveIsoTime(formValue);
         try{
             long ms=Long.parseLong(item.optString("inserttime","").trim());
@@ -770,14 +772,14 @@ public class MainActivity extends Activity {
             out.put("status",leaveStatus(statusText,statusId));
             out.put("statusText",statusText);
             out.put("statusId",statusId);
-            out.put("typeText",leaveFormValue(fields,"请假类型","销假类型"));
-            out.put("reason",leaveFormValue(fields,"请假原因","销假原因","离校原因"));
-            out.put("startAt",leaveIsoTime(leaveFormValue(fields,"请假开始时间","销假开始时间","离校时间")));
-            out.put("endAt",leaveIsoTime(leaveFormValue(fields,"请假结束时间","销假结束时间","返校时间")));
+            out.put("typeText",leaveFormValue(fields,"请假类型","销假类型","续假类型"));
+            out.put("reason",leaveFormValue(fields,"请假原因","销假原因","续假原因","离校原因"));
+            out.put("startAt",leaveIsoTime(leaveFormValue(fields,"请假开始时间","销假开始时间","续假开始时间","离校时间")));
+            out.put("endAt",leaveIsoTime(leaveFormValue(fields,"请假结束时间","销假结束时间","续假结束时间","返校时间")));
             out.put("submittedAt",leaveSubmittedAt(item,fields));
             out.put("approver",item.optString("allAprvUserList","").trim());
-            out.put("number",leaveFormValue(fields,"请假编号","销假编号"));
-            out.put("durationDays",leaveFormValue(fields,"请假时长","销假时长"));
+            out.put("number",leaveFormValue(fields,"请假编号","销假编号","续假编号"));
+            out.put("durationDays",leaveFormValue(fields,"请假时长","销假时长","续假时长"));
         }catch(Exception ignored){return null;}
         return out;
     }
@@ -786,7 +788,7 @@ public class MainActivity extends Activity {
         String formId=context==null?LEAVE_FORM_ID:context.formId;
         String prefsFormId=context==null?LEAVE_FORM_ID:context.prefsFormId;
         String recordType=context==null?"leave":context.type;
-        String sessionCode="cancel".equals(recordType)?"NEED_CANCEL_SESSION":"NEED_SESSION";
+        String sessionCode="cancel".equals(recordType)?"NEED_CANCEL_SESSION":("renew".equals(recordType)?"NEED_RENEW_SESSION":"NEED_SESSION");
         String cookie=null;
         try{cookie=CookieManager.getInstance().getCookie(XGXT_ORIGIN);}catch(Exception ignored){}
         if(cookie==null||cookie.trim().isEmpty())return leaveSyncError("NEED_LOGIN");
@@ -843,6 +845,67 @@ public class MainActivity extends Activity {
         finally{if(previous==null)leaveFetchContext.remove();else leaveFetchContext.set(previous);}
     }
     JSONObject fetchCancelRecords(){return fetchFormRecords(CANCEL_FORM_ID,CANCEL_FORM_ID,"cancel");}
+    JSONObject fetchRenewRecords(){return fetchFormRecords(RENEW_FORM_ID,RENEW_FORM_ID,"renew");}
+    // 续假同步失败的诊断文本：只含固定错误码，绝不带 cookie/uid/pageEnc 等会话值。
+    static String renewFailureDiagnostic(JSONObject renew){
+        if(renew!=null&&renew.optBoolean("ok",false))return null;
+        String code=renew==null?"NO_RESULT":renew.optString("code","UNKNOWN");
+        if(code==null||!code.matches("[A-Za-z0-9_]{1,40}"))code="UNKNOWN";
+        return "leave-renew-sync failed code="+code;
+    }
+    static void appendLeaveRecords(JSONArray target,java.util.HashSet<String> ids,JSONArray source){
+        if(source==null)return;
+        for(int i=0;i<source.length();i++){
+            JSONObject record=source.optJSONObject(i);
+            if(record==null)continue;
+            String id=record.optString("id","");
+            if(!id.isEmpty()&&!ids.add(id))continue;
+            try{target.put(record);}catch(Exception ignored){}
+        }
+    }
+    // 请假 + 续假：续假失败只记诊断，不改变请假/销假结果；重复 id 保留先到的请假表单记录。
+    static JSONObject mergeRenewRecords(JSONObject leave,JSONObject renew){
+        if(leave==null)return null;
+        if(!leave.optBoolean("ok",false))return leave;
+        if(renew==null||!renew.optBoolean("ok",false))return leave;
+        try{
+            JSONArray merged=new JSONArray();
+            java.util.HashSet<String> ids=new java.util.HashSet<>();
+            appendLeaveRecords(merged,ids,leave.optJSONArray("records"));
+            appendLeaveRecords(merged,ids,renew.optJSONArray("records"));
+            JSONObject out=new JSONObject();
+            out.put("ok",true);
+            if(leave.has("fetchedAt"))out.put("fetchedAt",leave.opt("fetchedAt"));
+            out.put("records",merged);
+            return out;
+        }catch(Exception ignored){return leave;}
+    }
+    JSONObject fetchLeaveRecordsWithRenew(){
+        long started=System.currentTimeMillis();
+        java.util.concurrent.FutureTask<JSONObject> renewTask=new java.util.concurrent.FutureTask<>(this::fetchRenewRecords);
+        boolean renewStarted=false;
+        try{renewExecutor.execute(renewTask);renewStarted=true;}catch(Exception ignored){}
+        JSONObject leave=fetchLeaveRecords();
+        if(leave==null||!leave.optBoolean("ok",false)){
+            if(renewStarted)renewTask.cancel(true);
+            return leave;
+        }
+        JSONObject renew=null;
+        if(renewStarted){
+            // 与请假并行抓取，最多再等 12 秒（原生看门狗 15 秒），避免拖慢请假主路径。
+            long remaining=12000L-(System.currentTimeMillis()-started);
+            if(remaining>500L){
+                try{renew=renewTask.get(remaining,java.util.concurrent.TimeUnit.MILLISECONDS);}
+                catch(Exception ignored){renewTask.cancel(true);}
+            }else{
+                renewTask.cancel(true);
+                renew=leaveSyncError("SKIPPED");
+            }
+        }
+        String diagnostic=renewFailureDiagnostic(renew);
+        if(diagnostic!=null)log(diagnostic);
+        return mergeRenewRecords(leave,renew);
+    }
     void finishLeaveSync(String id,JSONObject value){
         synchronized(leaveSyncLock){
             if(!leaveSyncActive||id==null||!id.equals(leaveSyncId))return;
@@ -863,7 +926,7 @@ public class MainActivity extends Activity {
         webAppHandler.postDelayed(leaveSyncWatchdog,15000);
         leaveExecutor.execute(()->{
             JSONObject response;
-            try{response=cancel?fetchCancelRecords():fetchLeaveRecords();}
+            try{response=cancel?fetchCancelRecords():fetchLeaveRecordsWithRenew();}
             catch(Exception e){response=leaveSyncError("NETWORK");}
             finishLeaveSync(id,response==null?leaveSyncError("NETWORK"):response);
         });
@@ -1051,7 +1114,7 @@ public class MainActivity extends Activity {
         },2000L);
     }
     @Override protected void onNewIntent(Intent intent){super.onNewIntent(intent);setIntent(intent);if(intent.getBooleanExtra("open_changes",false)){if(pageReady)openChanges(web);else openChangesOnLoad=true;}else if(intent.getBooleanExtra("open_today",false)){String date=intent.getStringExtra("open_date");if(pageReady)openSchedule(web,date);else{openTodayOnLoad=true;openDateOnLoad=date;}}}
-    @Override protected void onDestroy(){if(updates!=null){updates.shutdown();updates=null;}cancelLeaveSync();cancelCalendarAction();calendarExecutor.shutdownNow();leaveExecutor.shutdownNow();destroyWebApp();if(schoolClient!=null)schoolClient.destroy();schoolClient=null;readState.finish();if(web!=null){web.removeJavascriptInterface("Android");web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){if(updates!=null){updates.shutdown();updates=null;}cancelLeaveSync();cancelCalendarAction();calendarExecutor.shutdownNow();leaveExecutor.shutdownNow();renewExecutor.shutdownNow();destroyWebApp();if(schoolClient!=null)schoolClient.destroy();schoolClient=null;readState.finish();if(web!=null){web.removeJavascriptInterface("Android");web.destroy();web=null;}super.onDestroy();}
     @Override public void onBackPressed(){
         WebView target=web;
         if(target==null){handleNativeBack();return;}
