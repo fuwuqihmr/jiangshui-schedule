@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createState,addDays} from '../web/core.mjs';
 import {buildCalendarEvents,normalizeCalendarOptions,CALENDAR_EVENT_LIMIT,DEFAULT_CALENDAR_OPTIONS} from '../web/calendar-events.mjs';
+import {normalizeExamList} from '../web/jiaowu-exam.mjs';
+import {PERIOD_TIMES} from '../web/jsxsd.mjs';
 
 const START='2026-08-31',WEEKS=2;
 const rule=(id,extra={})=>({id,name:'课程'+id,teacher:'老师'+id,room:'A101',weekday:1,weeks:[1,2],periods:[1,2],startTime:'08:30',endTime:'09:55',...extra});
@@ -151,4 +153,25 @@ test('同名同时段多门保留独立 key；学期 1 周与 60 周边界',()=>
  const sixty=createState({...snapshot([rule('math',{weeks:[1,60]})],{semester:{id:'term-60',name:'六十周',startDate:START,weeks:60}})});
  const sixtyOut=buildCalendarEvents(sixty);
  assert.deepEqual(sixtyOut.events.map(e=>e.startDate),[START,addDays(START,59*7)]);
+});
+
+// 考试进系统日历：样本已脱敏（课程A、考场A、教师甲、假座位号 777）。
+test('考试写入系统日历：归学校课程类别，location 为考场，来源写学校考试且不写座位号',()=>{
+ const snap=snapshot([rule('math',{weeks:[1]})]);
+ snap.exams=normalizeExamList({code:0,count:1,data:[{kssj:'2026-08-31 19:00~20:25',kskcmc:'课程A',kch:'K001',jsxm:'教师甲',js_mc:'考场A',zwh:'777',ksccmc:'场次A'}]},{semesterId:'term-a',semesterStartDate:START,totalWeeks:WEEKS,periodTimes:PERIOD_TIMES,fetchedAt:'2026-11-17T00:00:00.000Z'});
+ const s=createState(snap);
+ const all=buildCalendarEvents(s);
+ const event=all.events.find(item=>item.title==='课程A');
+ assert(event,'考试应写入日历');
+ assert.equal(event.source,'exam');
+ assert.equal(event.location,'考场A');
+ assert.equal(event.startDate,'2026-08-31');
+ assert.equal(event.startTime,'19:00');
+ assert.equal(event.endTime,'20:25');
+ assert(event.description.includes('来源：学校考试'),'描述区分学校考试');
+ assert(!event.description.includes('座位')&&!event.description.includes('777'),'日历描述不写座位号');
+ const schoolOnly=all.events.filter(item=>item.source==='school');
+ assert.equal(schoolOnly.length,1,'学校课程不受影响');
+ const noSchool=buildCalendarEvents(s,{school:false,custom:true,study:true});
+ assert.equal(noSchool.events.some(item=>item.title==='课程A'),false,'考试随「学校课程」选项一起关闭');
 });

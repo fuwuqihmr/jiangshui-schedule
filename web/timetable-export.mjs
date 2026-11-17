@@ -29,6 +29,7 @@ export function semesterOccurrences(state){
           date,week,weekday:weekday(date),ruleWeekday:row.weekday,ruleId:row.ruleId,
           name:row.name,teacher:row.teacher,room:row.room,startTime:row.startTime,endTime:row.endTime,
           periods:Array.isArray(row.periods)?[...row.periods]:[],
+          exam:row.exam===true,
           localActivity:!!row.localActivity,customCourse:!!row.customCourse,
           remap:!!(row.remapId||(row.originDate&&row.originDate!==row.date)),
           override:!!row.overrideId,overlap:row.overlap===true,conflict:!!row.conflict,source:row.source
@@ -109,6 +110,8 @@ export function buildRulesModel(state){
   const occurrences=semesterOccurrences(state),semester=state.snapshot.semester,totalWeeks=semester.weeks;
   const courses=new Map();let conflictCount=0;
   for(const row of occurrences){
+    // Single-date exams are not weekly rules: they stay in the visual exports only.
+    if(row.exam===true)continue;
     if(row.conflict)conflictCount++;
     const courseKey=`${row.name??''}\u0000${row.teacher??''}`;
     let course=courses.get(courseKey);
@@ -160,6 +163,7 @@ export function buildRulesText(state){
     `# 导出时间：${model.generatedAt}（Asia/Shanghai）`,
     `# 来源：${cleanField(model.sourceLabel,model.sourceKind==='school'?'学校教务系统':'交接样例')}${model.sourceKind==='school'?'':'（非学校教务来源）'}`,
     '# 说明：按当前最终生效课表导出，包含调休、自定义课程和晚自习；不包含账号、密码或登录凭据。',
+    '# 考试：考试为单次安排，不属于每周规律课程，未写入本文件；可在单周图片或整学期总览中查看。',
     '# 格式：课程名<Tab>教师<Tab>教室<Tab>上课时间；多段以 ; 分隔；周次写作 {第7-15周}(全部|单周|双周)',
     '课程名\t教师\t教室\t上课时间'
   ];

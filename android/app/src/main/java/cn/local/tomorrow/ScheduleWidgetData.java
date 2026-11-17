@@ -30,13 +30,13 @@ final class ScheduleWidgetData {
 
     static final class Item {
         String date, key, ruleId, name, teacher, room, start, end;
-        boolean cancelled, localActivity, customCourse;
+        boolean cancelled, localActivity, customCourse, exam;
 
         Item copy() {
             Item x = new Item();
             x.date = date; x.key = key; x.ruleId = ruleId; x.name = name;
             x.teacher = teacher; x.room = room; x.start = start; x.end = end;
-            x.cancelled = cancelled; x.localActivity = localActivity; x.customCourse = customCourse;
+            x.cancelled = cancelled; x.localActivity = localActivity; x.customCourse = customCourse; x.exam = exam;
             return x;
         }
     }
@@ -204,6 +204,7 @@ final class ScheduleWidgetData {
         addEveningStudy(state, snapshot, date, list);
         applyCourseSettings(state.optJSONObject("courseSettings"), list);
         applyOverrides(state.optJSONArray("overrides"), date, list, holiday || movedOut || hasIncomingMap(state.optJSONArray("localMaps"), date));
+        addExams(snapshot, date, list);
         list.removeIf(item -> item.localActivity && list.stream().anyMatch(other ->
                 other != item && !other.localActivity && !other.cancelled &&
                 other.start.compareTo(item.end) < 0 && other.end.compareTo(item.start) > 0));
@@ -374,6 +375,34 @@ final class ScheduleWidgetData {
         evening.localActivity = true; list.add(evening);
     }
 
+    // Exams are fixed-date school events stored outside the weekly rules. They are added after
+    // local edits (never moved by holidays or 调休) and before the evening-study yield below.
+    private static void addExams(JSONObject snapshot, String date, List<Item> list) {
+        JSONObject exams = snapshot.optJSONObject("exams");
+        if (exams == null) return;
+        JSONObject semester = snapshot.optJSONObject("semester");
+        if (semester == null) return;
+        if (!semester.optString("id").equals(exams.optString("semesterId"))) return;
+        if (!semester.optString("startDate").equals(exams.optString("semesterStartDate"))) return;
+        JSONArray items = exams.optJSONArray("items");
+        if (items == null) return;
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject row = items.optJSONObject(i);
+            if (row == null || !date.equals(row.optString("date"))) continue;
+            Item item = new Item();
+            item.exam = true;
+            item.date = date;
+            item.ruleId = "exam-" + row.optString("id");
+            item.key = date + "/exam-" + row.optString("id");
+            item.name = row.optString("name", "未命名考试");
+            item.teacher = row.optString("teacher", DASH);
+            item.room = row.optString("room", DASH);
+            item.start = row.optString("startTime", "00:00");
+            item.end = row.optString("endTime", "00:00");
+            list.add(item);
+        }
+    }
+
     private static void applyCourseSettings(JSONObject settings, List<Item> list) {
         if (settings == null) return;
         for (Item item : list) {
@@ -406,7 +435,7 @@ final class ScheduleWidgetData {
         item.name = row.optString("name", "未命名课程"); item.teacher = row.optString("teacher", DASH);
         item.room = row.optString("room", DASH); item.start = row.optString("startTime", "00:00");
         item.end = row.optString("endTime", "00:00"); item.cancelled = row.optBoolean("cancelled", false);
-        item.localActivity = row.optBoolean("localActivity", false); item.customCourse = row.optBoolean("customCourse", false);
+        item.localActivity = row.optBoolean("localActivity", false); item.customCourse = row.optBoolean("customCourse", false); item.exam = row.optBoolean("exam", false);
         return item;
     }
 

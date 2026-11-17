@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {createState,timetableDay,saveOverride} from '../web/core.mjs';
 import {saveCustomCourse} from '../web/custom-courses.mjs';
-import {exportWeekModel,imagePagesPdf} from '../web/timetable-export.mjs';
+import {exportWeekModel,imagePagesPdf,buildRulesModel,buildRulesText,buildSemesterOverviewModel} from '../web/timetable-export.mjs';
+import {normalizeExamList} from '../web/jiaowu-exam.mjs';
+import {PERIOD_TIMES} from '../web/jsxsd.mjs';
 const require=createRequire(import.meta.url),{decodeExport}=require('../desktop/export-file.cjs');
 const source={schemaVersion:1,semester:{id:'test',name:'测试学期',startDate:'2026-10-12',weeks:3},rules:[{id:'math',name:'高等数学',room:'A101',teacher:'李老师',weekday:1,weeks:[1,2,3],periods:[1,2],startTime:'08:30',endTime:'09:55'}],exceptions:[],remaps:[],unscheduled:[]};
 test('单周导出逐日采用统一有效课表，包含修改、调休空位、自定义与取消',()=>{
@@ -31,4 +33,32 @@ test('桌面保存校验类型、扩展名、路径与二进制格式',()=>{
  const pdf=Buffer.from('%PDF-1.4\nexample');const payload={filename:'江水课表.pdf',mime:'application/pdf',base64:pdf.toString('base64')};assert.deepEqual(decodeExport(payload).bytes,pdf);
  for(const bad of [{filename:'../课表.pdf'},{filename:'课表.exe'},{mime:'text/plain'},{base64:'!!!!'},{base64:Buffer.from('wrong').toString('base64')}])assert.throws(()=>decodeExport({...payload,...bad}));
  const png=Buffer.from([137,80,78,71,13,10,26,10]);assert.equal(decodeExport({filename:'课表.png',mime:'image/png',base64:png.toString('base64')}).extension,'png');
+});
+
+// 考试导出：样本已脱敏（课程A/B、考场A/B、教师甲/乙、假座位号），日期落在测试学期内。
+const EXAM_ROWS=[
+ {kssj:'2026-10-12 19:00~20:25',kskcmc:'课程A',kch:'K001',jsxm:'教师甲',js_mc:'考场A',zwh:'1',ksccmc:'场次A'},
+ {kssj:'2026-10-13 10:15~11:40',kskcmc:'课程B',kch:'K002',jsxm:'教师乙',js_mc:'考场B',zwh:'2',ksccmc:'场次A'},
+];
+function examState(){
+ const state=createState(source);
+ state.snapshot.exams=normalizeExamList({code:0,count:EXAM_ROWS.length,data:EXAM_ROWS},{semesterId:'test',semesterStartDate:'2026-10-12',totalWeeks:3,periodTimes:PERIOD_TIMES,fetchedAt:'2026-11-17T00:00:00.000Z'});
+ return state;
+}
+test('单周图片与整学期总览包含考试；纯文本规则排除考试行并注明原因',()=>{
+ const state=examState();
+ const week=exportWeekModel(state,1);
+ assert(week.days[0].courses.some(row=>row.exam===true&&row.name==='课程A'),'周图第一天包含考试');
+ assert(week.days[1].courses.some(row=>row.exam===true&&row.name==='课程B'),'周图第二天包含考试');
+ assert.deepEqual(week.days[0].courses.map(row=>row.name),['高等数学','课程A'],'考试与普通课程按开始时间排在同一天');
+ const overview=buildSemesterOverviewModel(state);
+ assert(overview.days[0].courses.some(card=>card.name==='课程A'),'整学期总览包含考试');
+ assert(overview.days[1].courses.some(card=>card.name==='课程B'),'整学期总览包含考试');
+ const model=buildRulesModel(state);
+ assert.deepEqual(model.courses.map(course=>course.name),['高等数学'],'规则模型只含规律课程');
+ assert.equal(model.conflictCount,0);
+ const text=buildRulesText(state);
+ assert.doesNotMatch(text,/课程A|课程B|考场A|考场B/,'纯文本规则不得写入单次考试');
+ assert.match(text,/# 考试：考试为单次安排，不属于每周规律课程，未写入本文件/);
+ assert.match(text,/高等数学/,'规律课程仍在规则文本中');
 });

@@ -2,6 +2,7 @@ import {studyDay} from './study.mjs';
 import {holidayForDate,emptyHolidaySettings} from './holiday-settings.mjs';
 import {customCourseDay,alignCustomCoursesToSemester} from './custom-courses.mjs';
 import {courseSettingKey} from './interactions.mjs';
+import {examDay,diffExamSnapshots} from './jiaowu-exam.mjs';
 export const FIELDS = ['name','teacher','room','startTime','endTime','periods','cancelled'];
 export const clone = x => JSON.parse(JSON.stringify(x));
 export function latestIso(a,b){const ta=Date.parse(String(a??'')),tb=Date.parse(String(b??''));if(!Number.isFinite(ta)&&!Number.isFinite(tb))return null;if(!Number.isFinite(ta))return new Date(tb).toISOString();if(!Number.isFinite(tb)||ta>=tb)return new Date(ta).toISOString();return new Date(tb).toISOString();}
@@ -61,6 +62,9 @@ export function effectiveDay(s,date,overrides=[],localMaps=[],courseSettings={},
     const result=conflict ? {...(current||o.base),cancelled:!current||current.cancelled,conflict:{school:current,local,at:o.createdAt},overrideId:o.id} : local;
     if(i<0) list.push(result); else list[i]=result;
   }
+  // Exams are fixed-date school events. They are merged after local edits (never moved by
+  // 调休/休假) and before the evening-study yield below, so a real exam pushes study aside.
+  list.push(...examDay(s,date));
   // A real school class takes precedence over the optional locally generated study.
   list=list.filter(r=>!r.localActivity||!list.some(q=>q.key!==r.key&&!q.localActivity&&!q.cancelled&&q.startTime<r.endTime&&q.endTime>r.startTime));
   for(const r of list) r.overlap=list.some(q=>q.key!==r.key&&!q.cancelled&&!r.cancelled&&q.startTime<r.endTime&&q.endTime>r.startTime);
@@ -119,7 +123,11 @@ export function applySnapshot(state,snapshot,now=new Date().toISOString()) {
   const events=Array.isArray(state.events)?state.events:[];
   if(!snapshot.studentProfile && state.snapshot?.studentProfile) snapshot.studentProfile=clone(state.snapshot.studentProfile);
   if(!snapshot.studyPolicy && state.snapshot?.studyPolicy) snapshot.studyPolicy=clone(state.snapshot.studyPolicy);
-  const changes=diffSnapshots(state.snapshot,snapshot,now);
+  // Exam data is an independent school source. A caller that does not carry exams
+  // (older native build / background path) must not erase the previous exam list;
+  // a different semester always drops it (examDay re-checks the semester as a guard).
+  if(snapshot.exams===undefined && state.snapshot?.exams && state.snapshot.semester?.id===snapshot.semester.id && state.snapshot.semester?.startDate===snapshot.semester.startDate) snapshot={...snapshot,exams:clone(state.snapshot.exams)};
+  const changes=[...diffExamSnapshots(state.snapshot?.exams,snapshot.exams,now),...diffSnapshots(state.snapshot,snapshot,now)].sort((a,b)=>a.date.localeCompare(b.date));
   return {...state,snapshot:clone(snapshot),customCourses:alignCustomCoursesToSemester(state.customCourses,snapshot.semester),events:[...changes,...events],overrides,localMaps,holidaySettings,lastSuccess:now,courseLastSuccess:now,lastAttempt:now,error:null};
 }
 export function adoptSchoolSnapshot(state,snapshot,now=new Date().toISOString()) {
@@ -127,6 +135,7 @@ export function adoptSchoolSnapshot(state,snapshot,now=new Date().toISOString())
   const source=clone(snapshot);
   if(!source.studentProfile && state.snapshot?.studentProfile) source.studentProfile=clone(state.snapshot.studentProfile);
   if(!source.studyPolicy && state.snapshot?.studyPolicy) source.studyPolicy=clone(state.snapshot.studyPolicy);
+  if(source.exams===undefined && state.snapshot?.exams && state.snapshot.semester?.id===source.semester.id && state.snapshot.semester?.startDate===source.semester.startDate) source.exams=clone(state.snapshot.exams);
   const next=createState(source), studySetting=state.courseSettings?.['local-evening-study'];
   if(studySetting) next.courseSettings['local-evening-study']=clone(studySetting);
   next.overrides=clone((state.overrides||[]).filter(o=>o.base?.customCourse));

@@ -1,5 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';
-import {addDays,weekOf,sourceDay,effectiveDay,createState,clone,saveOverride,applySnapshot,recordFailure,diffSnapshots,noticeLevel,validateSnapshot} from '../web/core.mjs';
+import {addDays,weekOf,sourceDay,effectiveDay,createState,clone,saveOverride,applySnapshot,adoptSchoolSnapshot,recordFailure,diffSnapshots,noticeLevel,validateSnapshot} from '../web/core.mjs';
+import {normalizeExamList} from '../web/jiaowu-exam.mjs';
+import {PERIOD_TIMES} from '../web/jsxsd.mjs';
 const base=JSON.parse(fs.readFileSync(new URL('../web/data/baseline.json',import.meta.url)));const adjusted=JSON.parse(fs.readFileSync(new URL('../web/data/adjusted.json',import.meta.url)));
 test('真实样例17条排课，源周次正确；放假不阻止补课',()=>{assert.equal(base.rules.length,17);assert.equal(sourceDay(adjusted,'2026-09-29').length,0);const next=sourceDay(adjusted,'2026-10-10');assert.equal(next.length,3);assert(next.every(r=>r.originDate==='2026-09-29'));assert.deepEqual(next.map(r=>r.ruleId),sourceDay(base,'2026-09-29').map(r=>r.ruleId));});
 test('补课与军事理论重叠，双方均保留并提示',()=>{const a=effectiveDay(adjusted,'2026-10-17');assert.equal(a.length,2);assert(a.every(x=>x.overlap));});
@@ -13,3 +15,130 @@ test('失败保留原快照、原成功时间和变化记录',()=>{const s=apply
 test('replace与append不同，映射源周次不能用目的周次',()=>{const b=clone(base);b.rules.push({id:'test',name:'第六周独有',weekday:6,weeks:[6],periods:[1,2],startTime:'08:30',endTime:'09:55',room:'A1',teacher:'老师'});b.remaps=[{id:'m',date:'2026-10-10',fromDate:'2026-09-29',mode:'append'}];assert.equal(sourceDay(b,'2026-10-10').length,4);b.remaps[0].mode='replace';assert.equal(sourceDay(b,'2026-10-10').length,3);});
 test('同步学校课表不会清除本机调休与单日修改',()=>{const map={id:'local-map',date:'2026-10-17',fromDate:'2026-09-29',mode:'replace'};const first=createState(base);first.localMaps=[map];const edited=saveOverride(first,sourceDay(base,'2026-10-13')[0],{room:'B203'});const next=applySnapshot(edited,clone(adjusted));assert.deepEqual(next.localMaps,[map]);assert.equal(next.overrides.length,1);assert.equal(effectiveDay(next.snapshot,'2026-10-17',next.overrides,next.localMaps).some(r=>r.remapId==='local-map'),true);});
 test('格式错误和不同学期拒绝，避免误报整学期取消',()=>{const b=clone(base);b.rules[0].weeks=[0];assert.throws(()=>validateSnapshot(b));const c=clone(base);c.semester.id='other';assert.throws(()=>diffSnapshots(base,c));});
+
+// 考试集成：全部为脱敏合成样本（课程A/B、考场A/B、教师甲/乙、假座位号）。
+const EXAM_ROWS=[
+ {kssj:'2026-12-21 19:00~20:25',kskcmc:'课程A',kch:'K001',jsxm:'教师甲',js_mc:'考场A',zwh:'1',ksccmc:'场次A'},
+ {kssj:'2026-12-22 14:00~15:25',kskcmc:'课程B',kch:'K002',jsxm:'教师乙',js_mc:'考场B',zwh:'2',ksccmc:'场次A'},
+];
+function withExams(snapshot,rows=EXAM_ROWS){
+ const exams=normalizeExamList({code:0,count:rows.length,data:rows},{semesterId:snapshot.semester.id,semesterStartDate:snapshot.semester.startDate,totalWeeks:snapshot.semester.weeks,periodTimes:PERIOD_TIMES,fetchedAt:'2026-11-17T00:00:00.000Z'});
+ return {...clone(snapshot),exams};
+}
+function studySnapshot(){
+ const snapshot=withExams(clone(base));
+ snapshot.studentProfile={enrollmentYear:2026};
+ snapshot.studyPolicy={enabled:true,userEnabled:true,profile:{enrollmentYear:2026},holidayDates:[],verifiedYears:[2026],sourceLabel:'本人设置 · 大一晚自习规则'};
+ return snapshot;
+}
+
+test('考试注入：真实 effectiveDay 合并考试条目，考试不进 rules 也不改源课表',()=>{
+ const snapshot=withExams(base);
+ const day=effectiveDay(snapshot,'2026-12-21');
+ assert.equal(day.length,1);
+ assert.equal(day[0].exam,true);
+ assert.equal(day[0].name,'课程A');
+ assert.equal(day[0].startTime,'19:00');
+ assert.equal(day[0].endTime,'20:25');
+ assert.deepEqual(day[0].periods,[9,10]);
+ assert.equal(day[0].room,'考场A');
+ assert.equal(day[0].source,'school');
+ assert.equal(snapshot.rules.length,17,'rules 不变');
+ assert.equal(sourceDay(snapshot,'2026-12-21').length,0,'考试不进入 rules 源');
+});
+
+test('考试免疫休假：寒假区间与单日休假都不隐藏考试',()=>{
+ const snapshot=withExams(clone(base));
+ const winter={winter:{startDate:'2026-12-17',endDate:'2027-01-10'},summer:null,days:[]};
+ const holidayDay=effectiveDay(snapshot,'2026-12-21',[],[],{},[],winter);
+ assert.equal(holidayDay.filter(r=>r.exam===true).length,1,'寒假不隐藏考试');
+ assert.equal(holidayDay.filter(r=>r.exam!==true).length,0);
+ const dayOff={winter:null,summer:null,days:[{date:'2026-12-21',skipStudy:false}]};
+ const offDay=effectiveDay(snapshot,'2026-12-21',[],[],{},[],dayOff);
+ assert.equal(offDay.filter(r=>r.exam===true).length,1,'单日休假不隐藏考试');
+});
+
+test('考试免疫调休：replace 调休不搬走考试，考试日原课被替换后考试仍在',()=>{
+ const snapshot=withExams(clone(base));
+ snapshot.remaps=[{id:'rm-exam',date:'2026-12-21',fromDate:'2026-12-01',mode:'replace'}];
+ const sourceMapped=effectiveDay(snapshot,'2026-12-21');
+ assert.equal(sourceMapped.filter(r=>r.exam===true).length,1,'学校调休不影响考试');
+ const localMaps=[{id:'lm-exam',date:'2026-12-21',fromDate:'2026-12-01'}];
+ const localMapped=effectiveDay(snapshot,'2026-12-21',[],localMaps);
+ assert.equal(localMapped.filter(r=>r.exam===true).length,1,'本机调休不影响考试');
+ assert(sourceMapped.filter(r=>r.exam!==true).every(r=>r.remapId),'调休日原有课程被 replace，只剩调休课与考试');
+});
+
+test('同节冲突并存：考试与同时间课程都保留，双方 overlap=true',()=>{
+ const snapshot=withExams(clone(base));
+ const day=effectiveDay(snapshot,'2026-12-22');
+ const exam=day.find(r=>r.exam===true),course=day.find(r=>r.ruleId==='course-5');
+ assert(exam&&course,'考试与课程同时显示');
+ assert.equal(exam.overlap,true);
+ assert.equal(course.overlap,true);
+ assert.equal(day.find(r=>r.ruleId==='course-7').overlap,false,'不同时段课程不误标重叠');
+});
+
+test('晚自习给考试让位：同时段考试出现时本机晚自习不显示',()=>{
+ const snapshot=studySnapshot();
+ const examDay=effectiveDay(snapshot,'2026-12-21');
+ assert(examDay.some(r=>r.exam===true),'考试显示');
+ assert(!examDay.some(r=>r.localActivity),'晚自习让位');
+ const normalDay=effectiveDay(snapshot,'2026-12-23');
+ assert(normalDay.some(r=>r.localActivity),'没有考试的晚上晚自习照常显示');
+});
+
+test('学校刷新保留考试：新快照未携带 exams 时保留同学期旧数据，采用新课时同步保留',()=>{
+ const seeded=withExams(clone(base));
+ const state=createState(seeded);
+ const next=applySnapshot(state,clone(base),'2026-11-17T01:00:00.000Z');
+ assert.equal(next.snapshot.exams.items.length,2,'新快照缺 exams 时保留同学期旧数据');
+ const adopted=adoptSchoolSnapshot(state,clone(base),'2026-11-17T01:00:00.000Z');
+ assert.equal(adopted.snapshot.exams.items.length,2,'采用学校课表同样保留同学期考试');
+});
+
+test('学期切换丢弃旧考试：adopt 新学期快照不携带旧 exams',()=>{
+ const seeded=withExams(clone(base));
+ const state=createState(seeded);
+ const other=clone(base);
+ other.semester={id:'school-2027-02-22',name:'新学期',startDate:'2027-02-22',weeks:18};
+ const adopted=adoptSchoolSnapshot(state,other,'2027-02-22T01:00:00.000Z');
+ assert.equal(adopted.snapshot.exams,undefined,'异学期一律丢弃，避免旧考试显示到新学期');
+ assert.equal(effectiveDay(adopted.snapshot,'2026-12-21').length,0);
+});
+
+test('考试变更记录：经 applySnapshot 进入现有变更事件链路',()=>{
+ const initial=withExams(clone(base));
+ const state=createState(initial);
+ const changedRows=EXAM_ROWS.map((row,index)=>index===0?{...row,js_mc:'考场B'}:row);
+ const changed=withExams(clone(base),changedRows);
+ const next=applySnapshot(state,changed,'2026-11-17T02:00:00.000Z');
+ const events=next.events.filter(event=>event.exam);
+ assert.equal(events.length,1);
+ assert.equal(events[0].type,'换考场');
+ assert.equal(events[0].name,'课程A');
+ assert.equal(events[0].source,'school');
+ const unchanged=applySnapshot(createState(initial),withExams(clone(base)),'2026-11-17T03:00:00.000Z');
+ assert.equal(unchanged.events.filter(event=>event.exam).length,0,'同一份考试数据不产生新事件');
+});
+
+test('schemaVersion 兼容：validateSnapshot 不校验可选 exams 字段',()=>{
+ const snapshot=clone(base);
+ snapshot.exams={items:[],skipped:[],unknownFutureField:true};
+ assert.doesNotThrow(()=>validateSnapshot(snapshot));
+ assert.equal(clone(snapshot).exams.unknownFutureField,true,'未知字段随快照克隆保留');
+});
+
+test('首批考试数据静默入库：首次成功与失败标记后的首次成功都不产生变更事件（P2-R2-4）',()=>{
+ const now='2026-11-17T04:00:00.000Z';
+ const fresh=withExams(clone(base));
+ const noBaseline=applySnapshot(createState(clone(base)),fresh,now);
+ assert.equal(noBaseline.snapshot.exams.items.length,2);
+ assert.equal(noBaseline.events.filter(event=>event.exam).length,0,'首次成功不生成新增事件');
+ const marker={...clone(base),exams:{semesterId:base.semester.id,semesterStartDate:base.semester.startDate,fetchedAt:null,lastAttempt:'2026-11-16T00:00:00.000Z',error:'timeout',source:'school',items:[],skipped:[]}};
+ const afterFailure=applySnapshot(createState(marker),fresh,'2026-11-17T05:00:00.000Z');
+ assert.equal(afterFailure.events.filter(event=>event.exam).length,0,'失败标记后的首次成功同样静默');
+ const changed=withExams(clone(base),EXAM_ROWS.map((row,index)=>index===0?{...row,js_mc:'考场B'}:row));
+ const next=applySnapshot(afterFailure,changed,'2026-11-17T06:00:00.000Z');
+ assert.deepEqual(next.events.filter(event=>event.exam).map(event=>event.type),['换考场'],'第二次成功起才 diff');
+});

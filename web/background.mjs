@@ -1,5 +1,6 @@
 import {normalizeSchool} from './school.mjs';
-import {buildBundle,SEMESTER_MONDAYS} from './jsxsd.mjs';
+import {buildBundle,SEMESTER_MONDAYS,PERIOD_TIMES} from './jsxsd.mjs';
+import {attachExamPayload} from './jiaowu-exam.mjs';
 import {applySnapshot,recordFailure,noticeLevel,today} from './core.mjs';
 import {withStudyPolicy} from './study.mjs';
 import {appendScheduleTrace} from './schedule-diagnostics.mjs';
@@ -12,7 +13,8 @@ globalThis.processBackground=(state,result)=>{
   if(result.error)next=recordFailure(state,result.error);
   else{
    const snapshot=normalizeSchool(buildBundle(result.rows,{monday:SEMESTER_MONDAYS[result.semesterId],totalWeeks:result.totalWeeks,semesterId:result.semesterId}));
-   next=applySnapshot(state,withStudyPolicy(snapshot,result.studentProfile,calendar,state.snapshot));
+   const decorated=withStudyPolicy(snapshot,result.studentProfile,calendar,state.snapshot);
+   next=applySnapshot(state,attachExamPayload(decorated,result,state.snapshot?.exams,{periodTimes:PERIOD_TIMES}));
   }
   next=appendScheduleTrace(state,next,result.error?'background-error':'background');
   next.lastBackgroundAttempt=new Date().toISOString();if(!result.error)next.lastBackgroundSuccess=next.lastBackgroundAttempt;

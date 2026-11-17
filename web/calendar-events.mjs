@@ -3,7 +3,7 @@ import {addDays,timetableDay,weekday,weekOf} from './core.mjs';
 export const CALENDAR_EVENT_LIMIT = 5000;
 export const DEFAULT_CALENDAR_OPTIONS = Object.freeze({school:true,custom:true,study:true});
 
-const SOURCE_LABEL={school:'学校课程',custom:'自定义课程',study:'晚自习'};
+const SOURCE_LABEL={school:'学校课程',custom:'自定义课程',study:'晚自习',exam:'学校考试'};
 const WEEKDAY_LABEL=['一','二','三','四','五','六','日'];
 
 export function normalizeCalendarOptions(value){
@@ -47,7 +47,7 @@ export function buildCalendarEvents(state, options = DEFAULT_CALENDAR_OPTIONS){
       const startMillis=Date.parse(`${date}T${row.startTime}:00+08:00`);
       const endMillis=Date.parse(`${date}T${row.endTime}:00+08:00`);
       if(!Number.isFinite(startMillis)||!Number.isFinite(endMillis)||endMillis<=startMillis){skipped++;continue;}
-      const source=row.localActivity?'study':row.customCourse?'custom':'school';
+      const source=row.localActivity?'study':row.customCourse?'custom':row.exam===true?'exam':'school';
       const category=row.localActivity?'study':(row.customCourse||row.remapId||row.overrideId||row.source==='local')?'custom':'school';
       if(!opts[category]){skipped++;continue;}
       const week=weekOf(state.snapshot,date);
