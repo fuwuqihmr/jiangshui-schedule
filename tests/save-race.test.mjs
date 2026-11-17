@@ -38,8 +38,19 @@ test('app 保存队列在执行时克隆最新 state，避免把调用时的旧�
   const then=fn.indexOf('.then(async()=>{');
   assert.ok(then>0,'save 应串行进队列');
   assert.ok(fn.indexOf('const data=clone(state)')>then,'data 必须在队列回调内克隆，不能在调用时克隆旧快照');
-  assert.ok(fn.includes('expectedRevision:state._revision??0'),'写入时使用当前 state 的 revision');
-  assert.ok(fn.includes('if(saved?.revision)state._revision=saved.revision'),'成功后更新内存 revision');
+  // 原 :41-42 两条源码子串断言（Lead 裁定改为行为断言）：执行真实 save() 片段，
+  // 断言写入时使用当前 state 的 revision、成功后内存 revision 被更新。
+  const recoveryCalls=[];
+  const ctx={state:{_revision:3,events:[{id:'e1'}]},saveQueue:Promise.resolve(),native:true,sampleState:null,clone,
+    saveStateWithRecovery:async(call,data,expected)=>{recoveryCalls.push({data,expected});return {revision:expected+1,retried:false,forced:false};},
+    call:async()=>null,localStorage:{setItem(){}}};
+  vm.createContext(ctx);
+  vm.runInContext(fn+'\n;globalThis.__save=save;',ctx);
+  return ctx.__save().then(()=>{
+    assert.equal(recoveryCalls.length,1,'首次保存只调用一次 recovery');
+    assert.equal(recoveryCalls[0].expected,3,'写入时使用当前 state 的 revision');
+    assert.equal(ctx.state._revision,4,'成功后更新内存 revision');
+  });
 });
 
 test('StateStore 的 revision 检查必须发生在写文件之前',()=>{

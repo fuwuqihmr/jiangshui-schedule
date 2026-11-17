@@ -32,6 +32,7 @@ function updateFooterStamp(){const host=document.querySelector('#footer-stamp');
 const colors=[['#efedfb','#877ec3','#665d92','#302a43','#e3d9ff'],['#eaf3fc','#71a2c7','#547c9d','#203449','#cee6ff'],['#eaf5ef','#7bad93','#5e8a73','#233b30','#d0efdb'],['#fff2e8','#d6a279','#a47a55','#432f23','#ffdfc4'],['#fbeef2','#c389a3','#9b6a82','#422b37','#f6d5e5']];
 const courseColor=r=>{let n=0;for(const c of r.name)n+=c.charCodeAt(0);const p=colors[n%colors.length];return `--card-bg:${p[0]};--card-accent:${p[1]};--card-ink:${p[2]};--card-dark-bg:${p[3]};--card-dark-ink:${p[4]}`;};
 import {native,call,androidCallbacks} from './bridge.mjs';
+import {saveStateWithRecovery} from './state-sync.mjs';
 import {agreement,agreementContent,consentKey} from './consent.mjs';
 let pendingSchool=null,sampleState=null,sampleReturnView=null;
 const sampleReadActions=new Set(['export-diagnostics','export-week','export-semester','export-semester-pages','export-semester-overview','export-semester-rules','cancel-export','nav','close','detail','show-day','day-prev','day-next','show-week','week-prev','week-next','this-week','select-week-date','agreement','sample-exit','leave-status-all','leave-status-detail','leave-status-refresh','leave-status-clear-demo','leave-page-back','leave-filter','leave-page-detail']);
@@ -49,7 +50,9 @@ function visibleWeek(snapshot,date=today()){return Math.max(1,Math.min(snapshot.
 function selectVisibleWeek(snapshot,date=today()){selectedWeek=visibleWeek(snapshot,date);weekSelectedDate=date;}
 const samples={baseline:await (await fetch('./data/baseline.json')).json(),adjusted:await (await fetch('./data/adjusted.json')).json()};
 const holidayCalendar=await (await fetch('./data/holidays.json')).json();
-try{const saved=native?await call('loadState'):JSON.parse(localStorage.getItem('tomorrow-state'));if(saved){validateSnapshot(saved.snapshot);if(!Array.isArray(saved.events)||!Array.isArray(saved.overrides)||!Array.isArray(saved.localMaps))throw Error('数据格式不正确');state=saved;}}catch(e){console.warn('Local state unavailable');}
+// 旧快照内容校验失败时仍保留磁盘 revision，避免“内存 0 / 磁盘 N”的必然冲突。
+function savedStateRevision(value){const revision=Number(value&&value._revision);return Number.isSafeInteger(revision)&&revision>=0?revision:null;}
+try{const saved=native?await call('loadState'):JSON.parse(localStorage.getItem('tomorrow-state'));if(saved){try{validateSnapshot(saved.snapshot);if(!Array.isArray(saved.events)||!Array.isArray(saved.overrides)||!Array.isArray(saved.localMaps))throw Error('数据格式不正确');state=saved;}catch(validationError){const revision=savedStateRevision(saved);state=createState(samples.adjusted);if(revision!==null)state._revision=revision;throw validationError;}}}catch(e){console.warn('Local state unavailable');}
 state ||= createState(samples.adjusted);
 state.autoUpdate=state.autoUpdate!==false;
 state.leaveNoticeEnabled=state.leaveNoticeEnabled!==false;
@@ -203,7 +206,8 @@ function notificationPanel(){return `<section class="panel"><h2>通知与后台<
 selectedWeek=Math.min(state.snapshot.semester.weeks,Math.max(1,weekOf(state.snapshot,today())));
 let saveQueue=Promise.resolve();
 if(customCourseMigrationNeeded){try{await save();}catch{console.warn('Unable to save restored custom courses');}}
-function save(){if(sampleState)throw Error('请先退出示例模式再修改个人数据');saveQueue=saveQueue.catch(()=>{}).then(async()=>{const data=clone(state);if(native){const saved=await call('saveState',{state:data,expectedRevision:state._revision??0});if(saved?.revision)state._revision=saved.revision;}else localStorage.setItem('tomorrow-state',JSON.stringify(data));});return saveQueue;}
+// 所有保存统一走 state-sync 三层兜底（冲突自愈 + -1 强制保存）；单写者前提见 web/state-sync.mjs 头注释。
+function save(){if(sampleState)throw Error('请先退出示例模式再修改个人数据');saveQueue=saveQueue.catch(()=>{}).then(async()=>{const data=clone(state);if(native){const saved=await saveStateWithRecovery(call,data,state._revision??0);state._revision=saved.revision;}else localStorage.setItem('tomorrow-state',JSON.stringify(data));});return saveQueue;}
 if(state.snapshot.studyPolicy?.enabled===true && state.snapshot.studyPolicy.userEnabled==null && state.snapshot.studyPolicy.userDisabled!==true){state.snapshot.studyPolicy=withStudyPolicy(state.snapshot,state.snapshot.studentProfile,holidayCalendar,state.snapshot).studyPolicy;try{await save();}catch{console.warn('Unable to migrate saved evening study setting');}}
 function toast(message,options){return showNotice(message,options);}
 globalThis.onNativeProgress=(id,label)=>{if(!busy||!androidCallbacks.has(id))return;progressLabel=String(label);renderReadStatus();};
@@ -652,7 +656,7 @@ async function readSchool(action='sync'){
     else{const examInfo=examSummary(result.snapshot.exams);state=appendScheduleTrace(state,applySnapshot(state,result.snapshot),'foreground');await save();await notifyPending();readFeedback={text:`课表核对完成 · ${elapsed} 秒`,detail:`${result.snapshot.rules.length} 条排课规则 · ${result.snapshot.semester.weeks} 个教学周 · ${examInfo.count?`${examInfo.count} 场考试 · `:''}${examInfo.error?'考试安排读取不完整或失败 · ':''}数据已更新`};leaveRefreshWanted=true;}
   }catch(e){
     if(epoch!==readEpoch)return;
-    if(!e.message.startsWith('已取消')){await call('recordDiagnostic',failureCategory(e.message)).catch(()=>{});state=appendScheduleTrace(state,recordFailure(state,e.message),'foreground-error');await save();}
+    if(!e.message.startsWith('已取消')){await call('recordDiagnostic',failureCategory(e.message)).catch(()=>{});state=appendScheduleTrace(state,recordFailure(state,e.message),'foreground-error');await save().catch(()=>{});}
     readFeedback={kind:e.message.startsWith('已取消')?'cancelled':'error',error:!e.message.startsWith('已取消'),text:e.message.startsWith('已取消')?'已取消读取':'未能确认最新课表',detail:e.message};
   }finally{if(epoch===readEpoch){endRead();render();feedbackNotice();if(leaveRefreshWanted)void refreshLeaveStatus({reason:'school-sync'});if(globalThis.Android)setTimeout(()=>maybeShowPermissionOnboarding(),300);}}
 }
