@@ -101,3 +101,20 @@ test('亮/暗切换走既有主题机制：theme.mjs 解析系统偏好后写 ht
  assert(theme.includes('document.documentElement.dataset.theme=resolved'),'主题通过 html[data-theme] 切换');
  assert.match(examBlock,/html\[data-theme=dark\]\{/,'深色主题变量挂在 html[data-theme=dark]');
 });
+
+test('考试卡内联变更文字在红底上可读：unread/del/ins 覆盖为卡片文字色且 ≥4.5:1（P2-R2-5）',()=>{
+ const stripped=examBlock.replace(/\/\*[\s\S]*?\*\//g,'');
+ const rules=[...stripped.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(match=>({selector:match[1].trim().replace(/\s+/g,' '),body:match[2]}));
+ const override=rules.find(rule=>rule.selector.includes('.course-card.exam-card .unread'));
+ assert(override,'缺少考试卡内联变更文字的颜色覆盖规则');
+ for(const token of ['.course-card.exam-card .change-inline','.course-card.exam-card .change-inline del','.course-card.exam-card .change-inline ins','.course-card.exam-card .unread']) assert(override.selector.includes(token),'覆盖规则需包含选择器 '+token);
+ assert.match(override.body,/color:var\(--exam-card-ink\)!important/,'必须用 !important 压过 .unread{color:var(--red)!important}');
+ const delRule=rules.find(rule=>rule.selector==='.course-card.exam-card .change-inline del');
+ assert(delRule,'缺少 del 语义覆盖');
+ assert.match(delRule.body,/text-decoration:line-through/);
+ const insRule=rules.find(rule=>rule.selector==='.course-card.exam-card .change-inline ins');
+ assert(insRule,'缺少 ins 语义覆盖');
+ assert.match(insRule.body,/text-decoration:underline/);
+ assert.ok(contrast(valueOf(lightPart,'--exam-card-ink'),valueOf(lightPart,'--exam-card-bg'))>=4.5,'亮色考试卡变更文字 ≥4.5:1');
+ assert.ok(contrast(valueOf(darkPart,'--exam-card-ink'),valueOf(darkPart,'--exam-card-bg'))>=4.5,'深色考试卡变更文字 ≥4.5:1');
+});

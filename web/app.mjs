@@ -649,7 +649,7 @@ async function readSchool(action='sync'){
     result.snapshot=attachExamPayload(decorateSnapshot(result.snapshot,result.studentProfile),result,state.snapshot?.exams,{periodTimes:PERIOD_TIMES});
     const elapsed=((Date.now()-progressStarted)/1000).toFixed(1);
     if(state.snapshot.source.kind==='sample'){pendingSchool=result.snapshot;renderAdopt();readFeedback={kind:'pending',label:'等待采用课表',text:`课表读取完成 · ${elapsed} 秒`,detail:'请确认是否采用学校课表。'};}
-    else{const examInfo=examSummary(result.snapshot.exams);state=appendScheduleTrace(state,applySnapshot(state,result.snapshot),'foreground');await save();await notifyPending();readFeedback={text:`课表核对完成 · ${elapsed} 秒`,detail:`${result.snapshot.rules.length} 条排课规则 · ${result.snapshot.semester.weeks} 个教学周 · ${examInfo.count?`${examInfo.count} 场考试 · `:''}${examInfo.error?'考试安排读取失败，沿用上次数据 · ':''}数据已更新`};leaveRefreshWanted=true;}
+    else{const examInfo=examSummary(result.snapshot.exams);state=appendScheduleTrace(state,applySnapshot(state,result.snapshot),'foreground');await save();await notifyPending();readFeedback={text:`课表核对完成 · ${elapsed} 秒`,detail:`${result.snapshot.rules.length} 条排课规则 · ${result.snapshot.semester.weeks} 个教学周 · ${examInfo.count?`${examInfo.count} 场考试 · `:''}${examInfo.error?'考试安排读取不完整或失败 · ':''}数据已更新`};leaveRefreshWanted=true;}
   }catch(e){
     if(epoch!==readEpoch)return;
     if(!e.message.startsWith('已取消')){await call('recordDiagnostic',failureCategory(e.message)).catch(()=>{});state=appendScheduleTrace(state,recordFailure(state,e.message),'foreground-error');await save();}

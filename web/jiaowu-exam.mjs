@@ -87,9 +87,9 @@ export function normalizeExamList(payload, { semesterId, semesterStartDate, tota
       weekday: weekday(parsed.date),
     });
   }
-  // 上游字段改名（JSON 合法、code=0、data 非空，但所有行都无法解析）时必须返回可见失败，
-  // 否则空列表会静默覆盖已有考试数据（T15 P2-3）；data 本身为空仍是合法的"暂无考试"。
-  if (!out.items.length && out.skipped.length) out.error = 'format';
+  // 本轮结果只要有任何行被 skip 就视为不完整（字段改名/异常行）：调用方保留旧数据并通过 UI
+  // 显示失败，不能用部分列表静默覆盖（T15 第二轮 P2-R2-3）；data 为空仍是合法的"暂无考试"。
+  if (out.skipped.length) out.error = 'format';
   // 周次越界（week<1 或 week>教学周）按设计 §3.2-5 仍保留条目：日课表按日期可见，
   // 周课表只在 1..semester.weeks 内展示；此处不丢弃，避免把真实考试静默隐藏。
   // totalWeeks 仅参与语义校验（调用方传入当前快照周数），不用于过滤条目。
@@ -192,6 +192,9 @@ function examEventType(fields) {
 }
 export function diffExamSnapshots(before, after, now = new Date().toISOString()) {
   if (!after || !Array.isArray(after.items) || !before || !Array.isArray(before.items)) return [];
+  // 首次获得数据（此前无基线，或此前只有失败标记的空列表）不生成「新增」事件，避免首次成功
+  // 就合成一次批量变更通知；从第二次成功读取起才 diff（T15 第二轮 P2-R2-4）。
+  if (!before.items.length) return [];
   if (before.semesterId && after.semesterId && before.semesterId !== after.semesterId) return [];
   if (before.semesterStartDate && after.semesterStartDate && before.semesterStartDate !== after.semesterStartDate) return [];
   const oldMap = new Map(before.items.map((item) => [item.id, item]));

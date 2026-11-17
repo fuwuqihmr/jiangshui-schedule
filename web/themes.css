@@ -108,3 +108,11 @@ html[data-theme=dark]{--exam-card-bg:#b71c1c;--exam-card-border:#ef5350;--exam-c
 html[data-theme=dark] .course-card.exam-card:not(.vacant){--card-ink:var(--exam-card-ink)!important;background:var(--exam-card-bg);border-color:var(--exam-card-border);color:var(--exam-card-ink)}
 html[data-theme=dark] .badge.exam{background:var(--exam-badge-bg);color:var(--exam-badge-ink);border-color:var(--exam-badge-border)}
 html[data-theme=dark] .detail-hero.exam-hero{background:var(--exam-hero-bg);color:var(--exam-hero-ink)}
+/* 考试卡内联变更文字（未读变更/差异）跟随卡片文字色，保证红底上可读（T15 第二轮 P2-R2-5）：
+   亮色 = 白字 4.98:1、深色 = #FFEBEE 5.75:1，均 ≥ AA 4.5:1；del 删除线、ins 下划线保留语义。 */
+.course-card.exam-card .change-inline,
+.course-card.exam-card .change-inline del,
+.course-card.exam-card .change-inline ins,
+.course-card.exam-card .unread{color:var(--exam-card-ink)!important}
+.course-card.exam-card .change-inline del{text-decoration:line-through}
+.course-card.exam-card .change-inline ins{text-decoration:underline}

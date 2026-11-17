@@ -90,6 +90,7 @@ test('异常行按原因跳过：时间/节次/名称/重复，越界周仍保�
  assert.deepEqual(exams.skipped.map(item=>item.reason),['time','period','name','duplicate']);
  assert.equal(exams.items.length,3,'重复行去重后保留本周与两个越界周条目');
  assert.deepEqual(exams.items.map(item=>item.week),[0,19,40],'周次越界仍保留，不静默隐藏考试（按日期排序）');
+ assert.equal(exams.error,'format','存在被 skip 的行即视为本次结果不完整（P2-R2-3）');
  assert.equal(weekOf(SEMESTER.startDate,'2027-06-01'),40);
  assert.equal(weekday('2026-08-29'),6);
 });
@@ -157,11 +158,16 @@ test('examSummary：计数/时间/6小时新鲜度判定',()=>{
 test('diffExamSnapshots：新增/改时间/换考场/取消生成与课表变更同形状事件',()=>{
  const before=normalized();
  const now='2026-12-01T00:00:00.000Z';
- const added=diffExamSnapshots({...before,items:[]},before,now);
- assert.equal(added.length,8);
- assert(added.every(event=>event.type==='新增'&&event.source==='school'&&event.exam===true&&event.read===false&&event.notifiedAt===null));
- assert.equal(added[0].name,'课程A');
- assert.equal(added[0].date,'2026-12-21');
+ const firstBatch=diffExamSnapshots({...before,items:[]},before,now);
+ assert.equal(firstBatch.length,0,'首批数据不生成「新增」事件（P2-R2-4）');
+ const addedSnapshot=JSON.parse(JSON.stringify(before));
+ addedSnapshot.items.push({...before.items[7],id:'K009|场次A|2027-01-09|08:30',date:'2027-01-09',week:19,weekday:6});
+ const added=diffExamSnapshots(before,addedSnapshot,now);
+ assert.equal(added.length,1);
+ assert.equal(added[0].type,'新增');
+ assert(added.every(event=>event.source==='school'&&event.exam===true&&event.read===false&&event.notifiedAt===null));
+ assert.equal(added[0].name,'课程H','新增场次沿用被复制行的课程名');
+ assert.equal(added[0].date,'2027-01-09');
  const changed=JSON.parse(JSON.stringify(before));
  changed.items[0].room='考场B';
  changed.items[1].startTime='16:00';changed.items[1].endTime='17:25';
@@ -248,4 +254,32 @@ test('接线：变更记录 eventDiff 展示座位号前后值（P2-5）',()=>{
  assert.match(fn,/fields\.includes\('seat'\)\?'seat'/,'座位字段必须参与差异展示');
  assert.match(fn,/value\.seat/,'展示 seat 前后值');
  assert.match(fn,/'未安排座位'/,'空座位文案');
+});
+
+test('部分行解析失败：本次结果不完整，保留旧数据并写可见 error（P2-R2-3）',()=>{
+ const previous=normalized();
+ const snapshot=snapshotWith(previous);
+ const partial=RAW.map((row,index)=>index===2?{...row,kssj:'bad-time'}:row);
+ const fresh=normalized(partial);
+ assert.equal(fresh.items.length,7);
+ assert.equal(fresh.skipped.length,1);
+ assert.equal(fresh.error,'format','任意行失败即视为不完整，不能静默用部分列表覆盖');
+ const attached=attachExamPayload(snapshot,{exams:partial},previous,{periodTimes:PERIOD_TIMES,now:'2026-11-17T03:00:00.000Z'});
+ assert.equal(attached.exams.items.length,8,'旧数据不能被部分列表覆盖');
+ assert.equal(attached.exams.error,'format','失败必须在 snapshot.exams 可见');
+ assert.equal(attached.exams.lastAttempt,'2026-11-17T03:00:00.000Z');
+});
+
+test('首次获得考试数据不生成「新增」变更事件，第二次变更才记录（P2-R2-4）',()=>{
+ const first=normalized();
+ const now='2026-12-01T00:00:00.000Z';
+ assert.equal(diffExamSnapshots({semesterId:first.semesterId,semesterStartDate:first.semesterStartDate,items:[]},first,now).length,0,'首批数据不生成新增事件');
+ assert.equal(diffExamSnapshots(undefined,first,now).length,0,'无基线不生成事件');
+ const second=JSON.parse(JSON.stringify(first));
+ second.items[0].room='考场B';
+ const events=diffExamSnapshots(first,second,now);
+ assert.equal(events.length,1);
+ assert.equal(events[0].type,'换考场');
+ const removed={...first,items:first.items.slice(1)};
+ assert.equal(diffExamSnapshots(first,removed,now).length,1,'首次静默不能吞掉后续取消事件');
 });

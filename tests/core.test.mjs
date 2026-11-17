@@ -128,3 +128,17 @@ test('schemaVersion 兼容：validateSnapshot 不校验可选 exams 字段',()=>
  assert.doesNotThrow(()=>validateSnapshot(snapshot));
  assert.equal(clone(snapshot).exams.unknownFutureField,true,'未知字段随快照克隆保留');
 });
+
+test('首批考试数据静默入库：首次成功与失败标记后的首次成功都不产生变更事件（P2-R2-4）',()=>{
+ const now='2026-11-17T04:00:00.000Z';
+ const fresh=withExams(clone(base));
+ const noBaseline=applySnapshot(createState(clone(base)),fresh,now);
+ assert.equal(noBaseline.snapshot.exams.items.length,2);
+ assert.equal(noBaseline.events.filter(event=>event.exam).length,0,'首次成功不生成新增事件');
+ const marker={...clone(base),exams:{semesterId:base.semester.id,semesterStartDate:base.semester.startDate,fetchedAt:null,lastAttempt:'2026-11-16T00:00:00.000Z',error:'timeout',source:'school',items:[],skipped:[]}};
+ const afterFailure=applySnapshot(createState(marker),fresh,'2026-11-17T05:00:00.000Z');
+ assert.equal(afterFailure.events.filter(event=>event.exam).length,0,'失败标记后的首次成功同样静默');
+ const changed=withExams(clone(base),EXAM_ROWS.map((row,index)=>index===0?{...row,js_mc:'考场B'}:row));
+ const next=applySnapshot(afterFailure,changed,'2026-11-17T06:00:00.000Z');
+ assert.deepEqual(next.events.filter(event=>event.exam).map(event=>event.type),['换考场'],'第二次成功起才 diff');
+});
