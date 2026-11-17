@@ -21,7 +21,7 @@
 
 ## 当前状态
 
-- 当前版本 **1.4.0**（versionCode **60**，发布 tag `v1.4.0`）：正式版，由 CI 构建并用固定证书签名；GitHub Release 由工作流创建为 draft。
-- 版本号唯一真源为仓库根 `package.json`：`version=1.4.0`、`android.versionCode=60`；Gradle、构建脚本、CI、README 与测试均从该文件读取或断言一致，不再各写一份需要手工同步的字面量。
+- 当前版本 **1.4.1**（versionCode **61**，发布 tag `v1.4.1`）：修订位版本；正式版由 CI 构建并用固定证书签名，GitHub Release 由工作流创建为 draft。
+- 版本号唯一真源为仓库根 `package.json`：`version=1.4.1`、`android.versionCode=61`；Gradle、构建脚本、CI、README 与测试均从该文件读取或断言一致，不再各写一份需要手工同步的字面量。
 - 历史版本状态（1.3.0 / 1.3.1 系列与 1.4.0 预发布序列）见 `DECISIONS.md` 与 `ANDROID-CHANGELOG.md`；本文件只保留版本规则与当前状态。
-- 下一版本 1.4.1（修订位）开发中：versionCode 交付时递增，只改 `package.json`。
+- 下一版本号由维护者按修订单点递增，交付时只改 `package.json`（`android.versionCode` 同步 +1）。
