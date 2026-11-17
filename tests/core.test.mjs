@@ -142,3 +142,20 @@ test('首批考试数据静默入库：首次成功与失败标记后的首次�
  const next=applySnapshot(afterFailure,changed,'2026-11-17T06:00:00.000Z');
  assert.deepEqual(next.events.filter(event=>event.exam).map(event=>event.type),['换考场'],'第二次成功起才 diff');
 });
+
+test('单日恢复：休假与学校停课日恢复后按正常规则排课，考试仍按固定日期显示',()=>{
+ const snapshot=studySnapshot();
+ const winter={winter:{startDate:'2026-12-20',endDate:'2026-12-24'},summer:null,days:[],restoreDates:[]};
+ assert.deepEqual(effectiveDay(snapshot,'2026-12-23',[],[],{},[],winter),[],'寒假日默认取消全部课程');
+ const restored=effectiveDay(snapshot,'2026-12-23',[],[],{},[],{...winter,restoreDates:['2026-12-23']});
+ assert(restored.some(r=>r.exam!==true&&!r.localActivity),'恢复后学校课回来');
+ assert(restored.some(r=>r.localActivity),'恢复后晚自习回来');
+ const examHoliday=effectiveDay(snapshot,'2026-12-21',[],[],{},[],winter);
+ assert.equal(examHoliday.filter(r=>r.exam!==true).length,0,'未恢复时当天只剩固定日期考试');
+ assert.equal(examHoliday.filter(r=>r.exam===true).length,1);
+ const closed=clone(snapshot);closed.closedDates=['2026-12-23'];
+ assert.deepEqual(effectiveDay(closed,'2026-12-23'),[],'学校停课日默认取消全部课程');
+ const closedRestored=effectiveDay(closed,'2026-12-23',[],[],{},[],{winter:null,summer:null,days:[],restoreDates:['2026-12-23']});
+ assert(closedRestored.some(r=>r.exam!==true&&!r.localActivity),'停课日恢复后学校课回来');
+ assert(closedRestored.some(r=>r.localActivity),'停课日恢复后晚自习回来');
+});

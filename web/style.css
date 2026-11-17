@@ -529,3 +529,25 @@ html[data-theme=dark]{--settings-muted:#b3b3b3}
 .update-progress progress::-moz-progress-bar{background:var(--accent);border-radius:999px}
 #update-progress-text{margin:8px 0 0;font-size:12px;line-height:1.7;color:var(--muted)}
 #update-progress-text.update-error{color:var(--red)}
+/* ===== 休假/停课默认取消与单日恢复 ===== */
+.week-off-bar{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin:10px 0 0;padding:10px 14px;border:1px solid var(--line);border-left:3px solid var(--warn-ink);border-radius:var(--radius-card);background:var(--warn-soft);font-size:12px;line-height:1.6;color:var(--warn-ink)}
+.week-off-bar strong{font-size:12px}
+.week-off-item{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 8px;border-radius:8px;background:var(--surface)}
+.week-off-item.is-restored{background:var(--ok-soft);color:var(--ok-ink)}
+.week-off-date{font-weight:600}
+.week-off-note{color:var(--muted)}
+.week-off-item.is-restored .week-off-note{color:var(--ok-ink)}
+.week-off-bar .button{padding:4px 10px;min-height:28px;font-size:12px}
+.week-heading.is-off{background:var(--warn-soft);color:var(--warn-ink)}
+.week-heading.is-off strong{color:var(--warn-ink)}
+.week-heading.is-off.is-restored,.week-heading.is-off.is-restored strong{background:var(--ok-soft);color:var(--ok-ink)}
+.off-day-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border:1px solid var(--line);border-left:3px solid var(--warn-ink);border-radius:var(--radius-card);background:var(--warn-soft);color:var(--warn-ink)}
+.off-day-banner.is-restored{border-left-color:var(--ok-ink);background:var(--ok-soft);color:var(--ok-ink)}
+.off-day-copy{min-width:0}
+.off-day-copy strong{display:block;font-size:13px}
+.off-day-copy p{margin:2px 0 0;font-size:12px;line-height:1.7;color:var(--muted)}
+.off-day-banner.is-restored .off-day-copy p{color:var(--ok-ink)}
+.off-day-banner .button{flex:none}
+.holiday-restore-list{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.holiday-restore-list strong{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+.holiday-form .holiday-restore-list .holiday-record{border-bottom:0;padding:6px 2px}

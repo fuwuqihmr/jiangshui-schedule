@@ -1,5 +1,5 @@
 import {studyDay} from './study.mjs';
-import {holidayForDate,emptyHolidaySettings} from './holiday-settings.mjs';
+import {holidayForDate,isRestoredDate,emptyHolidaySettings} from './holiday-settings.mjs';
 import {customCourseDay,alignCustomCoursesToSemester} from './custom-courses.mjs';
 import {courseSettingKey} from './interactions.mjs';
 import {examDay,diffExamSnapshots} from './jiaowu-exam.mjs';
@@ -43,19 +43,26 @@ export function sourceDay(s,date) {
 export function effectiveDay(s,date,overrides=[],localMaps=[],courseSettings={},customCourses=[],holidaySettings=null) {
   // Manual rescheduling moves a day, including entries saved by older versions.
   const maps=localMaps.map(m=>({...m,mode:'replace'}));
-  const mixed={...s,remaps:[...(s.remaps||[]),...maps]};
+  // A2 口径 b：休假/寒暑假/学校停课日默认取消当天全部课程（含晚自习）；
+  // holidaySettings.restoreDates 可对单日恢复，恢复后按正常规则排课，考试不受影响。
   const holiday=holidayForDate(holidaySettings,date);
-  let list=holiday?[]:sourceDay(mixed,date).map(x=>({...x,source:localMaps.some(m=>m.id===x.remapId)?'local':x.source}));
-  if(!holiday){
+  const restored=isRestoredDate(holidaySettings,date);
+  const closed=(s.closedDates||[]).includes(date);
+  const holidayCancelled=!restored&&Boolean(holiday);
+  // 恢复的学校停课日按正常日处理：本次计算内先去掉该日的 closedDates 标记。
+  const daySnapshot=closed&&restored?{...s,closedDates:(s.closedDates||[]).filter(item=>item!==date)}:s;
+  const mixed={...daySnapshot,remaps:[...(daySnapshot.remaps||[]),...maps]};
+  let list=holidayCancelled?[]:sourceDay(mixed,date).map(x=>({...x,source:localMaps.some(m=>m.id===x.remapId)?'local':x.source}));
+  if(!holidayCancelled){
     if(maps.some(m=>m.fromDate===date&&m.date!==date)) list=list.filter(r=>r.remapId);
-    list.push(...customCourseDay(s,date,customCourses,maps));
+    list.push(...customCourseDay(daySnapshot,date,customCourses,maps));
   }
-  list.push(...studyDay(s,date,maps,holidaySettings));
+  list.push(...studyDay(daySnapshot,date,maps,holidaySettings));
   list=list.map(r=>applyCourseSetting(r,courseSettings));
   for(const o of overrides.filter(o=>o.date===date)) {
     const i=list.findIndex(r=>r.key===o.key), current=i<0?null:list[i];
     // Disabled or displaced local evening study must not be resurrected by an old override.
-    if(!current && (o.base?.localActivity||o.base?.customCourse||holiday||maps.some(m=>m.date===date||m.fromDate===date&&m.date!==date))) continue;
+    if(!current && (o.base?.localActivity||o.base?.customCourse||holidayCancelled||maps.some(m=>m.date===date||m.fromDate===date&&m.date!==date))) continue;
     const compareCurrent=current?.original||current,compareBase=o.base.original||o.base;
     const conflict=!current || !current.customCourse&&Object.keys(o.patch).some(f=>!equal(compareCurrent[f],compareBase[f])&&!equal(compareCurrent[f],o.patch[f]));
     const local={...(current||o.base),...clone(o.patch),source:'local',overrideId:o.id,original:o.base};
@@ -73,7 +80,7 @@ export function effectiveDay(s,date,overrides=[],localMaps=[],courseSettings={},
 // Grey vacancies are display records only; they never become attended courses.
 export function timetableDay(s,date,overrides=[],localMaps=[],courseSettings={},customCourses=[],holidaySettings=null) {
   const list=effectiveDay(s,date,overrides,localMaps,courseSettings,customCourses,holidaySettings);
-  if(holidayForDate(holidaySettings,date))return list;
+  if(!isRestoredDate(holidaySettings,date)&&holidayForDate(holidaySettings,date))return list;
   const moved=localMaps.find(m=>m.fromDate===date&&m.date!==date);
   if(!moved) return list;
   const originals=[...baseDay(s,date),...customCourseDay(s,date,customCourses).filter(r=>r.mode==='weekly')];

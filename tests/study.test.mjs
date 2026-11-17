@@ -1,7 +1,7 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import {withStudyPolicy,resolveGrade} from '../web/study.mjs';import {effectiveDay,saveOverride,createState,applySnapshot,adoptSchoolSnapshot,saveCourseSettings} from '../web/core.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import {readFile} from 'node:fs/promises';import {withStudyPolicy,resolveGrade} from '../web/study.mjs';import {effectiveDay,saveOverride,createState,applySnapshot,adoptSchoolSnapshot,saveCourseSettings} from '../web/core.mjs';import {setHolidayRange,setHolidayDay,setRestoreDate} from '../web/holiday-settings.mjs';
 const calendar=JSON.parse(await readFile(new URL('../web/data/holidays.json',import.meta.url),'utf8'));const base=JSON.parse(await readFile(new URL('../web/data/baseline.json',import.meta.url),'utf8'));
 const fresh=()=>withStudyPolicy(structuredClone(base),{enrollmentYear:2026},calendar,{studyPolicy:{userEnabled:true}});
-const study=(s,d,m=[])=>effectiveDay(s,d,[],m).filter(r=>r.localActivity);
+const study=(s,d,m=[],holidaySettings=null)=>effectiveDay(s,d,[],m,{},[],holidaySettings).filter(r=>r.localActivity);
 test('新安装默认关闭，升级保留原先开启的晚自习，显式关闭仍生效',()=>{
  const disabled=withStudyPolicy(base,{enrollmentYear:2026},calendar);
  assert.equal(disabled.studyPolicy.enabled,false);
@@ -15,7 +15,28 @@ test('新安装默认关闭，升级保留原先开启的晚自习，显式关�
 });
 test('大一周日至周四晚自习19:00–20:30，周五六不排',()=>{const s=fresh();for(const d of ['2026-10-11','2026-10-12','2026-10-13','2026-10-14','2026-10-15']){const a=study(s,d);assert.equal(a.length,1);assert.equal(a[0].startTime,'19:00');assert.equal(a[0].endTime,'20:30');assert.equal(a[0].source,'local');}assert.equal(study(s,'2026-10-16').length,0);assert.equal(study(s,'2026-10-17').length,0);});
 test('未知年级和大二不凭课程名称猜测晚自习',()=>{assert.equal(study(base,'2026-10-12').length,0);const older=withStudyPolicy(base,{enrollmentYear:2025},calendar);assert.equal(study(older,'2026-10-12').length,0);assert.equal(resolveGrade(null,'2026-10-12'),null);});
-test('法定假日和学校停课日的晚自习默认仍显示，周日也可显示',()=>{const s=fresh();s.remaps=[{id:'m',date:'2026-10-01',fromDate:'2026-09-29',mode:'replace'}];assert.equal(study(s,'2026-10-01').length,1);assert.equal(study(s,'2026-09-27').length,1);s.closedDates=['2026-10-12'];assert.equal(study(s,'2026-10-12').length,1);});
+test('法定假日、寒暑假和学校停课日的晚自习默认不生成，整周课表单日恢复后按正常规则显示',()=>{
+ const s=fresh();s.remaps=[{id:'m',date:'2026-10-01',fromDate:'2026-09-29',mode:'replace'}];
+ assert.equal(study(s,'2026-10-01').length,1,'本机未设休假时官方假日数据不影响晚自习');
+ assert.equal(study(s,'2026-09-27').length,1,'周日仍按规则显示');
+ const winter=setHolidayRange(null,'winter','2026-10-12','2026-10-16');
+ assert.equal(study(s,'2026-10-12',[],winter).length,0,'寒暑假默认不排晚自习');
+ assert.equal(study(s,'2026-10-12',[],setRestoreDate(winter,'2026-10-12',true)).length,1,'单日恢复后晚自习回来');
+ const single=setHolidayDay(null,'2026-10-14',false);
+ assert.equal(study(s,'2026-10-14',[],single).length,0,'单日休假默认不排晚自习');
+ assert.equal(study(s,'2026-10-14',[],setRestoreDate(single,'2026-10-14',true)).length,1,'单日休假恢复后晚自习回来');
+ const singleSkip=setHolidayDay(null,'2026-10-15',true);
+ assert.equal(study(s,'2026-10-15',[],setRestoreDate(singleSkip,'2026-10-15',true)).length,0,'恢复后仍尊重单日 skipStudy');
+ s.closedDates=['2026-10-12'];
+ assert.equal(study(s,'2026-10-12').length,0,'学校停课日默认不排晚自习');
+ assert.equal(study(s,'2026-10-12',[],setRestoreDate(null,'2026-10-12',true)).length,1,'学校停课日也可单日恢复');
+});
+test('单日恢复只影响当天，同一假期其他日期仍取消',()=>{
+ const s=fresh();const winter=setHolidayRange(null,'winter','2026-10-12','2026-10-16');const restored=setRestoreDate(winter,'2026-10-13',true);
+ assert.equal(study(s,'2026-10-13',[],restored).length,1);
+ assert.equal(study(s,'2026-10-12',[],restored).length,0);
+ assert.equal(study(s,'2026-10-14',[],restored).length,0);
+});
 test('周六按周二调休加入晚自习，周日按周五调休仍默认显示',()=>{const s=fresh();const maps=[{id:'m1',date:'2026-10-10',fromDate:'2026-09-29',mode:'replace'},{id:'m2',date:'2026-10-11',fromDate:'2026-10-09',mode:'replace'}];const a=study(s,'2026-10-10',maps);assert.equal(a.length,1);assert.equal(a[0].originDate,'2026-09-29');assert.equal(study(s,'2026-10-11',maps).length,1);});
 test('append调休不生成重复晚自习，撤销调休恢复原周历',()=>{const s=fresh(),m=[{id:'m',date:'2026-10-12',fromDate:'2026-10-13',mode:'append'}];assert.equal(study(s,'2026-10-12',m).length,1);assert.equal(study(s,'2026-10-12').length,1);});
 test('学期外不排，跨年保留大一但标示未核实假日',()=>{const s=fresh();assert.equal(study(s,'2026-08-30').length,0);const a=study(s,'2027-01-03');assert.equal(a.length,1);assert.equal(a[0].studyCalendarUnknown,true);assert.equal(resolveGrade({enrollmentYear:2026},'2027-01-01'),1);assert.equal(resolveGrade({enrollmentYear:2026},'2027-09-01'),2);});

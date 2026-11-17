@@ -1,4 +1,4 @@
-import {holidayForDate} from './holiday-settings.mjs';
+import {holidayForDate,isRestoredDate} from './holiday-settings.mjs';
 const clone = value => JSON.parse(JSON.stringify(value));
 const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 const daysBetween = (a,b) => Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000);
@@ -12,8 +12,13 @@ export function studyDay(snapshot,date,localMaps=[],holidaySettings=null){
  const p=snapshot.studyPolicy;
  if(!validDate(date)||!p||!p.enabled||p.userEnabled!==true||resolveGrade(p.profile,date)!==1)return [];
  const w=weekOf(snapshot,date);if(w<1||w>snapshot.semester.weeks)return [];
- if(holidayForDate(holidaySettings,date)?.skipStudy)return [];
- // 晚自习独立于休假和调休：法定假日与调走日默认仍显示，可按天取消。
+ // A2 口径 b：休假/寒暑假/学校停课日默认连晚自习一起取消；整周课表的单日恢复
+ // （holidaySettings.restoreDates）让当天按正常规则排晚自习，仍尊重该日 skipStudy。
+ const holiday=holidayForDate(holidaySettings,date);
+ const restored=isRestoredDate(holidaySettings,date);
+ const closed=(snapshot.closedDates||[]).includes(date);
+ if(!restored&&(holiday||closed))return [];
+ if(restored&&holiday?.skipStudy)return [];
  const maps=[...(snapshot.remaps||[]),...localMaps].filter(m=>m.date===date);
  const origin=[date,...maps.map(m=>m.fromDate)].find(d=>[7,1,2,3,4].includes(weekday(d))&&weekOf(snapshot,d)>=1&&weekOf(snapshot,d)<=snapshot.semester.weeks);
  if(!origin)return [];
