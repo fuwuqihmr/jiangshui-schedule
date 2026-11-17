@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 const script=await readFile(new URL('../web/school-reader.js',import.meta.url),'utf8');
-function setup({fetch,login=false,origin='http://jiaowu.juwp.edu.cn:8080',calendar=null,body='',controls=true}={}){
-  const calls=[],context={location:{origin,pathname:'/jsxsd/xskb/xskb_list.do'},document:{body:{innerText:body},querySelector:()=>login?{}:null,getElementById:id=>controls?{value:id==='xnxq01id'?'2026-2027-1':'mode-test'}:null},window:{__tomorrowRequestId:'request-1',__tomorrowCalendar:calendar},fetch:async(url,opts)=>{calls.push(url);return fetch?fetch(url,opts):{ok:true,text:async()=>url.includes('jxzlzc')?'[{"jszc":25}]':url.includes('xsksap_list')?'{"code":0,"count":1,"data":[{"kssj":"2027-01-04 08:30~09:55","kskcmc":"课程A","kch":"K001","jsxm":"教师甲","js_mc":"考场A","zwh":"1","ksccmc":"场次A"}]}':'{"code":0,"data":[{"kc_mc":"合成测试课","jg0101mc":"测试教师","sktime":"周一第1、2节{第1-16周}(全部)","skddmc":"测试楼","jx0404id":"plan-test","kch":"test"}]}'};},setTimeout,clearTimeout,AbortController,URLSearchParams,Date,JSON,Error,Object,Number};
-  return {context:vm.createContext(context),calls};
+function setup({fetch,login=false,origin='http://jiaowu.juwp.edu.cn:8080',calendar=null,body='',controls=true,fakeTimers=false}={}){
+  const calls=[],timers=[],context={location:{origin,pathname:'/jsxsd/xskb/xskb_list.do'},document:{body:{innerText:body},querySelector:()=>login?{}:null,getElementById:id=>controls?{value:id==='xnxq01id'?'2026-2027-1':'mode-test'}:null},window:{__tomorrowRequestId:'request-1',__tomorrowCalendar:calendar},fetch:async(url,opts)=>{calls.push(url);return fetch?fetch(url,opts):{ok:true,text:async()=>url.includes('jxzlzc')?'[{"jszc":25}]':url.includes('xsksap_list')?'{"code":0,"count":1,"data":[{"kssj":"2027-01-04 08:30~09:55","kskcmc":"课程A","kch":"K001","jsxm":"教师甲","js_mc":"考场A","zwh":"1","ksccmc":"场次A"}]}':'{"code":0,"data":[{"kc_mc":"合成测试课","jg0101mc":"测试教师","sktime":"周一第1、2节{第1-16周}(全部)","skddmc":"测试楼","jx0404id":"plan-test","kch":"test"}]}'};},setTimeout:fakeTimers?(fn,ms)=>{const id=timers.length+1;timers.push({id,fn,ms,cleared:false});return id;}:setTimeout,clearTimeout:fakeTimers?id=>{const timer=timers.find(item=>item.id===id);if(timer)timer.cleared=true;}:clearTimeout,AbortController,URLSearchParams,Date,JSON,Error,Object,Number};
+  const fire=ms=>{const timer=timers.find(item=>!item.cleared&&item.ms===ms);if(!timer)throw Error('no pending timer '+ms);timer.cleared=true;timer.fn();};
+  return {context:vm.createContext(context),calls,timers,fire};
 }
 test('读取复用DOM并串行请求周数、完整课程，不重复下载HTML',async()=>{const x=setup();await vm.runInContext(script,x.context);assert.equal(x.calls.length,3);assert.match(x.calls[0],/jxzlzc/);assert.match(x.calls[1],/pageSize=500/);assert.match(x.calls[2],/xsksap_list/);assert.equal(x.context.window.__tomorrowRead.rows.length,1);assert.equal(x.context.window.__tomorrowRead.weeks,25);assert.equal(x.context.window.__tomorrowRead.done,true);assert.equal(x.context.window.__tomorrowRead.modeKnown,true);assert.equal(x.context.window.__tomorrowRead.calendarCached,false);});
 test('同一会话短期复用日历元数据，但每次重新读取全部课程',async()=>{const x=setup();await vm.runInContext(script,x.context);x.context.window.__tomorrowRequestId='request-2';await vm.runInContext(script,x.context);assert.equal(x.calls.length,5);assert.equal(x.context.window.__tomorrowRead.id,'request-2');assert.match(x.calls[3],/needData=1/);assert.match(x.calls[2],/xsksap_list/);assert.match(x.calls[4],/xsksap_list/,'第二次读取仍重新取考试');assert.equal(x.context.window.__tomorrowRead.calendarCached,true);});
@@ -111,4 +112,63 @@ test('考试分页终止条件：count 已读全或首屏不足 pageSize 时不�
  await vm.runInContext(script,short.context);
  assert.equal(short.calls.length,3,'首页不足 pageSize 视为数据不足，不盲目翻页');
  assert.equal(short.context.window.__tomorrowRead.exams.length,2);
+});
+
+test('考试接口 code!==0 / data 非数组：examError=format（P2-2）',async()=>{
+ for(const bodyText of ['{"code":1,"data":[]}','{"code":0,"data":{}}']){
+  const x=setup({fetch:sequenced((n)=>n===1?{ok:true,text:async()=>CALENDAR_JSON}:n===2?{ok:true,text:async()=>COURSE_JSON}:{ok:true,text:async()=>bodyText})});
+  await vm.runInContext(script,x.context);
+  const r=x.context.window.__tomorrowRead;
+  assert.equal(r.rows.length,1);
+  assert.equal(r.examError,'format');
+  assert.equal(r.login,undefined);
+  assert.equal(r.done,true);
+ }
+});
+
+test('考试请求 8s 超时只标记 examError=timeout，课表照常 finish（P1-1）',async()=>{
+ const abortable=opts=>new Promise((_resolve,reject)=>{opts.signal.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'})),{once:true});});
+ const x=setup({fakeTimers:true,fetch:sequenced((n,url,opts)=>n===1?{ok:true,text:async()=>CALENDAR_JSON}:n===2?{ok:true,text:async()=>COURSE_JSON}:abortable(opts))});
+ const pending=vm.runInContext(script,x.context);
+ for(let i=0;i<200&&x.calls.length<3;i++) await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(x.calls.length,3,'课程读取完成后发出考试请求');
+ x.fire(8000);
+ await pending;
+ const r=x.context.window.__tomorrowRead;
+ assert.equal(r.done,true,'超时后整次读取仍必须结束');
+ assert.equal(r.rows.length,1,'已读课表不丢');
+ assert.equal(r.weeks,25);
+ assert.equal(r.exams,undefined);
+ assert.equal(r.examError,'timeout');
+ assert.equal(r.examHttpStatus,0);
+ assert.equal(r.login,undefined);
+ assert.equal(r.error,undefined);
+});
+
+test('普通课表请求超时仍是整次失败 kind=timeout（既有语义回归）',async()=>{
+ const abortable=opts=>new Promise((_resolve,reject)=>{opts.signal.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'})),{once:true});});
+ const x=setup({fakeTimers:true,fetch:(url,opts)=>abortable(opts)});
+ const pending=vm.runInContext(script,x.context);
+ for(let i=0;i<200&&x.calls.length<1;i++) await new Promise(resolve=>setImmediate(resolve));
+ x.fire(20000);
+ await pending;
+ const r=x.context.window.__tomorrowRead;
+ assert.equal(r.done,true);
+ assert.equal(r.kind,'timeout');
+ assert.match(r.error,/超时/);
+ assert.equal(r.rows,undefined);
+});
+
+test('考试请求被整体取消时不写 examError、不 finish（保持取消语义）',async()=>{
+ const abortable=opts=>new Promise((_resolve,reject)=>{opts.signal.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'})),{once:true});});
+ const x=setup({fetch:sequenced((n,url,opts)=>n===1?{ok:true,text:async()=>CALENDAR_JSON}:n===2?{ok:true,text:async()=>COURSE_JSON}:abortable(opts))});
+ const pending=vm.runInContext(script,x.context);
+ for(let i=0;i<200&&x.calls.length<3;i++) await new Promise(resolve=>setImmediate(resolve));
+ x.context.window.__tomorrowAbort.abort();
+ await pending;
+ const r=x.context.window.__tomorrowRead;
+ assert.equal(r.done,false);
+ assert.equal(r.examError,undefined);
+ assert.equal(r.exams,undefined);
+ assert.equal(r.error,undefined);
 });

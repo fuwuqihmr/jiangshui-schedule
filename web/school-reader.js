@@ -21,16 +21,22 @@
       return (code===2||code===3) && typeof payload.msgContent==='string';
     } catch { return false; }
   };
-  let networkTimer;
+  // Each read gets its own AbortController linked to the shared cancel controller: a per-request
+  // timeout aborts only that request, so the overall read can still `finish` (exam section then
+  // reports examError='timeout'); a user/app cancel still aborts every request and stops the read.
   const read = async (url,timeoutMs) => {
-    networkTimer = setTimeout(() => controller.abort(), timeoutMs ?? 20000);
+    const request = new AbortController();
+    const cancelAll = () => request.abort();
+    if (controller.signal.aborted) request.abort();
+    else controller.signal.addEventListener('abort', cancelAll, {once:true});
+    const timer = setTimeout(() => request.abort(), timeoutMs ?? 20000);
     try {
-      const response = await fetch(url, {credentials:'include', signal:controller.signal, cache:'no-store'});
+      const response = await fetch(url, {credentials:'include', signal:request.signal, cache:'no-store'});
       if (!response.ok) {if(response.status===401)throw Object.assign(Error('学校会话已失效'),{login:true});throw Object.assign(Error('学校课表接口返回 HTTP '+response.status+'，原课表已保留。可在设置页导出排查日志'),{httpStatus:response.status,kind:'http'});}
       const text = await response.text();
       if (loginPage(text)) throw Object.assign(Error('学校会话已失效'), {login:true});
       return text;
-    } finally { clearTimeout(networkTimer); }
+    } finally { clearTimeout(timer); controller.signal.removeEventListener('abort',cancelAll); }
   };
   // Hard-coded same-origin path and parameters: the reader never accepts a caller-provided URL.
   const EXAM_PAGE_SIZE = 20, EXAM_MAX_PAGES = 5;
@@ -74,7 +80,7 @@
     try { exams=await readExams(sem); examFetchedAt=new Date().toISOString(); }
     catch (examFailure) {
       if (!current()) return;
-      examError=examFailure.login?'session':examFailure.kind==='http'?'http':examFailure.name==='AbortError'?'timeout':examFailure.name==='SyntaxError'?'format':'other';
+      examError=examFailure.login?'session':examFailure.kind==='http'?'http':examFailure.kind==='format'?'format':examFailure.name==='AbortError'?'timeout':examFailure.name==='SyntaxError'?'format':'other';
       examHttpStatus=Number(examFailure.httpStatus)||0;
     }
     if (current()) {window.__tomorrowCalendar={sem,mode,weeks,at:Date.now()};finish({sem,weeks,rows,calendarCached,modeKnown:!!mode,...(examError?{examError,examHttpStatus}:{exams,examFetchedAt})});}

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {EXAM_CACHE_TTL_MS,parseExamTime,timeToPeriods,normalizeExamList,examDay,withExamFallback,examSummary,diffExamSnapshots,weekOf,weekday} from '../web/jiaowu-exam.mjs';
+import {readFileSync} from 'node:fs';
+import {EXAM_CACHE_TTL_MS,parseExamTime,timeToPeriods,normalizeExamList,examDay,withExamFallback,examSummary,diffExamSnapshots,attachExamPayload,weekOf,weekday} from '../web/jiaowu-exam.mjs';
 import {PERIOD_TIMES} from '../web/jsxsd.mjs';
 
 // 全部样本为脱敏合成数据：课程A–H / 考场A–H / 教师甲–辛 / 假座位号；日期与时刻保留（落格规则需要）。
@@ -181,4 +182,70 @@ test('diffExamSnapshots：新增/改时间/换考场/取消生成与课表变更
  assert.equal(diffExamSnapshots(before,lateSnapshot,'2027-03-01T00:00:00.000Z').length,0,'过去场次不生成变更事件');
  assert.equal(diffExamSnapshots(null,before,now).length,0);
  assert.equal(diffExamSnapshots(before,{...before,semesterId:'other'},now).length,0);
+});
+
+test('JSON 合法但全部行被 skip：返回 error=format，避免空列表静默覆盖旧考试（P2-3）',()=>{
+ const renamed=RAW.map(({kssj,...rest})=>({kssj2:kssj,...rest}));
+ const exams=normalized(renamed);
+ assert.equal(exams.error,'format');
+ assert.deepEqual(exams.items,[]);
+ assert.deepEqual(exams.skipped.map(item=>item.reason),Array(8).fill('time'));
+ const empty=normalized([]);
+ assert.equal(empty.error,null,'data 为空仍是合法的“暂无考试”');
+ assert.deepEqual(empty.items,[]);
+});
+
+test('attachExamPayload：成功替换，失败保留旧数据并写 error/lastAttempt；无旧数据时仍挂可见失败（P2-1/P2-3）',()=>{
+ const snapshot=snapshotWith(null);
+ const previous=normalized();
+ const stamp='2026-11-17T02:00:00.000Z';
+ const success=attachExamPayload(snapshot,{exams:RAW,examFetchedAt:FETCHED},previous,{periodTimes:PERIOD_TIMES,now:stamp});
+ assert.equal(success.exams.items.length,8);
+ assert.equal(success.exams.error,null);
+ assert.equal(success.exams.lastAttempt,stamp);
+ const failed=attachExamPayload(snapshot,{examError:'http'},previous,{periodTimes:PERIOD_TIMES,now:stamp});
+ assert.equal(failed.exams.items.length,8,'考试段失败保留旧数据');
+ assert.equal(failed.exams.error,'http');
+ assert.equal(failed.exams.lastAttempt,stamp);
+ const skipped=attachExamPayload(snapshot,{exams:RAW.map(({kssj,...rest})=>({kssj2:kssj,...rest}))},previous,{periodTimes:PERIOD_TIMES,now:stamp});
+ assert.equal(skipped.exams.items.length,8,'全部行无法解析时保留旧数据');
+ assert.equal(skipped.exams.error,'format');
+ const firstFailure=attachExamPayload(snapshot,{examError:'timeout'},undefined,{periodTimes:PERIOD_TIMES,now:stamp});
+ assert.equal(firstFailure.exams.items.length,0,'首次读取即失败：只挂错误标记');
+ assert.equal(firstFailure.exams.error,'timeout');
+ const legacy=attachExamPayload(snapshot,{rows:[]},previous,{periodTimes:PERIOD_TIMES,now:stamp});
+ assert.equal(legacy,snapshot,'旧原生版本不带 exams/examError 时保持快照引用不变');
+ assert.equal(legacy.exams,undefined);
+});
+
+test('接线：app/background 使用 attachExamPayload，旧考试值传 state.snapshot.exams（P2-1）',()=>{
+ const app=readFileSync(new URL('../web/app.mjs',import.meta.url),'utf8');
+ const background=readFileSync(new URL('../web/background.mjs',import.meta.url),'utf8');
+ assert.match(app,/attachExamPayload\([^;]*state\.snapshot\?\.exams/,'前台必须传旧 exams 对象');
+ assert.match(background,/attachExamPayload\([^;]*state\.snapshot\?\.exams/,'后台必须传旧 exams 对象');
+ assert.doesNotMatch(app,/attachExams\(/,'旧的本地 attachExams 实现应已移除');
+ assert.doesNotMatch(background,/attachExams\(/);
+});
+
+test('座位号单独变化：生成“换座位”事件且字段为 seat（P2-5）',()=>{
+ const before=normalized();
+ const now='2026-12-01T00:00:00.000Z';
+ const seatChanged=JSON.parse(JSON.stringify(before));
+ seatChanged.items[0].seat='99';
+ const events=diffExamSnapshots(before,seatChanged,now);
+ assert.equal(events.length,1);
+ assert.equal(events[0].type,'换座位');
+ assert.deepEqual(events[0].fields,['seat']);
+ assert.equal(events[0].before.seat,'11');
+ assert.equal(events[0].after.seat,'99');
+});
+
+test('接线：变更记录 eventDiff 展示座位号前后值（P2-5）',()=>{
+ const app=readFileSync(new URL('../web/app.mjs',import.meta.url),'utf8');
+ const start=app.indexOf('function eventDiff('),end=app.indexOf('function ongoingTag(');
+ assert(start>=0&&end>start);
+ const fn=app.slice(start,end);
+ assert.match(fn,/fields\.includes\('seat'\)\?'seat'/,'座位字段必须参与差异展示');
+ assert.match(fn,/value\.seat/,'展示 seat 前后值');
+ assert.match(fn,/'未安排座位'/,'空座位文案');
 });

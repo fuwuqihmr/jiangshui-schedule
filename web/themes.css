@@ -91,3 +91,20 @@ html[data-theme=blue] .hero p,html[data-theme=blue] .hero-count span{color:#5f6a
    themes inherit the value from style.css). */
 html[data-theme=dark]{--danger-soft:#3a2226;--danger-line:#6b3b42}
 
+
+/* ===== 考试卡片：统一红色（T14，不跟随课程自动配色）=====
+   exam-card 不使用内联 --card-bg/--card-ink，由以下主题变量决定；普通课程仍走 courseColor()。
+   对比度（WCAG 2.1 相对亮度公式复算）：
+   - 浅色：白字 / 卡片 #D32F2F = 4.98:1；白字 / 角标 #8B0000 = 10.01:1（均 ≥ AA 正文 4.5:1）
+   - 深色：#FFEBEE / 卡片 #B71C1C = 5.75:1；角标文字 #1A0000 / #EF5350 = 5.77:1（均 ≥ AA）
+   - 边框对页面底色：浅色 #8B0000/#FFFFFF = 10.01:1；深色 #EF5350/#121212 = 5.37:1（≥ UI 组件 3:1）
+   系统深色由 theme.mjs 解析 prefers-color-scheme / 原生设置在 <html data-theme> 上切换。 */
+:root{--exam-card-bg:#d32f2f;--exam-card-border:#8b0000;--exam-card-ink:#ffffff;--exam-badge-bg:#8b0000;--exam-badge-ink:#ffffff;--exam-badge-border:#8b0000;--exam-hero-bg:#d32f2f;--exam-hero-ink:#ffffff}
+html[data-theme=dark]{--exam-card-bg:#b71c1c;--exam-card-border:#ef5350;--exam-card-ink:#ffebee;--exam-badge-bg:#ef5350;--exam-badge-ink:#1a0000;--exam-badge-border:#ef5350;--exam-hero-bg:#b71c1c;--exam-hero-ink:#ffebee}
+.course-card.exam-card{--card-ink:var(--exam-card-ink);background:var(--exam-card-bg);border-color:var(--exam-card-border);color:var(--exam-card-ink)}
+.course-card.exam-card h3,.course-card.exam-card .course-meta,.course-card.exam-card .custom-time,.course-card.exam-card .change-inline{color:var(--exam-card-ink)}
+.badge.exam{background:var(--exam-badge-bg);color:var(--exam-badge-ink);border:1px solid var(--exam-badge-border)}
+.detail-hero.exam-hero{background:var(--exam-hero-bg);color:var(--exam-hero-ink)}
+html[data-theme=dark] .course-card.exam-card:not(.vacant){--card-ink:var(--exam-card-ink)!important;background:var(--exam-card-bg);border-color:var(--exam-card-border);color:var(--exam-card-ink)}
+html[data-theme=dark] .badge.exam{background:var(--exam-badge-bg);color:var(--exam-badge-ink);border-color:var(--exam-badge-border)}
+html[data-theme=dark] .detail-hero.exam-hero{background:var(--exam-hero-bg);color:var(--exam-hero-ink)}

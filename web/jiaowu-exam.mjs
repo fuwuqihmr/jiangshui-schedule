@@ -87,6 +87,9 @@ export function normalizeExamList(payload, { semesterId, semesterStartDate, tota
       weekday: weekday(parsed.date),
     });
   }
+  // 上游字段改名（JSON 合法、code=0、data 非空，但所有行都无法解析）时必须返回可见失败，
+  // 否则空列表会静默覆盖已有考试数据（T15 P2-3）；data 本身为空仍是合法的"暂无考试"。
+  if (!out.items.length && out.skipped.length) out.error = 'format';
   // 周次越界（week<1 或 week>教学周）按设计 §3.2-5 仍保留条目：日课表按日期可见，
   // 周课表只在 1..semester.weeks 内展示；此处不丢弃，避免把真实考试静默隐藏。
   // totalWeeks 仅参与语义校验（调用方传入当前快照周数），不用于过滤条目。
@@ -145,13 +148,44 @@ export function examSummary(exams) {
   return { count: items.length, fetchedAt, stale: !Number.isFinite(age) || age > EXAM_CACHE_TTL_MS, error: typeof exams?.error === 'string' ? exams.error : null };
 }
 
+// 把 reader/Java 返回的考试 payload 挂到快照（app.mjs / background.mjs 共用，避免重复实现）：
+// - exams 数组：规范化后全量替换；规范化失败或全部行被 skip 时保留旧数据并写 error/lastAttempt；
+// - examError：考试段失败类别，保留同学期旧数据并写入可见失败标记；
+// - 两者都没有（旧原生版本不带该字段）：不动快照，交由 core.applySnapshot 保留旧 exams。
+// previousExams 必须是旧的 snapshot.exams（不是 snapshot 本身）。
+export function attachExamPayload(snapshot, payload, previousExams, { periodTimes, now } = {}) {
+  if (!snapshot) return snapshot;
+  const at = now || new Date().toISOString();
+  if (Array.isArray(payload?.exams)) {
+    const exams = normalizeExamList({ code: 0, data: payload.exams }, {
+      semesterId: snapshot.semester?.id,
+      semesterStartDate: snapshot.semester?.startDate,
+      totalWeeks: snapshot.semester?.weeks,
+      periodTimes,
+      fetchedAt: payload.examFetchedAt || at,
+    });
+    if (!exams.error) return { ...snapshot, exams: { ...exams, lastAttempt: at } };
+    const kept = withExamFallback(snapshot, exams, previousExams, { now: at, error: exams.error });
+    // 没有可保留的旧数据（首次读取即失败）时只挂错误标记，保证设置页/读取提示可见失败。
+    return kept.exams ? kept : { ...snapshot, exams: { ...exams, lastAttempt: at } };
+  }
+  if (payload?.examError === undefined && payload?.exams === undefined) return snapshot;
+  const error = String(payload?.examError || 'other');
+  const fallback = withExamFallback(snapshot, null, previousExams, { now: at, error });
+  if (fallback.exams) return fallback;
+  // 没有可保留的旧数据（首次读取即失败或跨学期）：挂只含错误标记的 exams，保证 UI/诊断可见失败。
+  return { ...snapshot, exams: { semesterId: snapshot.semester?.id, semesterStartDate: snapshot.semester?.startDate, fetchedAt: null, lastAttempt: at, error, source: 'school', items: [], skipped: [] } };
+}
+
 // 考试变更记录（D4）：新增/时间变更/考场变更/取消，形状与 core.diffSnapshots 的事件一致，
 // 复用现有变更记录/通知链路。过去场次不生成（与 diffSnapshots 一致）。
 const EXAM_FIELDS = ['name', 'teacher', 'room', 'seat', 'startTime', 'endTime'];
 const equal = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 function examEventType(fields) {
   if (fields.includes('startTime') || fields.includes('endTime')) return '改时间';
-  if (fields.includes('room') || fields.includes('seat')) return '换考场';
+  if (fields.includes('room')) return '换考场';
+  // 仅座位号变化单独成类，避免出现"换考场"但展示文本相同的事件（T15 P2-5）。
+  if (fields.includes('seat')) return '换座位';
   if (fields.includes('teacher')) return '换教师';
   if (fields.includes('name')) return '课程调整';
   return '考试调整';

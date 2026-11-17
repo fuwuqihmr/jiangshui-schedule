@@ -111,7 +111,7 @@ export function buildRulesModel(state){
   const courses=new Map();let conflictCount=0;
   for(const row of occurrences){
     // Single-date exams are not weekly rules: they stay in the visual exports only.
-    if(row.exam)continue;
+    if(row.exam===true)continue;
     if(row.conflict)conflictCount++;
     const courseKey=`${row.name??''}\u0000${row.teacher??''}`;
     let course=courses.get(courseKey);
