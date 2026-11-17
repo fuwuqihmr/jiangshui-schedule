@@ -3,11 +3,20 @@ param(
     [string]$BuildDirectory,
     [string]$XiaomiAppId,
     [string]$ToolchainRoot,
-    [ValidateRange(1, 2147483647)][int]$VersionCode = 60,
-    [ValidateNotNullOrEmpty()][string]$VersionName = '1.4.0'
+    [int]$VersionCode = 0,
+    [string]$VersionName = ''
 )
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path $PSScriptRoot -Parent
+# 版本号唯一真源：仓库根 package.json（version=versionName，android.versionCode=versionCode）。
+# 未显式传 -VersionCode/-VersionName 时从这里读取，避免构建脚本与 CI/Gradle 多处手工同步。
+$packagePath=Join-Path $projectRoot 'package.json'
+if(!(Test-Path -LiteralPath $packagePath)){throw "package.json not found: $packagePath"}
+$packageJson=Get-Content -LiteralPath $packagePath -Raw -Encoding UTF8 | ConvertFrom-Json
+if(-not $PSBoundParameters.ContainsKey('VersionCode')){$VersionCode=[int]$packageJson.android.versionCode}
+if(-not $PSBoundParameters.ContainsKey('VersionName')){$VersionName=[string]$packageJson.version}
+if($VersionCode -lt 1 -or $VersionCode -gt 2147483647){throw "VersionCode out of range (1..2147483647): $VersionCode"}
+if([string]::IsNullOrWhiteSpace($VersionName)){throw 'VersionName is empty'}
 if($ToolchainRoot){$toolchainRoot=[IO.Path]::GetFullPath($ToolchainRoot)}else{$toolchainRoot=Join-Path (Split-Path $projectRoot -Parent) 'toolchain'}
 if($VersionName -notmatch '^[0-9A-Za-z][0-9A-Za-z._+-]*$'){throw "VersionName contains unsupported characters: $VersionName"}
 $sdkRoot=Join-Path $toolchainRoot 'android-sdk'

@@ -98,9 +98,16 @@ test('Android：SharedPreferences 键按规格为 calendar-sync，事件字段�
  assert.equal(/RRULE/.test(calendarSync),false,'一次性事件不得写 RRULE');
  assert.match(app,/call\('calendarSync',\{semesterId:state\.snapshot\.semester\.id,events:built\.events\}\)/);
  assert.match(app,/call\('calendarRemove'\)/);
+ // 版本号唯一真源：package.json（version / android.versionCode）。build.gradle 只保留
+ // Gradle 路径所需的字面量，但必须与真源一致，不允许各自漂移。
+ const pkg=JSON.parse(read('package.json'));
  const gradle=read('android/app/build.gradle');
- assert.match(gradle,/versionCode 60/);
- assert.match(gradle,/versionName '1\.4\.0'/);
+ const codeMatch=/\bversionCode\s+(\d+)/.exec(gradle);
+ const nameMatch=/\bversionName\s+'([^']+)'/.exec(gradle);
+ assert.ok(codeMatch,'build.gradle 必须声明 versionCode');
+ assert.ok(nameMatch,'build.gradle 必须声明 versionName');
+ assert.equal(Number(codeMatch[1]),pkg.android.versionCode,'build.gradle versionCode 必须与 package.json 真源一致');
+ assert.equal(nameMatch[1],pkg.version,'build.gradle versionName 必须与 package.json 真源一致');
 });
 test('设置分组收起态摘要：六组常量齐全',()=>{
  const summaries={'自动更新':'打开应用自动核对学校课表','课表与显示':'外观主题 · 首页显示 · 完整课表','请假与调休':'请假服务 · 调休安排 · 休假设置','课程与提醒':'上课提醒 · 晚自习 · 自定义课程','数据与同步':'<b>写入系统日历</b> · 教务系统 · 导出与排查日志','关于与隐私':'版本信息 · 用户协议 · 开源与致谢'};

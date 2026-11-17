@@ -5,27 +5,23 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
-    inputs:
-      version_code:
-        description: Android versionCode (must match android/app/build.gradle)
-        required: true
-        default: '60'
-      version_name:
-        description: Android versionName without leading v (must match android/app/build.gradle)
-        required: true
-        default: '1.4.0'
 
 permissions:
   contents: write
 
 jobs:
   android:
-    name: Build signed debug APK
+    name: Verify, build and sign debug APK
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -37,6 +33,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Run unit tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # 干净 checkout 直接跑全套测试（不安装 npm 依赖）；3 条原生行为测试需要上方 JDK 17 的 javac/java。
+          node --test tests/*.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "node --test failed with exit code $LASTEXITCODE" }
+
+      - name: Check upload scope
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node tools/check-upload-scope.mjs
+          if ($LASTEXITCODE -ne 0) { throw "check-upload-scope failed with exit code $LASTEXITCODE" }
 
       - name: Ensure Android SDK packages
         shell: pwsh
@@ -118,32 +129,23 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
-          INPUT_VERSION_CODE: ${{ github.event.inputs.version_code }}
-          INPUT_VERSION_NAME: ${{ github.event.inputs.version_name }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $gradlePath = Join-Path $env:GITHUB_WORKSPACE 'android\app\build.gradle'
-          if (-not (Test-Path -LiteralPath $gradlePath)) { throw "build.gradle not found: $gradlePath" }
-          $gradle = Get-Content -LiteralPath $gradlePath -Raw
-          $codeMatch = [regex]::Match($gradle, '(?m)\bversionCode\s+(\d+)')
-          $nameMatch = [regex]::Match($gradle, '(?m)\bversionName\s+[''"]?([^''"\s]+)[''"]?')
-          if (-not $codeMatch.Success) { throw "Could not parse versionCode from $gradlePath" }
-          if (-not $nameMatch.Success) { throw "Could not parse versionName from $gradlePath" }
-          $code = $codeMatch.Groups[1].Value
-          $name = $nameMatch.Groups[1].Value
-          if ($code -notmatch '^\d+$') { throw "Invalid Android versionCode: $code" }
-          if ([string]::IsNullOrWhiteSpace($name)) { throw "Empty Android versionName in $gradlePath" }
+          # 版本号唯一真源：仓库根 package.json（version=versionName，android.versionCode=versionCode）。
+          $packagePath = Join-Path $env:GITHUB_WORKSPACE 'package.json'
+          if (-not (Test-Path -LiteralPath $packagePath)) { throw "package.json not found: $packagePath" }
+          $package = Get-Content -LiteralPath $packagePath -Raw -Encoding UTF8 | ConvertFrom-Json
+          $code = [string]$package.android.versionCode
+          $name = [string]$package.version
+          if ($code -notmatch '^\d+$') { throw "Invalid android.versionCode in package.json: $code" }
+          if ([int]$code -lt 1 -or [int]$code -gt 2147483647) { throw "android.versionCode out of range (1..2147483647): $code" }
+          if ($name -notmatch '^[0-9A-Za-z][0-9A-Za-z._+-]*$') { throw "Invalid version in package.json: $name" }
           if ($env:EVENT_NAME -eq 'workflow_dispatch') {
-            if (-not [string]::IsNullOrWhiteSpace($env:INPUT_VERSION_CODE) -and $env:INPUT_VERSION_CODE -ne $code) {
-              throw "workflow_dispatch version_code=$($env:INPUT_VERSION_CODE) does not match build.gradle versionCode=$code"
-            }
-            if (-not [string]::IsNullOrWhiteSpace($env:INPUT_VERSION_NAME) -and $env:INPUT_VERSION_NAME -ne $name) {
-              throw "workflow_dispatch version_name=$($env:INPUT_VERSION_NAME) does not match build.gradle versionName=$name"
-            }
+            Write-Host "workflow_dispatch: building package.json version $name (versionCode $code)"
           } else {
             $expectedTag = "v$name"
             if ($env:REF_NAME -ne $expectedTag) {
-              throw "Tag $($env:REF_NAME) does not match build.gradle versionName '$name'; expected $expectedTag."
+              throw "Tag $($env:REF_NAME) does not match package.json version '$name'; expected $expectedTag."
             }
           }
           "version_code=$code" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -189,6 +191,18 @@ jobs:
           $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $apk).Hash.ToLowerInvariant()
           "$hash  $apkName" | Set-Content -LiteralPath "$apk.sha256" -Encoding ascii
           Get-ChildItem -LiteralPath $outDir | Format-Table Name,Length
+
+      - name: Check APK data gate (strict)
+        shell: pwsh
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # 严格模式：APK 内 assets/data/*.json 必须与 git blob（LF）字节级一致；CI checkout 为 LF，不得启用 CRLF 诊断放宽。
+          $apk = Join-Path $env:RUNNER_TEMP "android-output\JiangShui-Schedule-$($env:VERSION_NAME).apk"
+          if (-not (Test-Path -LiteralPath $apk)) { throw "APK not found: $apk" }
+          node tools/check-data-gate.mjs --apk "$apk"
+          if ($LASTEXITCODE -ne 0) { throw "check-data-gate --apk failed with exit code $LASTEXITCODE" }
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

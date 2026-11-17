@@ -102,6 +102,9 @@ desktop.ini
 /README-归档说明-归档入口.md
 /MOBILE_ONLY.md
 /RELEASE-POLICY.md
+# 发布规则有意纳入公开仓库（A1 去伪后以该文件为准，内容不含内部过程记录）；
+# 其余内部过程记录仍不带入仓库。
+!/RELEASE-POLICY.md
 /harmony/README-Harmony.md
 /harmony/deveco-setup.md
 /harmony/**/NAV.md
@@ -111,6 +114,8 @@ desktop.ini
 /tools/extract_samples.py
 # tools 仅保留构建相关文件（其余 QA/探针/采集脚本整体不入库）
 /tools/*
+# 测试依赖：tests/read-lock.test.mjs 通过 process.execPath 执行它；无此文件干净检出跑不全套件
+!/tools/android-login-check.cjs
 !/tools/build-android.ps1
 !/tools/build-windows-installer.ps1
 !/tools/verify-manifest.ps1

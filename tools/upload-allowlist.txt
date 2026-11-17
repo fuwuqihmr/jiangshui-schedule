@@ -20,6 +20,8 @@
 /NOTIFICATIONS.md
 /XIAOMI-NOTIFICATIONS.md
 /README.md
+# 有意公开的版本发布规则（.gitignore 已同步放行）
+/RELEASE-POLICY.md
 /SECURITY.md
 /LICENSE
 /NOTICE
@@ -38,6 +40,8 @@
 /tests/**
 
 # tools：只放构建相关文件与守卫自身；QA/采集脚本与探针不入库
+# 例外：npm test 的 read-lock 用例会编译执行该脚本，缺它干净检出跑不全套
+/tools/android-login-check.cjs
 /tools/build-android.ps1
 /tools/build-windows-installer.ps1
 /tools/verify-manifest.ps1
