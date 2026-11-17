@@ -3,8 +3,8 @@ param(
     [string]$BuildDirectory,
     [string]$XiaomiAppId,
     [string]$ToolchainRoot,
-    [ValidateRange(1, 2147483647)][int]$VersionCode = 56,
-    [ValidateNotNullOrEmpty()][string]$VersionName = '1.3.6-rc1'
+    [ValidateRange(1, 2147483647)][int]$VersionCode = 57,
+    [ValidateNotNullOrEmpty()][string]$VersionName = '1.3.6'
 )
 $ErrorActionPreference='Stop'
 $projectRoot=Split-Path $PSScriptRoot -Parent
