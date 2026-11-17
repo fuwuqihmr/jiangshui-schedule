@@ -92,6 +92,35 @@ html[data-theme=blue] .hero p,html[data-theme=blue] .hero-count span{color:#5f6a
 html[data-theme=dark]{--danger-soft:#3a2226;--danger-line:#6b3b42}
 
 
+/* A4 / task-50：示例模式底部可展开示例菜单（折叠一行，展开按组列出入口） */
+.sample-example-menu{margin:26px 0 8px;border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.sample-example-menu-toggle{display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;text-align:left;background:var(--accent-soft);color:var(--ink);border:0;border-radius:0}
+.sample-example-menu-text{flex:1;min-width:0}
+.sample-example-menu-text strong{display:block;font-size:13px;line-height:1.5}
+.sample-example-menu-text span{display:block;margin-top:2px;font-size:11px;line-height:1.6;color:var(--muted)}
+.sample-example-menu-toggle .badge{flex:none}
+.sample-example-menu-chevron{flex:none;width:18px;height:18px;color:var(--muted);transition:transform .18s ease}
+.sample-example-menu-toggle[aria-expanded=true] .sample-example-menu-chevron{transform:rotate(90deg)}
+.sample-example-menu-body{display:grid;gap:18px;padding:16px;border-top:1px solid var(--line)}
+.sample-example-group h3{margin:0 0 9px;font-size:12px;font-weight:600;color:var(--muted)}
+.sample-example-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.sample-example-link{flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:3px;min-height:0;padding:11px 13px;text-align:left;line-height:1.5;background:var(--surface-soft)}
+.sample-example-link strong{font-size:12px;font-weight:600;color:var(--ink)}
+.sample-example-link small{display:block;font-size:10px;font-weight:400;line-height:1.55;color:var(--muted)}
+.sample-example-link:hover{filter:none;border-color:var(--accent)}
+.sample-example-list{display:grid;gap:2px}
+.sample-example-item{border-top:1px solid var(--line);padding:11px 0}
+.sample-example-item:first-child{border-top:0;padding-top:0}
+.sample-example-item-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.sample-example-item-head strong{font-size:13px;color:var(--ink)}
+.sample-example-item p{margin:6px 0 0;font-size:12px;line-height:1.7;color:var(--muted)}
+.sample-example-ul{margin:10px 0 0;padding-left:18px;font-size:12px;line-height:1.9;color:var(--muted)}
+.sample-notification-card{margin:14px 0;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--surface-soft)}
+.sample-notification-card strong{display:block;font-size:13px;color:var(--ink)}
+.sample-notification-card p{margin-top:6px;font-size:12px;line-height:1.7;color:var(--muted)}
+.sample-diagnostics{max-height:46dvh;margin:14px 0;padding:12px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft);color:var(--ink);font-size:11px;line-height:1.7}
+@media(max-width:720px){.sample-example-menu{margin-top:18px}.sample-example-links{grid-template-columns:1fr}.sample-example-menu-body{padding:14px;gap:16px}}
+
 /* ===== 考试卡片：统一红色（T14，不跟随课程自动配色）=====
    exam-card 不使用内联 --card-bg/--card-ink，由以下主题变量决定；普通课程仍走 courseColor()。
    对比度（WCAG 2.1 相对亮度公式复算）：
@@ -116,3 +145,4 @@ html[data-theme=dark] .detail-hero.exam-hero{background:var(--exam-hero-bg);colo
 .course-card.exam-card .unread{color:var(--exam-card-ink)!important}
 .course-card.exam-card .change-inline del{text-decoration:line-through}
 .course-card.exam-card .change-inline ins{text-decoration:underline}
+
