@@ -1,4 +1,5 @@
 import {addDays,weekday,weekOf,sourceDay,timetableDay,today,validDate} from './core.mjs';
+import {examSkipCounts} from './jiaowu-exam.mjs';
 
 // Export only dates, periods, counts and origin categories. Never serialize a rule,
 // school response, course name, location, teacher or credential into diagnostics.
@@ -30,8 +31,13 @@ export function appendScheduleTrace(before,after,mode,at=new Date().toISOString(
 export function scheduleDiagnosticLines(state,date=today()) {
  if(!state?.snapshot || !safeDate(date))return [];
  try {
-  const s=state.snapshot,examIds=new Set((Array.isArray(s.exams?.items)?s.exams.items:[]).map(item=>item&&item.id).filter(id=>typeof id==='string')),monday=addDays(date,1-weekday(date)),lines=[
-   `快照：来源=${kind(s.source?.kind)} 学期起始=${safeDate(s.semester?.startDate)||'unknown'} 总周数=${Number.isInteger(s.semester?.weeks)?s.semester.weeks:0} 规则数=${count(s.rules)} 考试数=${count(s.exams?.items)} 考试跳过=${count(s.exams?.skipped)} 考试截至=${stamp(s.exams?.fetchedAt)} 考试状态=${s.exams?.error?examState(s.exams.error):'ok'} 上次成功=${stamp(state.lastSuccess)} 上次尝试=${stamp(state.lastAttempt)} 状态=${state.error?'failed':'ok'}`,
+  const s=state.snapshot,examIds=new Set((Array.isArray(s.exams?.items)?s.exams.items:[]).map(item=>item&&item.id).filter(id=>typeof id==='string')),monday=addDays(date,1-weekday(date));
+  // 保留旧考试数据时 lastSkipped 是本轮跳过；没有则用该批数据的 skipped（T15 第三轮 P2-R3-2）。
+  const examSkipRows=Array.isArray(s.exams?.lastSkipped)?s.exams.lastSkipped:(Array.isArray(s.exams?.skipped)?s.exams.skipped:[]);
+  const examSkipCountsById=examSkipCounts(examSkipRows);
+  const examSkipParts=Object.keys(examSkipCountsById).filter(reason=>examSkipCountsById[reason]>0).map(reason=>reason+'='+examSkipCountsById[reason]).join('/')||'-';
+  const lines=[
+   `快照：来源=${kind(s.source?.kind)} 学期起始=${safeDate(s.semester?.startDate)||'unknown'} 总周数=${Number.isInteger(s.semester?.weeks)?s.semester.weeks:0} 规则数=${count(s.rules)} 考试数=${count(s.exams?.items)} 考试跳过=${examSkipRows.length} 考试跳过分类=${examSkipParts} 考试截至=${stamp(s.exams?.fetchedAt)} 考试状态=${s.exams?.error?examState(s.exams.error):'ok'} 上次成功=${stamp(state.lastSuccess)} 上次尝试=${stamp(state.lastAttempt)} 状态=${state.error?'failed':'ok'}`,
    `本地修改：单次=${count(state.overrides)} 调休=${count(state.localMaps)} 自定义=${count(state.customCourses)} 课程设置=${Object.keys(state.courseSettings||{}).length}`
   ];
   for(let i=0;i<7;i++){

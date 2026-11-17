@@ -54,3 +54,18 @@ test('考试计入诊断：来源类别 exam、快照行含计数，且不导出
  const text=formatDiagnostics({platform:'android',appVersion:'1.4.0-rc1',systemVersion:'16',androidApi:36,events:[]},'',state);
  assert.doesNotMatch(text,/课程A|考场A|777/);
 });
+
+test('保留旧考试数据时诊断「考试跳过」使用本轮 lastSkipped 计数并保留分类（P2-R3-2）',()=>{
+ const initial=structuredClone(sample);
+ initial.source={...initial.source,kind:'school'};
+ initial.exams={semesterId:initial.semester.id,semesterStartDate:initial.semester.startDate,fetchedAt:'2026-11-17T00:00:00.000Z',lastAttempt:'2026-11-18T01:00:00.000Z',error:'format',source:'school',items:[{id:'exam-1'}],skipped:[],lastSkipped:[{reason:'time'}]};
+ const kept={...createState(initial),lastSuccess:'2026-11-17T00:00:00.000Z',lastAttempt:'2026-11-18T01:00:00.000Z'};
+ const lines=scheduleDiagnosticLines(kept,'2026-10-12');
+ assert(lines.some(line=>line.includes('考试跳过=1')),'保留旧数据时显示本轮跳过数');
+ assert(lines.some(line=>line.includes('考试跳过分类=time=1')),'保留本轮分类计数');
+ assert(!lines.some(line=>line.includes('考试跳过=0')),'不能显示旧数据的 0');
+ const applied=structuredClone(initial);
+ applied.exams={...applied.exams,error:null,lastSkipped:null,skipped:[{reason:'period'},{reason:'duplicate'}]};
+ const lines2=scheduleDiagnosticLines(createState(applied),'2026-10-12');
+ assert(lines2.some(line=>line.includes('考试跳过=2')&&line.includes('period=1/duplicate=1')),'应用新数据时显示该批分类计数');
+});

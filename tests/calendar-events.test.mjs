@@ -161,10 +161,17 @@ test('考试写入系统日历：归学校课程类别，location 为考场，�
  snap.exams=normalizeExamList({code:0,count:1,data:[{kssj:'2026-08-31 19:00~20:25',kskcmc:'课程A',kch:'K001',jsxm:'教师甲',js_mc:'考场A',zwh:'777',ksccmc:'场次A'}]},{semesterId:'term-a',semesterStartDate:START,totalWeeks:WEEKS,periodTimes:PERIOD_TIMES,fetchedAt:'2026-11-17T00:00:00.000Z'});
  const s=createState(snap);
  const all=buildCalendarEvents(s);
- const event=all.events.find(item=>item.title==='课程A');
- assert(event,'考试应写入日历');
+ const event=all.events.find(item=>item.title==='【考试】课程A');
+ assert(event,'考试应写入日历且标题带【考试】前缀');
+ assert.equal(event.title,'【考试】课程A','考试事件标题必须与同名课程可区分');
  assert.equal(event.source,'exam');
+ assert.equal(event.exam,true);
  assert.equal(event.location,'考场A');
+ assert(event.description.startsWith('考试'),'考试事件描述以「考试」开头');
+ assert(event.description.includes('考场：考场A'),'描述写清考场');
+ assert(event.description.includes('教师：教师甲'),'描述保留教师');
+ assert(event.description.includes('第1周'),'描述保留第N周');
+ assert(event.description.includes('来源：学校考试'),'描述保留来源');
  assert.equal(event.startDate,'2026-08-31');
  assert.equal(event.startTime,'19:00');
  assert.equal(event.endTime,'20:25');
@@ -173,5 +180,16 @@ test('考试写入系统日历：归学校课程类别，location 为考场，�
  const schoolOnly=all.events.filter(item=>item.source==='school');
  assert.equal(schoolOnly.length,1,'学校课程不受影响');
  const noSchool=buildCalendarEvents(s,{school:false,custom:true,study:true});
- assert.equal(noSchool.events.some(item=>item.title==='课程A'),false,'考试随「学校课程」选项一起关闭');
+ assert.equal(noSchool.events.some(item=>item.title==='【考试】课程A'),false,'考试随「学校课程」选项一起关闭');
+});
+
+test('考试标题加【考试】前缀且 clipping 后仍 ≤200；普通课程标题不带前缀（A）',()=>{
+ const snap=snapshot([]);
+ snap.exams=normalizeExamList({code:0,count:1,data:[{kssj:'2026-08-31 19:00~20:25',kskcmc:'课'.repeat(250),kch:'K001',jsxm:'教师甲',js_mc:'考场A',ksccmc:'场次A'}]},{semesterId:'term-a',semesterStartDate:START,totalWeeks:WEEKS,periodTimes:PERIOD_TIMES,fetchedAt:'2026-11-17T00:00:00.000Z'});
+ const examEvent=buildCalendarEvents(createState(snap)).events.find(item=>item.source==='exam');
+ assert(examEvent.title.startsWith('【考试】'),'长名称考试仍保留前缀');
+ assert(examEvent.title.length<=200,'clipping 后仍 ≤200');
+ const course=buildCalendarEvents(state([rule('math',{name:'高等数学',weeks:[1]})])).events[0];
+ assert.equal(course.title,'高等数学','普通课程标题不变');
+ assert(!course.title.includes('【考试】'));
 });

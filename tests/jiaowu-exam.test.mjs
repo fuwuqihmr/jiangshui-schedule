@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {EXAM_CACHE_TTL_MS,parseExamTime,timeToPeriods,normalizeExamList,examDay,withExamFallback,examSummary,diffExamSnapshots,attachExamPayload,weekOf,weekday} from '../web/jiaowu-exam.mjs';
+import {EXAM_CACHE_TTL_MS,parseExamTime,timeToPeriods,normalizeExamList,examDay,withExamFallback,examSummary,diffExamSnapshots,attachExamPayload,examSkipCounts,examSkipsAreHard,weekOf,weekday} from '../web/jiaowu-exam.mjs';
 import {PERIOD_TIMES} from '../web/jsxsd.mjs';
 
 // 全部样本为脱敏合成数据：课程A–H / 考场A–H / 教师甲–辛 / 假座位号；日期与时刻保留（落格规则需要）。
@@ -90,7 +90,7 @@ test('异常行按原因跳过：时间/节次/名称/重复，越界周仍保�
  assert.deepEqual(exams.skipped.map(item=>item.reason),['time','period','name','duplicate']);
  assert.equal(exams.items.length,3,'重复行去重后保留本周与两个越界周条目');
  assert.deepEqual(exams.items.map(item=>item.week),[0,19,40],'周次越界仍保留，不静默隐藏考试（按日期排序）');
- assert.equal(exams.error,'format','存在被 skip 的行即视为本次结果不完整（P2-R2-3）');
+ assert.equal(exams.error,'format','存在硬失败（time/name）即视为本次结果不完整（P2-R2-3）');
  assert.equal(weekOf(SEMESTER.startDate,'2027-06-01'),40);
  assert.equal(weekday('2026-08-29'),6);
 });
@@ -99,6 +99,7 @@ test('semesterStartDate 缺失时无法计算周次：按 week 原因跳过而�
  const exams=normalizeExamList(payload(RAW),{semesterId:SEMESTER.id,semesterStartDate:undefined,totalWeeks:25,periodTimes:PERIOD_TIMES,fetchedAt:FETCHED});
  assert.equal(exams.items.length,0);
  assert.deepEqual(exams.skipped.map(item=>item.reason),Array(8).fill('week'));
+ assert.equal(exams.error,'format','week 为防御性硬失败，不能拿空列表覆盖旧数据');
 });
 
 test('稳定 id 与幂等：同一份响应两次规范化得到完全相同数据',()=>{
@@ -282,4 +283,50 @@ test('首次获得考试数据不生成「新增」变更事件，第二次变�
  assert.equal(events[0].type,'换考场');
  const removed={...first,items:first.items.slice(1)};
  assert.equal(diffExamSnapshots(first,removed,now).length,1,'首次静默不能吞掉后续取消事件');
+});
+
+test('跳过分类：time/name/week 硬失败，period/duplicate 容忍（P2-R3-1）',()=>{
+ assert.deepEqual(examSkipCounts([{reason:'time'},{reason:'period'},{reason:'period'},{reason:'name'},{reason:'duplicate'},{reason:'mystery'}]),{time:1,name:1,week:0,period:2,duplicate:1,other:1});
+ assert.equal(examSkipsAreHard([]),false);
+ assert.equal(examSkipsAreHard([{reason:'period'},{reason:'duplicate'}]),false,'容忍型跳过不算硬失败');
+ assert.equal(examSkipsAreHard([{reason:'period'},{reason:'time'}]),true);
+ assert.equal(examSkipsAreHard([{reason:'name'}]),true);
+ assert.equal(examSkipsAreHard([{reason:'mystery'}]),true,'未知原因保守按硬失败');
+});
+
+test('容忍型跳过不阻塞更新：大量 period/duplicate 仍正常应用新数据（P2-R3-1）',()=>{
+ const toleratedRows=[...RAW,{...RAW[2],kssj:'2027-01-04 21:20~22:00',kch:'K900'},{...RAW[2]}];
+ const fresh=normalized(toleratedRows);
+ assert.equal(fresh.error,null,'容忍型跳过不判失败');
+ assert.equal(fresh.items.length,8);
+ assert.deepEqual(fresh.skipped.map(item=>item.reason),['period','duplicate']);
+ assert.deepEqual(fresh.skipCounts,{time:0,name:0,week:0,period:1,duplicate:1,other:0});
+ const previous=normalized();
+ const attached=attachExamPayload(snapshotWith(previous),{exams:toleratedRows,examFetchedAt:'2026-11-18T00:00:00.000Z'},previous,{periodTimes:PERIOD_TIMES,now:'2026-11-18T00:00:00.000Z'});
+ assert.equal(attached.exams.error,null);
+ assert.equal(attached.exams.fetchedAt,'2026-11-18T00:00:00.000Z','新数据已应用（不再永久 stale）');
+ assert.equal(attached.exams.lastSkipped,null,'成功应用时不保留旧轮次 lastSkipped');
+ assert.equal(attached.exams.skipped.length,2,'诊断保留本轮分类计数');
+});
+
+test('硬失败保留旧数据，并把本轮 skipped 写入 lastSkipped（P2-R3-2）',()=>{
+ const previous=normalized();
+ const hardRows=RAW.map((row,index)=>index===0?{...row,kssj:'bad-time'}:index===1?{...row,kskcmc:'   '}:row);
+ const fresh=normalized(hardRows);
+ assert.equal(fresh.items.length,6);
+ assert.equal(fresh.error,'format');
+ assert.deepEqual(fresh.skipped.map(item=>item.reason),['time','name']);
+ const attached=attachExamPayload(snapshotWith(previous),{exams:hardRows},previous,{periodTimes:PERIOD_TIMES,now:'2026-11-18T01:00:00.000Z'});
+ assert.equal(attached.exams.items.length,8,'硬失败保留旧数据');
+ assert.equal(attached.exams.error,'format');
+ assert.equal(attached.exams.lastAttempt,'2026-11-18T01:00:00.000Z');
+ assert.deepEqual(attached.exams.lastSkipped.map(item=>item.reason),['time','name'],'本轮跳过写入 lastSkipped');
+});
+
+test('文案统一：schoolPanel 与 readFeedback 都使用「读取不完整或失败」（P2-R3-3）',()=>{
+ const app=readFileSync(new URL('../web/app.mjs',import.meta.url),'utf8');
+ assert(app.includes('考试安排读取不完整或失败'),'schoolPanel 无数据失败文案');
+ assert(app.includes(' · 读取不完整或失败'),'schoolPanel 有数据失败文案');
+ assert(!app.includes('上次读取失败'),'不再使用旧的“上次读取失败”措辞');
+ assert(!app.includes('考试安排读取失败'),'不再使用旧的“考试安排读取失败”措辞');
 });
