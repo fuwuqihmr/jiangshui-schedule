@@ -92,7 +92,7 @@ aapt2 dump badging .\build-output\TomorrowSchedule-debug.apk
 apksigner verify --verbose .\build-output\TomorrowSchedule-debug.apk
 ```
 
-本仓库逻辑测试：`node --test tests/*.test.mjs`（329 项，含 `feedback.test.mjs`）。本次合并没有做 Android 编译、装机或真机验证，所以「点开入口后问卷星页面能否完整渲染、图片上传是否可用」仍需在设备上点一次确认。
+本仓库逻辑测试：`node --test tests/*.test.mjs`（截至 2026-11-18 工作树实测 **419 项**，含 `feedback.test.mjs`；口径为 TAP 汇总的 `# tests`，数量随新增用例增长，以实测为准）。本次合并没有做 Android 编译、装机或真机验证，所以「点开入口后问卷星页面能否完整渲染、图片上传是否可用」仍需在设备上点一次确认。
 
 ## 6. 签名与升级提醒
 

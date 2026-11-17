@@ -6,7 +6,7 @@
 
 项目**没有服务器**：不运营后台，不提供账号体系、云同步或远程推送。数据留在你自己的设备上，换设备就是重新登录、重新读取。
 
-**[下载 Android 安装包](https://github.com/fuwuqihmr/jiangshui-schedule/releases/latest)** —— 当前正式版 v1.4.0；预发布测试版见 [Releases](https://github.com/fuwuqihmr/jiangshui-schedule/releases)，Android 8.0 及以上。
+**[下载 Android 安装包](https://github.com/fuwuqihmr/jiangshui-schedule/releases/latest)** —— 最新正式版与预发布测试版见 [Releases](https://github.com/fuwuqihmr/jiangshui-schedule/releases)，Android 8.0 及以上；版本号以仓库 `package.json` 为唯一真源，本文不再重复记录。
 
 - 许可：GPL-3.0-or-later，全文见 [LICENSE](LICENSE)
 - 第三方组件、名称与图标说明：[NOTICE](NOTICE)
@@ -47,7 +47,7 @@
 - **完整课表**：整周网格；支持单双周、调休、停课、单日课程修改与自定义课程；跨节课程按实际起止时间显示。
 - **变更记录**：每次读取后与上一次比较，列出新增、取消以及时间 / 地点变化；本机的手动修改可在记录里一键撤销。
 - **上课提醒**：课前倒计时与系统通知卡片（Android）；通知内容在本机生成，可整体关闭。
-- **每日自动检查**：默认每天 22:00（北京时间）在本机检查一次，时间可改；到点无法执行时顺延重试，不会反复触发。
+- **自动核对**：打开应用或回到前台时，在本机核对一次学校课表（可整体关闭）；本机不注册每日定时核对，不会在固定时间于后台自动运行。
 - **桌面小组件**（Android）：小、高、宽与横屏布局的课表小组件。
 - **导出课表**：三种形式——每周一页的 PDF、整学期一张 PNG 总览、教务风格的纯文本。
 - **写入系统日历**（Android）：写进一个专用的本地日历，逐日单次事件；再次写入为覆盖更新，也可整体移除；不写其他日历、不加课程提醒。
@@ -73,7 +73,7 @@
 ```
 web/        前端页面逻辑（ES Module，无打包器、无框架）：解析、周次、变更、提醒、导出、主题
 web/data/   合成示例数据：示例课表、调休、节假日（不是任何人的真实课表）
-android/    原生外壳：WebView 与会话保险库、通知卡片、桌面小组件、日历同步、每日检查
+android/    原生外壳：WebView 与会话保险库、通知卡片、桌面小组件、日历同步、启动与回前台核对
 harmony/    HarmonyOS NEXT 工程（ArkTS，Stage 模型）
 desktop/    Electron 桌面外壳（历史，不再维护）
 tests/      纯逻辑回归测试（Node 内置 test runner）
@@ -83,11 +83,11 @@ assets/     应用图标源文件
 
 ## 下载与安装
 
-安装包发布在 GitHub 的 [Releases](https://github.com/fuwuqihmr/jiangshui-schedule/releases) 页面：当前正式版是 **v1.4.0**。
+安装包发布在 GitHub 的 [Releases](https://github.com/fuwuqihmr/jiangshui-schedule/releases) 页面；当前版本号以该页面与仓库 `package.json` 为准，不在文档里重复记录。
 
 - 每个版本提供 Android APK，旁边附一个同名的 `.sha256` 校验文件；下载后可以自己核对摘要（Windows 用 `certutil -hashfile 文件名 SHA256`，macOS / Linux 用 `sha256sum 文件名`）。
 - 需要 Android 8.0（API 26）及以上；第一次安装要在系统设置里允许「安装未知应用」。
-- 正式包由 CI 用与早期 rc 构建相同的证书签名，装过 v1.3.1-rc1 / rc2、v1.3.4-rc2 与 v1.3.4 正式版的可直接覆盖升级到本版（versionCode 60），本机数据保留。
+- 正式包由 CI 用与早期 rc 构建相同的证书签名，装过 v1.3.1-rc1 / rc2、v1.3.4-rc2 与 v1.3.4 正式版的可直接覆盖升级到本版（versionCode 见仓库 `package.json` 的 `android.versionCode`），本机数据保留。
 - 如果你装的是 v1.3.4-rc1（versionCode 52）：那一版的更新安装器有缺陷，需要手动下载安装一次本版本；从 1.3.2 及更早版本升级没有这个问题。
 - 如果你装过早期的反馈测试包，它用的是另一张证书（安装包校验值以 `81d9` 开头），需要先卸载再安装本版本；卸载会清除本机的课表、登录状态与设置。
 - 系统集成行为（通知、桌面小组件、日历写入、意见反馈页渲染）仍需要在设备上逐项确认，不保证在所有机型上都一致；遇到问题请用应用内「意见反馈」报告。
@@ -105,7 +105,7 @@ assets/     应用图标源文件
 ### 前端
 
 ```bash
-npm test        # 纯逻辑测试，不需要安装任何依赖
+npm test        # 逻辑层测试；不需要 npm install，但 3 条原生行为测试需要 JDK 17
 npx serve web   # 用任意静态服务器打开 web/ 即可
 ```
 
@@ -119,7 +119,7 @@ npx serve web   # 用任意静态服务器打开 web/ 即可
 powershell -ExecutionPolicy Bypass -File tools/build-android.ps1
 ```
 
-脚本用 aapt2 / javac / d8 / zipalign / apksigner 直接产出 APK，可选参数 `-OutputDirectory`、`-BuildDirectory`、`-XiaomiAppId`（小米聚焦通知需要开发者平台签发的 AppId；不填则只使用系统标准通知）。它默认从**仓库上一级目录**的 `toolchain/android-sdk` 读取 SDK，如果你的 SDK 不在这里，请改脚本顶部的 `sdkRoot`。
+脚本用 aapt2 / javac / d8 / zipalign / apksigner 直接产出 APK。可选参数：`-OutputDirectory`、`-BuildDirectory`、`-XiaomiAppId`（小米聚焦通知需要开发者平台签发的 AppId；不填则只使用系统标准通知）、`-ToolchainRoot`（工具链根目录，SDK 从其下 `android-sdk` 读取）、`-VersionCode` / `-VersionName`（不传时自动从仓库根 `package.json` 读取）。默认工具链根是**仓库上一级目录**的 `toolchain`；SDK 不在那里时用 `-ToolchainRoot` 指定。
 
 这个脚本内部会调用 `tools/package-apk.py`：由后者把 `web/` 里的前端资源与编译出的 dex 一起打进 `unsigned.apk`。两个文件需要一起保留，缺一个都会构建失败。
 
@@ -161,9 +161,11 @@ npm start
 npm test
 ```
 
-`tests/` 下的测试直接跑 Node 内置的 test runner，只依赖 `node:` 模块和 `web/` 里的纯逻辑模块，**不需要安装依赖**。覆盖课表解析、周次与节次、跨节课程、变更判定、提醒、导出、请假状态与本地存储等纯逻辑部分。
+`tests/` 下的测试直接跑 Node 内置的 test runner，不导入任何第三方包、**不需要 npm install**。多数用例只依赖 `node:` 模块和 `web/` 里的纯逻辑模块；另有 3 条原生行为测试会用 `javac` / `java` 临时编译并执行 `MainActivity.java` 的方法或 `tools/android-login-check.cjs`（该脚本已随仓库提供），所以跑完整套件需要 **JDK 17**。覆盖课表解析、周次与节次、跨节课程、变更判定、提醒、导出、请假状态与本地存储等纯逻辑部分。
 
-原生部分另有静态检查（例如上文的 `harmony/tools/check-harmony.mjs`），它们在编译前跑，**不替代设备上的验证**；涉及系统通知、组件、日历、WebView 会话的行为仍需在设备上确认。
+CI（`.github/workflows/android.yml`）在打 `v*` tag 或手动触发时会先跑 `node --test`、上传范围守卫与 APK 数据门禁，任一失败即中止构建；测试与门禁不再是发布前的手工步骤。
+
+原生部分另有静态/契约检查（例如 `harmony/tools/check-harmony.mjs`、`tools/notification-cards-check.cjs`），它们都**不替代设备上的验证**：前者只做 HarmonyOS 工程静态检查；后者需要先构建出 `android/direct-build` 的 classes 与 `R.java` 才能运行。涉及系统通知、组件、日历、WebView 会话的行为仍需在设备上确认。
 
 归档校验另有一个可选脚本 `tools/verify-manifest.ps1`：按增量清单逐项核对文件的字节数与 SHA-256，用来确认拿到的归档与交付时一致。
 
@@ -205,7 +207,7 @@ Android 版在 **设置 → 关于与隐私 → 意见反馈** 里提供一条�
 
 - **缺陷与建议**：开 Issue 说明现象、系统版本与复现步骤。不要贴真实课表、账号、Cookie、票据、校内页面截图或抓包内容。
 - **安全问题**：不要开公开 Issue，请按 [SECURITY.md](SECURITY.md) 里的渠道私下报告。
-- **Pull Request**：一次只做一件事；改前端逻辑时请在 `tests/` 补对应断言；新增功能需保持「无第三方运行时依赖、不上报数据、不加统计 SDK、不写回学校系统」；PR 里不需要改版本号，版本由维护者统一发布。
+- **Pull Request**：一次只做一件事；改前端逻辑时请在 `tests/` 补对应断言；新增功能需保持「无第三方运行时依赖、不上报数据、不加统计 SDK、不写回学校系统」；PR 里不需要改版本号：版本号唯一真源是 `package.json`（`version` / `android.versionCode`），由维护者统一发布。
 - **提交前自检**：`node tools/check-upload-scope.mjs` 会按白名单检查待提交文件；也不要提交任何 keystore、密码或构建产物。
 
 ## 相关文档
