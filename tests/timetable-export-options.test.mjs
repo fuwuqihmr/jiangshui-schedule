@@ -143,6 +143,21 @@ test('B 总览：自定义课程、晚自习与来源冲突都进入结果',()=>
  assert.equal(semesterOccurrences(createState(studySnapshot)).filter(o=>o.localActivity).length,79);
 });
 
+// 本用例断言中文课程名按拼音（zh-CN）排序的产品顺序；生产 web 代码使用不带 locale 参数的
+// String.prototype.localeCompare，会跟随运行环境的默认 locale：CI runner（en-US）下是码元序，
+// 本机（zh-CN）下是拼音序。为消除对 runner 默认 locale 的依赖，只在本用例内把无参
+// localeCompare 固定为显式 zh-CN 排序语义：不改生产代码、不改断言。
+// 生产排序随设备 locale 变化属 P2（见 work/docs/phase-1.4.1/实现报告-CI封闭性.md）。
+function withZhCnCollation(run){
+ const collator=new Intl.Collator('zh-CN');
+ const original=String.prototype.localeCompare;
+ String.prototype.localeCompare=function(other,locales,options){
+  if(locales===undefined&&options===undefined)return collator.compare(String(this),String(other));
+  return original.call(this,other,locales,options);
+ };
+ try{return run();}finally{String.prototype.localeCompare=original;}
+}
+
 test('C 纯文本：教务风格字段、多段合并与单双周压缩',()=>{
  const state=createState(base([
   rule('math',{name:'高等数学',teacher:'李老师',room:'A101',weekday:1,weeks:[7,8,9,10,11,12,13,14,15],periods:[1,2],startTime:'08:30',endTime:'09:55'}),
@@ -153,7 +168,7 @@ test('C 纯文本：教务风格字段、多段合并与单双周压缩',()=>{
   rule('even',{name:'双周课程',teacher:'乙',room:'B2',weekday:4,weeks:[6,8,10,12,14],periods:[5,6],startTime:'14:00',endTime:'15:25'}),
   rule('sparse',{name:'离散课程',teacher:'丙',room:'B3',weekday:5,weeks:[7,9,13,15],periods:[9,10],startTime:'19:00',endTime:'20:25'})
  ]));
- const text=buildRulesText(state),model=buildRulesModel(state);
+ const {text,model}=withZhCnCollation(()=>({text:buildRulesText(state),model:buildRulesModel(state)}));
  assert.equal(model.kind,'rules-text');assert.equal(model.empty,false);assert.equal(model.conflictCount,0);
  assert(text.includes(['高等数学','李老师','A101','周一第1、2节{第7-15周}(全部)'].join('\t')));
  assert(text.includes(['人工智能导论','[REDACTED-NAME]','B301;B303;B205','周一第7、8节{第6-14周}(双周);周二第1、2节{第7-15周}(全部);周五第7、8节{第5-6周}(全部)'].join('\t')),'多段必须一行、教室与段同序');
