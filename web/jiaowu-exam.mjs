@@ -4,7 +4,7 @@
 // 规范化（字段映射、时间→节次、周次、去重、稳定 id）全部在本模块完成，渲染仍走普通课程路径。
 // 只读：本模块不发请求、不写 DOM、不接触 cookie。
 
-export const EXAM_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+import {cmp} from './sort.mjs';export const EXAM_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -114,7 +114,7 @@ export function normalizeExamList(payload, { semesterId, semesterStartDate, tota
   // 周次越界（week<1 或 week>教学周）按设计 §3.2-5 仍保留条目：日课表按日期可见，
   // 周课表只在 1..semester.weeks 内展示；此处不丢弃，避免把真实考试静默隐藏。
   // totalWeeks 仅参与语义校验（调用方传入当前快照周数），不用于过滤条目。
-  out.items.sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime) || a.id.localeCompare(b.id));
+  out.items.sort((a, b) => cmp(a.date, b.date) || cmp(a.startTime, b.startTime) || cmp(a.id, b.id));
   return out;
 }
 
@@ -147,7 +147,7 @@ export function examDay(snapshot, date) {
       sourceLabel: '考试安排',
       cancelled: false,
     }))
-    .sort((a, b) => a.startTime.localeCompare(b.startTime) || a.key.localeCompare(b.key));
+    .sort((a, b) => cmp(a.startTime, b.startTime) || cmp(a.key, b.key));
 }
 
 // 读取失败时保留旧考试数据：仅同学期保留（记录 lastAttempt/error/本轮跳过），跨学期一律丢弃。
@@ -234,5 +234,5 @@ export function diffExamSnapshots(before, after, now = new Date().toISOString())
     const key = r.date + '/exam-' + id;
     result.push({ id: now + '/' + key, key, date: r.date, name: r.name || '考试安排', before: a || null, after: b || null, fields, type: !a ? '新增' : !b ? '考试取消' : examEventType(fields), source: 'school', exam: true, read: false, notifiedAt: null, detectedAt: now });
   }
-  return result.sort((a, b) => a.date.localeCompare(b.date));
+  return result.sort((a, b) => cmp(a.date, b.date));
 }

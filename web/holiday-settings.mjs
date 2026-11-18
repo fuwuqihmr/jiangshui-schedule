@@ -1,4 +1,4 @@
-import {daysBetween,validDate} from './core.mjs';
+import {daysBetween,validDate} from './core.mjs';import {cmp} from './sort.mjs';
 
 // restoreDates：本机“单日恢复上课”标记。只对当天确实被取消（休假/寒暑假/学校停课日）
 // 的日期生效；日期不再被取消时标记保留但无效果，再次被取消时重新生效（界面会显示
@@ -48,7 +48,7 @@ export function setHolidayRange(settings,kind,startDate,endDate){
 export function setHolidayDay(settings,date,skipStudy=false){
  if(!validDate(date))throw Error('休假日期无效');
  const days=(settings?.days||[]).filter(item=>item.date!==date);
- return {...emptyHolidaySettings(),...settings,days:[...days,{date,skipStudy:skipStudy===true}].sort((a,b)=>a.date.localeCompare(b.date))};
+ return {...emptyHolidaySettings(),...settings,days:[...days,{date,skipStudy:skipStudy===true}].sort((a,b)=>cmp(a.date,b.date))};
 }
 export function removeHolidayDay(settings,date){
  return {...emptyHolidaySettings(),...settings,days:(settings?.days||[]).filter(item=>item.date!==date)};

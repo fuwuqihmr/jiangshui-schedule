@@ -2,7 +2,7 @@ import {studyDay} from './study.mjs';
 import {holidayForDate,isRestoredDate,emptyHolidaySettings} from './holiday-settings.mjs';
 import {customCourseDay,alignCustomCoursesToSemester} from './custom-courses.mjs';
 import {courseSettingKey} from './interactions.mjs';
-import {examDay,diffExamSnapshots} from './jiaowu-exam.mjs';
+import {examDay,diffExamSnapshots} from './jiaowu-exam.mjs';import {cmp} from './sort.mjs';
 export const FIELDS = ['name','teacher','room','startTime','endTime','periods','cancelled'];
 export const clone = x => JSON.parse(JSON.stringify(x));
 export function latestIso(a,b){const ta=Date.parse(String(a??'')),tb=Date.parse(String(b??''));if(!Number.isFinite(ta)&&!Number.isFinite(tb))return null;if(!Number.isFinite(ta))return new Date(tb).toISOString();if(!Number.isFinite(tb)||ta>=tb)return new Date(ta).toISOString();return new Date(tb).toISOString();}
@@ -38,7 +38,7 @@ export function sourceDay(s,date) {
     list.push(...baseDay(s,m.fromDate).map(r=>({...r,date,key:`${date}/${r.ruleId}/map-${m.id}`,originDate:m.fromDate,remapId:m.id})));
   }
   for(const e of s.exceptions||[]) if(e.date===date) list=list.flatMap(r=>r.ruleId===e.ruleId ? e.cancel ? [] : [{...r,...clone(e.patch||{})}] : [r]);
-  return list.sort((a,b)=>a.startTime.localeCompare(b.startTime)||a.key.localeCompare(b.key));
+  return list.sort((a,b)=>a.startTime<b.startTime?-1:a.startTime>b.startTime?1:a.key<b.key?-1:a.key>b.key?1:0);// D3：码元序 tie-break（与 Java AND-171 一致，locale 无关）
 }
 export function effectiveDay(s,date,overrides=[],localMaps=[],courseSettings={},customCourses=[],holidaySettings=null) {
   // Manual rescheduling moves a day, including entries saved by older versions.
@@ -81,7 +81,7 @@ export function effectiveDay(s,date,overrides=[],localMaps=[],courseSettings={},
   // A real school class takes precedence over the optional locally generated study.
   list=list.filter(r=>!r.localActivity||!list.some(q=>q.key!==r.key&&!q.localActivity&&!q.cancelled&&q.startTime<r.endTime&&q.endTime>r.startTime));
   for(const r of list) r.overlap=list.some(q=>q.key!==r.key&&!q.cancelled&&!r.cancelled&&q.startTime<r.endTime&&q.endTime>r.startTime);
-  return list.sort((a,b)=>a.startTime.localeCompare(b.startTime)||a.key.localeCompare(b.key));
+  return list.sort((a,b)=>a.startTime<b.startTime?-1:a.startTime>b.startTime?1:a.key<b.key?-1:a.key>b.key?1:0);// D3：码元序 tie-break（与 Java AND-171 一致，locale 无关）
 }
 // Grey vacancies are display records only; they never become attended courses.
 export function timetableDay(s,date,overrides=[],localMaps=[],courseSettings={},customCourses=[],holidaySettings=null) {
@@ -94,7 +94,7 @@ export function timetableDay(s,date,overrides=[],localMaps=[],courseSettings={},
     if(list.some(q=>q.key===r.key||(!q.cancelled&&q.startTime<r.endTime&&q.endTime>r.startTime))) continue;
     list.push({...r,cancelled:true,vacant:true,vacancyReason:'moved',movedTo:moved.date});
   }
-  return list.sort((a,b)=>a.startTime.localeCompare(b.startTime)||a.key.localeCompare(b.key));
+  return list.sort((a,b)=>a.startTime<b.startTime?-1:a.startTime>b.startTime?1:a.key<b.key?-1:a.key>b.key?1:0);// D3：码元序 tie-break（与 Java AND-171 一致，locale 无关）
 }
 export function semesterOccurrences(s) {
   const result=[];
@@ -115,7 +115,7 @@ export function diffSnapshots(before,after,now=new Date().toISOString()) {
     if(!fields.length) continue;
     result.push({id:`${now}/${key}`,key,date:r.date,name:r.name,before:a||null,after:b||null,fields,type:!a?'新增':!b?'停课':fields.includes('startTime')||fields.includes('periods')?'改时间':fields.includes('room')?'换教室':fields.includes('teacher')?'换教师':'课程调整',source:after.source?.kind||'sample',read:false,notifiedAt:null,detectedAt:now});
   }
-  return result.sort((a,b)=>a.date.localeCompare(b.date));
+  return result.sort((a,b)=>cmp(a.date,b.date));
 }
 export function noticeLevel(event,now=new Date()) {
   const r=event.after||event.before, hours=(Date.parse(`${event.date}T${r.startTime}:00+08:00`)-Number(now))/3600000;
@@ -140,7 +140,7 @@ export function applySnapshot(state,snapshot,now=new Date().toISOString()) {
   // (older native build / background path) must not erase the previous exam list;
   // a different semester always drops it (examDay re-checks the semester as a guard).
   if(snapshot.exams===undefined && state.snapshot?.exams && state.snapshot.semester?.id===snapshot.semester.id && state.snapshot.semester?.startDate===snapshot.semester.startDate) snapshot={...snapshot,exams:clone(state.snapshot.exams)};
-  const changes=[...diffExamSnapshots(state.snapshot?.exams,snapshot.exams,now),...diffSnapshots(state.snapshot,snapshot,now)].sort((a,b)=>a.date.localeCompare(b.date));
+  const changes=[...diffExamSnapshots(state.snapshot?.exams,snapshot.exams,now),...diffSnapshots(state.snapshot,snapshot,now)].sort((a,b)=>cmp(a.date,b.date));
   return {...state,snapshot:clone(snapshot),customCourses:alignCustomCoursesToSemester(state.customCourses,snapshot.semester),events:[...changes,...events],overrides,localMaps,holidaySettings,lastSuccess:now,courseLastSuccess:now,lastAttempt:now,error:null};
 }
 export function adoptSchoolSnapshot(state,snapshot,now=new Date().toISOString()) {

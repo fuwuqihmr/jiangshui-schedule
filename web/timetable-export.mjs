@@ -1,5 +1,5 @@
 import {addDays,timetableDay,validateSnapshot,weekday} from './core.mjs';
-import {PERIOD_TIMES} from './jsxsd.mjs';
+import {PERIOD_TIMES} from './jsxsd.mjs';import {cmp,cmpText} from './sort.mjs';
 
 // Export from the same final schedule used by the daily and weekly screens.
 // No credentials or application settings are included in these visual files.
@@ -126,12 +126,12 @@ export function buildRulesModel(state){
     const segments=[...course.segments.values()].map(segment=>({
       weekday:segment.weekday,periods:[...segment.periods],startTime:segment.startTime,endTime:segment.endTime,room:segment.room,
       weeks:[...segment.weeks].sort((a,b)=>a-b)
-    })).sort((a,b)=>a.weekday-b.weekday||a.startTime.localeCompare(b.startTime)||(a.periods[0]??99)-(b.periods[0]??99)||String(a.room??'').localeCompare(String(b.room??'')));
+    })).sort((a,b)=>a.weekday-b.weekday||cmp(a.startTime,b.startTime)||(a.periods[0]??99)-(b.periods[0]??99)||cmpText(a.room,b.room));
     return {name:course.name,teacher:course.teacher,rooms:segments.map(segment=>segment.room),segments};
   }).sort((a,b)=>{
     const minDay=course=>Math.min(...course.segments.map(segment=>segment.weekday));
     const minTime=course=>course.segments.reduce((value,segment)=>segment.startTime<value?segment.startTime:value,'99:99');
-    return minDay(a)-minDay(b)||minTime(a).localeCompare(minTime(b))||String(a.name??'').localeCompare(String(b.name??''))||String(a.teacher??'').localeCompare(String(b.teacher??''));
+    return minDay(a)-minDay(b)||cmp(minTime(a),minTime(b))||cmpText(a.name,b.name)||cmpText(a.teacher,b.teacher);
   });
   const sourceKind=state.snapshot.source?.kind||'sample';
   return {
@@ -214,7 +214,7 @@ export function buildSemesterOverviewModel(state){
       overlap:card.overlap,conflict:card.conflict,sources:[...card.sources]
     });
   }
-  for(const day of days)day.courses.sort((a,b)=>a.startTime.localeCompare(b.startTime)||a.endTime.localeCompare(b.endTime)||String(a.name??'').localeCompare(String(b.name??''))||String(a.teacher??'').localeCompare(String(b.teacher??'')));
+  for(const day of days)day.courses.sort((a,b)=>cmp(a.startTime,b.startTime)||cmp(a.endTime,b.endTime)||cmpText(a.name,b.name)||cmpText(a.teacher,b.teacher));
   return {
     kind:'semester-overview',
     semester:{name:semester.name,startDate:semester.startDate,weeks:totalWeeks},

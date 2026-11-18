@@ -1,6 +1,6 @@
-// 假条状态：本地数据模型、状态映射、时间交集和示例 provider。
+// 假条状态：本地数据模型、状态映射、时间交集、刷新合并和示例 provider。
 // 本模块不读取 Cookie/TGC/账号密码，也不发起任何网络请求。
-import {addDays, today, validDate, timetableDay} from './core.mjs';
+import {addDays, today, validDate, timetableDay} from './core.mjs';import {cmp} from './sort.mjs';
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -168,7 +168,7 @@ export function normalizeManualCancelMarks(value) {
     seen.add(number);
     marks.push({number, markedAt: new Date(at).toISOString()});
   }
-  marks.sort((a, b) => a.number.localeCompare(b.number));
+  marks.sort((a, b) => cmp(a.number, b.number));
   return {schemaVersion: 1, marks};
 }
 
@@ -185,7 +185,7 @@ export function markManualCancel(value, number, markedAt = new Date().toISOStrin
   const key = cleanText(number, 60);
   const at = Date.parse(String(markedAt ?? ''));
   if (!key || !Number.isFinite(at) || normalized.marks.some(mark => mark.number === key)) return normalized;
-  const marks = [...normalized.marks, {number: key, markedAt: new Date(at).toISOString()}].sort((a, b) => a.number.localeCompare(b.number));
+  const marks = [...normalized.marks, {number: key, markedAt: new Date(at).toISOString()}].sort((a, b) => cmp(a.number, b.number));
   return {schemaVersion: 1, marks};
 }
 
@@ -313,7 +313,7 @@ export function normalizeLeaveStatusCache(value, semesterId = null) {
     const startA = leaveInterval(a)?.start ?? Number.MAX_SAFE_INTEGER;
     const startB = leaveInterval(b)?.start ?? Number.MAX_SAFE_INTEGER;
     if (startA !== startB) return startA - startB;
-    return a.id.localeCompare(b.id);
+    return cmp(a.id,b.id);
   });
   // 200 条上限优先保留销假记录（它们是销假关联的证据），再按时间保留其余记录。
   const cancelRecords = real.filter(record => record.type === 'cancel').slice(-200);
@@ -323,7 +323,7 @@ export function normalizeLeaveStatusCache(value, semesterId = null) {
     const startA = leaveInterval(a)?.start ?? Number.MAX_SAFE_INTEGER;
     const startB = leaveInterval(b)?.start ?? Number.MAX_SAFE_INTEGER;
     if (startA !== startB) return startA - startB;
-    return a.id.localeCompare(b.id);
+    return cmp(a.id,b.id);
   });
   const fetched = value.fetchedAt == null ? null : Date.parse(String(value.fetchedAt));
   return {
@@ -428,7 +428,7 @@ export function sortLeaveRecords(records = []) {
     const startA = leaveInterval(a)?.start ?? Number.MAX_SAFE_INTEGER;
     const startB = leaveInterval(b)?.start ?? Number.MAX_SAFE_INTEGER;
     if (startA !== startB) return startA - startB;
-    return String(a?.id || '').localeCompare(String(b?.id || ''));
+    return cmp(a?.id || '', b?.id || '');
   });
 }
 
@@ -475,7 +475,7 @@ export function sampleLeaveRecords(state, date = today()) {
   }
   courses = courses
     .filter(course => course && !course.cancelled && !course.vacant && !course.localActivity && course.startTime < course.endTime)
-    .sort((a, b) => a.startTime.localeCompare(b.startTime) || String(a.key).localeCompare(String(b.key)));
+    .sort((a, b) => cmp(a.startTime, b.startTime) || cmp(String(a.key), String(b.key)));
   if (!courses.length) return [];
 
   const distinct = [];

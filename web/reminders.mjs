@@ -1,4 +1,4 @@
-import {addDays,effectiveDay} from './core.mjs';
+import {addDays,effectiveDay} from './core.mjs';import {cmp} from './sort.mjs';
 
 export const REMINDER_DEFAULTS=Object.freeze({enabled:true,leadMinutes:30,afterStartMinutes:5});
 export function reminderSettings(input={}){
@@ -29,7 +29,7 @@ export function reminderWindows(state,now=Date.now()){
    rows.push({id:`${day}|${r.key}`,date:day,key:r.key,name:r.name,room:r.room,teacher:r.teacher,startTime:r.startTime,endTime:r.endTime,startAt,showAt,expiresAt:endAt});
   }
  }
- return rows.sort((a,b)=>a.startAt-b.startAt||a.id.localeCompare(b.id));
+ return rows.sort((a,b)=>a.startAt-b.startAt||cmp(a.id,b.id));
 }
 export function activeReminderWindows(state,now=Date.now(),closed=new Set()){
  return reminderWindows(state,now).filter(r=>r.showAt<=now&&now<r.expiresAt&&!closed.has(r.id));
