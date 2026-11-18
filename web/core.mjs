@@ -52,9 +52,14 @@ export function effectiveDay(s,date,overrides=[],localMaps=[],courseSettings={},
   // 恢复的学校停课日按正常日处理：本次计算内先去掉该日的 closedDates 标记。
   const daySnapshot=closed&&restored?{...s,closedDates:(s.closedDates||[]).filter(item=>item!==date)}:s;
   const mixed={...daySnapshot,remaps:[...(daySnapshot.remaps||[]),...maps]};
+  // D1 口径 A：调出日不显示源课。学校调课（snapshot.remaps）与本机调休同一语义——
+  // 只要某条映射的 fromDate 是当日且目标日不同（date!==fromDate）即视为当天课程被「搬走」，
+  // 与 Java ScheduleWidgetData.hasOutgoingMap 的字符串比较口径一致（自映射不算调出；
+  // 缺 date 字段的损坏映射两侧同样按“目标日≠当日”处理；非法/非对象条目不匹配任何合法日期）。
+  const movedOut=mixed.remaps.some(m=>m&&m.fromDate===date&&m.date!==date);
   let list=holidayCancelled?[]:sourceDay(mixed,date).map(x=>({...x,source:localMaps.some(m=>m.id===x.remapId)?'local':x.source}));
   if(!holidayCancelled){
-    if(maps.some(m=>m.fromDate===date&&m.date!==date)) list=list.filter(r=>r.remapId);
+    if(movedOut) list=list.filter(r=>r.remapId);
     list.push(...customCourseDay(daySnapshot,date,customCourses,maps));
   }
   list.push(...studyDay(daySnapshot,date,maps,holidaySettings));
@@ -62,7 +67,8 @@ export function effectiveDay(s,date,overrides=[],localMaps=[],courseSettings={},
   for(const o of overrides.filter(o=>o.date===date)) {
     const i=list.findIndex(r=>r.key===o.key), current=i<0?null:list[i];
     // Disabled or displaced local evening study must not be resurrected by an old override.
-    if(!current && (o.base?.localActivity||o.base?.customCourse||holidayCancelled||maps.some(m=>m.date===date||m.fromDate===date&&m.date!==date))) continue;
+    // 被搬走（本机调休或学校调课）与假日取消同口径：旧单日修改不得复活已移走的源课（与 Java applyOverrides 抑制条件一致）。
+    if(!current && (o.base?.localActivity||o.base?.customCourse||holidayCancelled||movedOut||maps.some(m=>m.date===date))) continue;
     const compareCurrent=current?.original||current,compareBase=o.base.original||o.base;
     const conflict=!current || !current.customCourse&&Object.keys(o.patch).some(f=>!equal(compareCurrent[f],compareBase[f])&&!equal(compareCurrent[f],o.patch[f]));
     const local={...(current||o.base),...clone(o.patch),source:'local',overrideId:o.id,original:o.base};

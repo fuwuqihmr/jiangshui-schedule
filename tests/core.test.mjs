@@ -159,3 +159,82 @@ test('单日恢复：休假与学校停课日恢复后按正常规则排课，�
  assert(closedRestored.some(r=>r.exam!==true&&!r.localActivity),'停课日恢复后学校课回来');
  assert(closedRestored.some(r=>r.localActivity),'停课日恢复后晚自习回来');
 });
+
+// D1 口径 A：学校调课（snapshot.remaps）与本机调休统一按「搬走」语义——调出日不显示源课。
+// 事实基准：work/docs/specification-2026-11-18/10-web-core-state.md CORE-022、13-android-platform.md AND-163。
+// 与真实 Java ScheduleWidgetData.java 的双 resolver 对照见 tests/widget-remap.test.mjs。
+function d1Snapshot(){
+ const snapshot=clone(base);
+ snapshot.semester={id:'term-d1',name:'D1 调课学期',startDate:'2026-08-31',weeks:18};
+ snapshot.source={kind:'school',label:'测试学校课表'};
+ snapshot.rules=[
+  {id:'mon-course',name:'周一源课',teacher:'甲',room:'A101',weekday:1,weeks:[7],periods:[1,2],startTime:'08:30',endTime:'09:55'},
+  {id:'tue-course',name:'周二源课',teacher:'乙',room:'B202',weekday:2,weeks:[7],periods:[3,4],startTime:'10:05',endTime:'11:30'},
+  {id:'wed-course',name:'周三源课',teacher:'丙',room:'C303',weekday:3,weeks:[7],periods:[5,6],startTime:'14:00',endTime:'15:25'},
+  {id:'fri-course',name:'周五本课',teacher:'丁',room:'D404',weekday:5,weeks:[7],periods:[1,2],startTime:'08:30',endTime:'09:55'},
+  {id:'sat-course',name:'周六本课',teacher:'戊',room:'E505',weekday:6,weeks:[7],periods:[1,2],startTime:'08:30',endTime:'09:55'}
+ ];
+ snapshot.remaps=[];snapshot.closedDates=[];snapshot.exceptions=[];
+ return snapshot;
+}
+const D1_MON='2026-10-12',D1_TUE='2026-10-13',D1_WED='2026-10-14',D1_THU='2026-10-15',D1_FRI='2026-10-16',D1_SAT='2026-10-17';
+const D1_REPLACE={id:'school-replace',date:D1_FRI,fromDate:D1_MON,mode:'replace'};
+const D1_APPEND={id:'school-append',date:D1_SAT,fromDate:D1_TUE,mode:'append'};
+
+test('D1 口径 A：学校调课 replace 调出日不显示源课，目标日按源日排课',()=>{
+ const snapshot=d1Snapshot();snapshot.remaps=[D1_REPLACE];
+ assert.deepEqual(effectiveDay(snapshot,D1_MON).map(r=>r.ruleId),[],'调出日不再显示学校源课（口径 A）');
+ assert.equal(sourceDay(snapshot,D1_MON).some(r=>r.ruleId==='mon-course'),true,'sourceDay 仍是学校源课表视图，生效口径只改 effectiveDay');
+ const friday=effectiveDay(snapshot,D1_FRI);
+ assert.deepEqual(friday.map(r=>r.ruleId),['mon-course'],'replace 清空目标日本课后只留调入课');
+ assert.equal(friday[0].originDate,D1_MON,'调入行保留源日期');
+ assert.equal(friday[0].remapId,'school-replace','调入行带学校映射 id');
+ assert.equal(friday[0].source,'school','学校调课调入行 source 仍是学校');
+ assert.equal(friday[0].overlap,false);
+});
+
+test('D1 口径 A：学校调课 append 调出日不显示源课，目标日保留本课并追加源日课程',()=>{
+ const snapshot=d1Snapshot();snapshot.remaps=[D1_APPEND];
+ assert.deepEqual(effectiveDay(snapshot,D1_TUE).map(r=>r.ruleId),[],'append 调出日同样不显示源课');
+ const saturday=effectiveDay(snapshot,D1_SAT).map(r=>({rule:r.ruleId,remap:r.remapId||null,origin:r.originDate}));
+ assert.deepEqual(saturday,[
+  {rule:'sat-course',remap:null,origin:D1_SAT},
+  {rule:'tue-course',remap:'school-append',origin:D1_TUE}
+ ],'append 目标日保留本课并追加源日课程');
+});
+
+test('D1 口径 A：本机调休行为不回归，学校调课与本机调休并存时都按调出过滤',()=>{
+ const snapshot=d1Snapshot();snapshot.remaps=[D1_REPLACE];
+ const localMaps=[{id:'local-1700000000000',date:D1_THU,fromDate:D1_WED}];
+ assert.deepEqual(effectiveDay(snapshot,D1_WED,[],localMaps).map(r=>r.ruleId),[],'本机调休调出日仍不显示源课（CORE-022 原口径保留）');
+ const thursday=effectiveDay(snapshot,D1_THU,[],localMaps);
+ assert.deepEqual(thursday.map(r=>r.ruleId),['wed-course'],'本机调休目标日仍按源日排课');
+ assert.equal(thursday[0].source,'local','本机调休调入行 source=local，不与学校行混淆');
+ assert.equal(thursday[0].remapId,'local-1700000000000');
+ assert.deepEqual(effectiveDay(snapshot,D1_MON,[],localMaps).map(r=>r.ruleId),[],'两条映射并存时学校调课调出日仍过滤');
+ assert.deepEqual(effectiveDay(snapshot,D1_THU).map(r=>r.ruleId),[],'没有本机调休时周四本来就无课，行为不变');
+});
+
+test('D1 口径 A：调出日不搬走本机自定义课，旧单日修改不复活源课',()=>{
+ const snapshot=d1Snapshot();snapshot.remaps=[D1_REPLACE];
+ const weekly={id:'custom-weekly-mon',mode:'weekly',name:'规律补习',teacher:'孙',room:'E505',startTime:'16:00',endTime:'17:30',semesterId:snapshot.semester.id,semesterStartDate:snapshot.semester.startDate,startWeek:1,endWeek:18,weekPattern:'every',weekdays:[1]};
+ const once={id:'custom-once-mon',mode:'once',name:'独立加课',teacher:'赵',room:'G707',startTime:'18:00',endTime:'19:00',date:D1_MON};
+ assert.deepEqual(effectiveDay(snapshot,D1_MON,[],[],{},[weekly,once]).map(r=>r.ruleId),['custom-weekly-mon','custom-once-mon'],'学校调课只搬学校源课，本机自定义课留在原日期');
+ const sourceRow=sourceDay(snapshot,D1_MON).find(r=>r.ruleId==='mon-course');
+ const edited=saveOverride(createState(snapshot),sourceRow,{room:'X909'});
+ assert.deepEqual(effectiveDay(snapshot,D1_MON,edited.overrides).map(r=>r.ruleId),[],'旧单日修改不能把已搬走的源课复活');
+});
+
+test('D1 口径 A：无效/自映射映射按与 Java 相同的字符串口径处理',()=>{
+ const self=d1Snapshot();self.remaps=[{id:'self-map',date:D1_FRI,fromDate:D1_FRI,mode:'append'}];
+ assert.equal(effectiveDay(self,D1_MON).length,1,'自映射不影响其他日期');
+ const friday=effectiveDay(self,D1_FRI);
+ assert.equal(friday.length,2,'自映射不判为调出：目标日保留本课并追加源日相同行（Java 同口径）');
+ assert.equal(friday.filter(r=>r.remapId==='self-map').length,1);
+ const broken=d1Snapshot();broken.remaps=[{id:'broken-map',fromDate:D1_MON,mode:'append'}];
+ assert.deepEqual(effectiveDay(broken,D1_MON).map(r=>r.ruleId),[],'缺 target 的损坏映射在两侧都按「目标日≠当日」判为调出');
+ assert.equal(effectiveDay(broken,D1_FRI).length,1,'缺 target 的映射不会把课程搬到其他日期');
+ assert.throws(()=>validateSnapshot({...d1Snapshot(),remaps:[{id:'bad-mode',date:D1_FRI,fromDate:D1_MON,mode:'merge'}]}),/调休映射无效/,'非法 mode 在导入边界被拒绝');
+ assert.throws(()=>validateSnapshot({...d1Snapshot(),remaps:[{id:'bad-date',date:'2026-02-30',fromDate:D1_MON,mode:'append'}]}),/调休映射无效/,'非法 target 日期在导入边界被拒绝');
+ assert.throws(()=>validateSnapshot({...d1Snapshot(),remaps:[D1_REPLACE,{...D1_REPLACE}]}),/调休映射无效/,'重复 id 在导入边界被拒绝');
+});

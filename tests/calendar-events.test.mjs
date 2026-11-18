@@ -45,18 +45,22 @@ test('单双周、停课与学期范围：只产生实际发生的事件',()=>{
  assert.equal(out.events.some(e=>e.startDate==='2026-09-09'),false);
 });
 
-test('调休映射与单日调整：按实际日期时间展开，自定义选项包含调休课程',()=>{
+test('调休映射与单日调整：按实际日期时间展开，自定义选项包含调休课程（D1 口径 A：学校调课调出日不写源课）',()=>{
  const school=state([rule('math',{weeks:[1]})],{
   overrides:[],
   snapshot:{...snapshot([rule('math',{weeks:[1]})]),remaps:[{id:'rm1',date:'2026-09-01',fromDate:'2026-08-31',mode:'append'}]},
  });
  const all=buildCalendarEvents(school);
- assert.deepEqual(all.events.map(e=>e.key).sort(),['2026-08-31/math','2026-09-01/math/map-rm1'].sort(),'周二出现调休后的实际课程');
+ // D1 口径 A（CORE-022/AND-163）：学校调课 fromDate=2026-08-31 视为调出，生效课表与日历都不再出现源课；
+ // 目标日 2026-09-01 只写调入课程。改动前期望为 ['2026-08-31/math','2026-09-01/math/map-rm1']（旧口径）。
+ assert.deepEqual(all.events.map(e=>e.key).sort(),['2026-09-01/math/map-rm1'],'口径 A：学校调课调出日不写源课，只在目标日写一次调入课');
+ assert.equal(all.events.some(e=>e.startDate==='2026-08-31'),false,'调出日（fromDate）不得再写学校源课事件');
  const remapped=all.events.find(e=>e.key.includes('map-rm1'));
  assert.equal(remapped.source,'school','调休后的学校课程事件来源仍是学校课程');
  assert.equal(remapped.startDate,'2026-09-01');
  const noCustom=buildCalendarEvents(school,{school:true,custom:false,study:false});
- assert.deepEqual(noCustom.events.map(e=>e.key),['2026-08-31/math'],'取消自定义/调休选项后不写调休事件');
+ // 口径 A 后调出日不再有学校课事件（旧期望 ['2026-08-31/math']），而调入行按 remapId 归入自定义类别被关闭。
+ assert.deepEqual(noCustom.events.map(e=>e.key),[],'取消自定义/调休选项后只剩空列表：源课已调出、调入课属自定义类别');
 
  const adjusted=state([rule('math',{weeks:[2]})],{
   localMaps:[{id:'lm1',fromDate:'2026-09-07',date:'2026-09-08'}],
