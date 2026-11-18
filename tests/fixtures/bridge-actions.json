@@ -1,0 +1,1128 @@
+{
+  "schemaVersion": 1,
+  "contractVersion": "v0-2026-11-18",
+  "repoBaseline": "01eb8d6（course-change v1.4.1 / vC62）；契约表内容对应 2026-11-18 契约 v0 文档",
+  "intent": "三端桥（web↔原生）最小契约护栏：登记 action 分级与回包最小形状、web 调用集合、动态调度点、回调与平台接口，供 web 测试与三端 CI 共同引用（D6 门禁换代的最小落地）。本表只约束契约面，不改生产行为。",
+  "sources": [
+    {
+      "path": "JiangShui-Pack/work/docs/specification-2026-11-18/20-platform-contract.md",
+      "role": "D1-D7 决定与 MUST/OPTIONAL/PLATFORM 三级定义（§2、§8）"
+    },
+    {
+      "path": "JiangShui-Pack/work/docs/platform-reconnect-2026-11-17/tables/action-matrix.csv",
+      "role": "45 行 action 三向对照：action 集合、web 调用点、死 API 标记"
+    },
+    {
+      "path": "JiangShui-Pack/work/docs/platform-reconnect-2026-11-17/平台契约对齐与iOS追平清单.md",
+      "role": "§6.2 action 契约表（参数/返回/等级）、§6.3 回调表、§6.4 关键形状"
+    }
+  ],
+  "levels": {
+    "MUST": "三端都应有等价能力，缺则功能不可用/不可发布",
+    "OPTIONAL": "缺则能力降级，不得报错、不得误导",
+    "PLATFORM": "平台特有，不进桥或允许平台空实现"
+  },
+  "levelStats": {
+    "actions": {
+      "MUST": 35,
+      "OPTIONAL": 10,
+      "PLATFORM": 0,
+      "total": 45
+    },
+    "callbacks": {
+      "MUST": 7,
+      "OPTIONAL": 1,
+      "PLATFORM": 0,
+      "total": 8
+    },
+    "platformInterfaces": {
+      "MUST": 0,
+      "OPTIONAL": 0,
+      "PLATFORM": 1,
+      "total": 1
+    }
+  },
+  "openQuestions": [
+    {
+      "id": "LEVEL-MUST-31-VS-35",
+      "status": "待 owner 确认",
+      "detail": "20-platform-contract.md D3 写 MUST(31)，源报告 §6.2 表列 35 条 M 级 action；差额疑为 DAC-08 的四个豁免动作（consentStatus/acceptConsent/declineConsent/setTheme），源报告未明说。本表按 §6.2 表登记 35 条 MUST；若 owner 确认 31，只需改 level 不改结构。",
+      "source": "20-platform-contract.md §8"
+    },
+    {
+      "id": "PLATFORM-POST-BACKGROUND",
+      "status": "待定",
+      "detail": "Android.post/background.html 平台接口在 v1.4.1 web 已删除，但原生 BackgroundCheck 仍依赖；需决定恢复 web/background.html 或删除原生后台核对链路。本任务只记录，不修复。",
+      "source": "git commit 05bb2ae + android/.../BackgroundCheck.java:8"
+    }
+  ],
+  "proposals": [
+    {
+      "action": "platformInfo",
+      "level": "OPTIONAL",
+      "status": "proposed",
+      "response": {
+        "kind": "object",
+        "required": [
+          "version",
+          "platform",
+          "capabilities"
+        ],
+        "nested": {
+          "capabilities": {
+            "required": [
+              "updates",
+              "feedback",
+              "exams",
+              "xiaomiFocus",
+              "widgets",
+              "liveActivity",
+              "backgroundCheck",
+              "exactAlarm",
+              "autostart",
+              "battery"
+            ]
+          }
+        },
+        "notes": "D2/D3 v0 新增可选 action，当前三端均未实现（M4）。实现前不得被 web 调用；老壳回『不支持的操作』→ web 按全能力处理"
+      }
+    }
+  ],
+  "transport": {
+    "request": "window.Android.request(id, action, payloadJson)",
+    "result": "window.onNativeResult(id, {value|error})",
+    "webFile": "web/bridge.mjs",
+    "frozenSnippets": [
+      {
+        "file": "web/bridge.mjs",
+        "contains": "globalThis.onNativeResult"
+      },
+      {
+        "file": "web/bridge.mjs",
+        "contains": "globalThis.Android.request(id,action,JSON.stringify(payload))"
+      },
+      {
+        "file": "web/bridge.mjs",
+        "contains": "androidCallbacks"
+      }
+    ],
+    "notes": "D2 协议冻结：三端逐字一致；v0 新增 platformInfo 与 bridge.call 超时尚未实现（见 proposals / openQuestions）"
+  },
+  "actions": {
+    "consentStatus": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "agreed",
+          "version",
+          "acceptedAt"
+        ]
+      },
+      "notes": "UserConsent.status()；web/consent.mjs 以 agreed 决定是否进入同意页"
+    },
+    "acceptConsent": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "version"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "version",
+          "acceptedAt"
+        ]
+      },
+      "notes": "version 必须回显当前协议版本，acceptedAt 缺失即视为保存失败"
+    },
+    "declineConsent": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      },
+      "notes": "iOS 不能退出应用 → 显示拒绝页"
+    },
+    "loadState": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object-or-null",
+        "required": [
+          "_revision"
+        ],
+        "notes": "状态对象或 null；_revision 为整数，saveState 冲突检查依据（D4/§6.4-1）"
+      }
+    },
+    "saveState": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "state",
+          "expectedRevision"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "revision"
+        ],
+        "notes": "expectedRevision=-1 表示强制保存；冲突时回中文错误『课表已在后台更新，请稍后重试』"
+      }
+    },
+    "setTheme": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "background",
+          "surface",
+          "preference",
+          "dark"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      }
+    },
+    "classReminderStatus": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "active",
+          "next",
+          "exact",
+          "notificationsAllowed",
+          "notificationStatus"
+        ],
+        "nested": {
+          "notificationStatus": {
+            "required": [
+              "enabled",
+              "importance",
+              "lockVisibility",
+              "deviceLocked",
+              "activeCount",
+              "groupedCount",
+              "focus"
+            ],
+            "optional": [
+              "live"
+            ]
+          }
+        },
+        "notes": "notificationStatus.live 为 Android 1.3.6 新增，可选（D4 向后兼容）"
+      }
+    },
+    "previewClassReminder": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [],
+        "optional": [
+          "lockedTest"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      },
+      "notes": "lockedTest 为锁屏预览开关；Android 侧小米焦点刷新属平台特有"
+    },
+    "classReminderSystemSettings": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      }
+    },
+    "closeClassReminder": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "id"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ],
+        "notes": "失败回错误包；成功 {ok:true} 或状态对象"
+      }
+    },
+    "notificationSettings": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      }
+    },
+    "permissionStatus": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "notifications",
+          "exactAlarm",
+          "battery",
+          "autostart"
+        ],
+        "optional": [
+          "sdk"
+        ],
+        "nested": {
+          "notifications": {
+            "required": [
+              "runtime",
+              "granted",
+              "systemEnabled",
+              "allowed"
+            ]
+          },
+          "exactAlarm": {
+            "required": [
+              "required",
+              "allowed"
+            ],
+            "optional": [
+              "supported"
+            ]
+          },
+          "battery": {
+            "required": [
+              "exempt"
+            ],
+            "optional": [
+              "supported"
+            ]
+          },
+          "autostart": {
+            "required": [
+              "supported",
+              "known",
+              "oem",
+              "openedAt"
+            ]
+          }
+        },
+        "notes": "D5：supported/required/exempt 是契约字段，web 必须按 supported===false 隐藏或降级（S3）"
+      }
+    },
+    "autostartSettings": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      },
+      "notes": "无自启动能力的平台 → 打开 App 设置页"
+    },
+    "runtimeStatus": {
+      "level": "OPTIONAL",
+      "webUsage": "dead",
+      "deadReason": "per action-matrix.csv dead_no_web_caller=Y；web 无调用点",
+      "response": {
+        "kind": "object",
+        "required": [],
+        "opaque": true,
+        "notes": "后台核对可用性对象；web 0 调用（死 API）。v1.4.1 commit 05bb2ae 已删除 Android 分发分支（矩阵基于 v1.4.0），契约保留观察，恢复需两端重新登记"
+      }
+    },
+    "requestExactAlarm": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      },
+      "notes": "iOS 映射为打开设置"
+    },
+    "batterySettings": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      }
+    },
+    "openSchool": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "mobile"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "variants": [
+          {
+            "case": "mobile:true 打开学校窗口",
+            "required": [
+              "ok"
+            ]
+          },
+          {
+            "case": "mobile:false 读取课表",
+            "required": [
+              "rows",
+              "totalWeeks",
+              "semesterId"
+            ],
+            "optional": [
+              "studentProfile",
+              "exams",
+              "examFetchedAt",
+              "examError",
+              "bundle"
+            ]
+          }
+        ],
+        "notes": "mobile:false 与 capture/sync 同一语义（三别名，契约保留兼容）"
+      }
+    },
+    "openWebApp": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "url"
+        ],
+        "optional": [
+          "warmupUrl"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      }
+    },
+    "leaveRecordSync": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "variants": [
+          {
+            "case": "成功",
+            "required": [
+              "ok",
+              "fetchedAt",
+              "records"
+            ]
+          },
+          {
+            "case": "失败",
+            "required": [
+              "ok",
+              "code"
+            ]
+          }
+        ],
+        "nested": {
+          "records": {
+            "required": [
+              "id",
+              "status",
+              "statusText",
+              "statusId",
+              "typeText",
+              "reason",
+              "startAt",
+              "endAt",
+              "submittedAt",
+              "approver",
+              "number",
+              "durationDays"
+            ]
+          }
+        },
+        "notes": "startAt/endAt/statusText 为单一真源；web/leave-status.mjs 按此解析，status 只信文本不信 statusId"
+      }
+    },
+    "cancelRecordSync": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "variants": [
+          {
+            "case": "成功",
+            "required": [
+              "ok",
+              "fetchedAt",
+              "records"
+            ]
+          },
+          {
+            "case": "失败",
+            "required": [
+              "ok",
+              "code"
+            ]
+          }
+        ],
+        "nested": {
+          "records": {
+            "required": [
+              "id",
+              "status",
+              "statusText",
+              "statusId",
+              "typeText",
+              "reason",
+              "startAt",
+              "endAt",
+              "submittedAt",
+              "approver",
+              "number",
+              "durationDays"
+            ]
+          }
+        },
+        "notes": "与 leaveRecordSync 同形状；records 的 type 为 cancel。iOS 缺口 M1（必须先修）"
+      }
+    },
+    "calendarStatus": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "available",
+          "writable",
+          "permission",
+          "calendarId",
+          "lastSyncAt",
+          "lastEventCount",
+          "lastSemesterId"
+        ],
+        "optional": [
+          "lastDeleted",
+          "lastFailed"
+        ]
+      }
+    },
+    "calendarSync": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "semesterId",
+          "events"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok",
+          "written",
+          "deleted",
+          "failed",
+          "calendarId",
+          "lastSyncAt",
+          "lastEventCount"
+        ]
+      }
+    },
+    "calendarRemove": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok",
+          "removed",
+          "failed",
+          "calendarId"
+        ]
+      }
+    },
+    "calendarOpenSettings": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      }
+    },
+    "cancelRead": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      }
+    },
+    "capture": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "variants": [
+          {
+            "case": "rows 形状",
+            "required": [
+              "rows",
+              "totalWeeks",
+              "semesterId"
+            ],
+            "optional": [
+              "studentProfile",
+              "exams",
+              "examFetchedAt",
+              "examError"
+            ]
+          },
+          {
+            "case": "bundle 形状",
+            "required": [
+              "bundle"
+            ]
+          }
+        ],
+        "notes": "考试三字段 exams/examFetchedAt/examError 为 1.4.0 新增，必须向后兼容（D4）；无考试字段时 web 保留旧快照（web/jiaowu-exam.mjs）"
+      }
+    },
+    "sync": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "variants": [
+          {
+            "case": "rows 形状",
+            "required": [
+              "rows",
+              "totalWeeks",
+              "semesterId"
+            ],
+            "optional": [
+              "studentProfile",
+              "exams",
+              "examFetchedAt",
+              "examError"
+            ]
+          },
+          {
+            "case": "bundle 形状",
+            "required": [
+              "bundle"
+            ]
+          }
+        ],
+        "notes": "同 capture（三别名同一实现）"
+      }
+    },
+    "requestNotifications": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ],
+        "notes": "ok=当前是否允许（三端统一口径；Android 返系统开关，iOS 返授权结果）"
+      }
+    },
+    "notify": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "title",
+          "body"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ],
+        "notes": "ok=是否发出；channel 为平台特有"
+      }
+    },
+    "import": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "variants": [
+          {
+            "case": "已选择文件",
+            "required": [
+              "text"
+            ]
+          },
+          {
+            "case": "取消",
+            "required": [],
+            "allowEmpty": true
+          }
+        ]
+      }
+    },
+    "export": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "text"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "variants": [
+          {
+            "case": "已保存",
+            "required": [
+              "ok"
+            ]
+          },
+          {
+            "case": "取消",
+            "required": [],
+            "allowEmpty": true
+          }
+        ],
+        "notes": "成功 {ok:true}；用户取消回 {}（也是合法的空回包）"
+      }
+    },
+    "getDiagnostics": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [],
+        "opaque": true,
+        "notes": "诊断对象形状由 Diagnostics 冻结（web/diagnostics.mjs 消费）"
+      }
+    },
+    "recordDiagnostic": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "kind",
+          "httpStatus"
+        ],
+        "fields": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "http",
+              "cancelled",
+              "session",
+              "timeout",
+              "structure",
+              "network",
+              "other"
+            ]
+          },
+          "httpStatus": {
+            "type": "integer",
+            "min": 0,
+            "max": 599
+          }
+        }
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      },
+      "notes": "kind 白名单 7 项 + httpStatus 0..599（Android MainActivity 与 iOS BridgeDispatcher 同口径）"
+    },
+    "exportDiagnostics": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "filename",
+          "text"
+        ],
+        "fields": {
+          "filename": {
+            "type": "string",
+            "pattern": "江水课表-排查日志-[0-9-]+\\.txt"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 200000
+          }
+        }
+      },
+      "response": {
+        "kind": "object",
+        "variants": [
+          {
+            "case": "已保存",
+            "required": [
+              "ok"
+            ]
+          },
+          {
+            "case": "取消",
+            "required": [],
+            "allowEmpty": true
+          }
+        ],
+        "notes": "文件名与长度由原生再校验；取消回 {}"
+      }
+    },
+    "exportFile": {
+      "level": "MUST",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "mime",
+          "filename",
+          "base64"
+        ],
+        "fields": {
+          "mime": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "application/pdf",
+              "text/plain"
+            ]
+          },
+          "base64": {
+            "type": "string",
+            "maxLength": 44739244
+          }
+        }
+      },
+      "response": {
+        "kind": "object",
+        "variants": [
+          {
+            "case": "已保存",
+            "required": [
+              "ok"
+            ]
+          },
+          {
+            "case": "取消",
+            "required": [],
+            "allowEmpty": true
+          }
+        ],
+        "notes": "filename 后缀必须与 mime 一致；base64 解码 1..32MB，由生成本端与原生双端校验"
+      }
+    },
+    "logout": {
+      "level": "MUST",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ],
+        "notes": "清理面平台特有（Android 清小组件/WebStorage/Keystore/Cookie）"
+      }
+    },
+    "feedbackInfo": {
+      "level": "OPTIONAL",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "enabled",
+          "title",
+          "intro",
+          "url"
+        ]
+      }
+    },
+    "openFeedback": {
+      "level": "OPTIONAL",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      }
+    },
+    "updateInfo": {
+      "level": "OPTIONAL",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "enabled",
+          "currentVersion",
+          "skippedVersion",
+          "lastAutoCheckAt"
+        ]
+      }
+    },
+    "updateSettings": {
+      "level": "OPTIONAL",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "enabled"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "enabled"
+        ]
+      }
+    },
+    "updateCheck": {
+      "level": "OPTIONAL",
+      "webUsage": "active",
+      "payload": {
+        "required": [],
+        "optional": [
+          "manual"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok",
+          "updateAvailable",
+          "currentVersion",
+          "latestVersion",
+          "prerelease",
+          "notes",
+          "publishedAt",
+          "skipped"
+        ],
+        "optional": [
+          "errorCode",
+          "message"
+        ]
+      }
+    },
+    "updateDownload": {
+      "level": "OPTIONAL",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok",
+          "message"
+        ],
+        "optional": [
+          "errorCode",
+          "needPermission",
+          "installing"
+        ],
+        "notes": "内部含下载+校验+安装"
+      }
+    },
+    "updateCancel": {
+      "level": "OPTIONAL",
+      "webUsage": "active",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      }
+    },
+    "updateSkip": {
+      "level": "OPTIONAL",
+      "webUsage": "active",
+      "payload": {
+        "required": [
+          "version"
+        ]
+      },
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ]
+      }
+    },
+    "updateInstall": {
+      "level": "OPTIONAL",
+      "webUsage": "dead",
+      "deadReason": "per action-matrix.csv dead_no_web_caller=Y；web 无调用点",
+      "response": {
+        "kind": "object",
+        "required": [
+          "ok"
+        ],
+        "notes": "web 0 调用（死 API）；建议从契约删除或标保留"
+      }
+    }
+  },
+  "dynamicCallSites": [
+    {
+      "file": "web/app.mjs",
+      "expression": "call(action)",
+      "arg": "action",
+      "resolution": {
+        "callee": "readSchool",
+        "param": "action",
+        "defaultAction": "sync"
+      },
+      "note": "readSchool(action='sync') 的参数经 call(action) 上桥；调用点只有 readSchool('sync') / readSchool('openSchool') / readSchool('capture') 三个字面量。新增调度入口必须在 dynamicCallSites 登记，新增 action 必须先进契约表"
+    }
+  ],
+  "callbacks": [
+    {
+      "name": "onNativeResult",
+      "kind": "callback",
+      "direction": "native→web",
+      "level": "MUST",
+      "signature": "window.onNativeResult(id,{value|error})",
+      "web": {
+        "file": "web/bridge.mjs",
+        "contains": "globalThis.onNativeResult"
+      },
+      "notes": "每个请求 id 必须且只能回一次；未知 action 回 {error:'不支持的操作'}"
+    },
+    {
+      "name": "onNativeResume",
+      "kind": "callback",
+      "direction": "native→web",
+      "level": "MUST",
+      "signature": "window.onNativeResume()",
+      "web": {
+        "file": "web/app.mjs",
+        "contains": "globalThis.onNativeResume="
+      },
+      "notes": "回前台时调用；web 负责保存队列/权限/日历/更新/提醒刷新"
+    },
+    {
+      "name": "onNativeSystemThemeChanged",
+      "kind": "callback",
+      "direction": "native→web",
+      "level": "MUST",
+      "signature": "window.onNativeSystemThemeChanged(dark)",
+      "web": {
+        "file": "web/theme.mjs",
+        "contains": "onNativeSystemThemeChanged"
+      }
+    },
+    {
+      "name": "__dsjOnBack",
+      "kind": "callback",
+      "direction": "native→web",
+      "level": "MUST",
+      "signature": "window.__dsjOnBack()",
+      "web": {
+        "file": "web/app.mjs",
+        "contains": "globalThis.__dsjOnBack="
+      },
+      "notes": "返回 true 表示 JS 已消费；否则原生返回/退后台"
+    },
+    {
+      "name": "onNativeProgress",
+      "kind": "callback",
+      "direction": "native→web",
+      "level": "MUST",
+      "signature": "window.onNativeProgress(id,text)",
+      "web": {
+        "file": "web/app.mjs",
+        "contains": "onNativeProgress"
+      },
+      "notes": "学校读取阶段文案；iOS 缺口 S4"
+    },
+    {
+      "name": "onLeaveServiceReturn",
+      "kind": "callback",
+      "direction": "native→web",
+      "level": "MUST",
+      "signature": "window.onLeaveServiceReturn()",
+      "web": {
+        "file": "web/app.mjs",
+        "contains": "globalThis.onLeaveServiceReturn="
+      },
+      "notes": "请假 WebView 返回时调用；iOS 缺口 S4"
+    },
+    {
+      "name": "onNativeUpdateProgress",
+      "kind": "callback",
+      "direction": "native→web",
+      "level": "OPTIONAL",
+      "signature": "window.onNativeUpdateProgress(payload)",
+      "web": {
+        "file": "web/app.mjs",
+        "contains": "onNativeUpdateProgress"
+      },
+      "notes": "仅更新能力平台需要；iOS 若不做应用内更新可不实现"
+    },
+    {
+      "name": "Android.systemDarkMode",
+      "kind": "platform-interface",
+      "direction": "web→native",
+      "level": "MUST",
+      "platform": "android",
+      "signature": "window.Android.systemDarkMode() → boolean",
+      "web": {
+        "file": "web/theme.mjs",
+        "contains": "systemDarkMode"
+      },
+      "notes": "同步返回 bool；iOS 无此接口（主题变化走 onNativeSystemThemeChanged）"
+    }
+  ],
+  "platformInterfaces": [
+    {
+      "name": "Android.post",
+      "kind": "platform-interface",
+      "direction": "web→native",
+      "level": "PLATFORM",
+      "platform": "android",
+      "signature": "window.Android.post(action,json)",
+      "web": null,
+      "status": "removed-in-v1.4.1",
+      "notes": "v1.4.0 由 web/background.mjs:8 使用；v1.4.1 commit 05bb2ae 删除了 web/background.* 与 runtimeStatus，但 android/.../BackgroundCheck.java:8 仍加载 https://app.local/background.html 并等待 post('ready')——静态不一致（未真机验证，本任务不修复）"
+    }
+  ],
+  "androidDispatcher": {
+    "file": "android/app/src/main/java/cn/local/tomorrow/MainActivity.java",
+    "baselineCaseCount": 44,
+    "removedInV141": [
+      "runtimeStatus"
+    ],
+    "note": "v1.4.1 commit 05bb2ae 删除了 runtimeStatus 分发分支（action-matrix.csv 基于 v1.4.0 的 45 行）；Android 当前 44 个 case = 45 action − runtimeStatus"
+  }
+}
