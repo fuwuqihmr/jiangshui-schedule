@@ -16,7 +16,7 @@ const pkgVersion = pkg.version;
 const pkgVersionCode = pkg.android?.versionCode;
 
 test('package.json 是版本唯一真源：version 与 android.versionCode 均存在且格式有效', () => {
-  assert.match(pkgVersion, /^\d+\.\d+\.\d+$/, 'version 必须是 主.次.修订 形式（不带前导 v）');
+  assert.match(pkgVersion, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.]*)?$/, 'version 必须是 主.次.修订 形式（不带前导 v），允许 -rcN/-betaN 预发布后缀（对齐 RELEASE-POLICY 的 rc/beta 流程）');
   assert.equal(Number.isInteger(pkgVersionCode), true, 'package.json 必须提供整数 android.versionCode');
   assert.ok(pkgVersionCode >= 1 && pkgVersionCode <= 2147483647, 'android.versionCode 必须在 1..2147483647');
 });
