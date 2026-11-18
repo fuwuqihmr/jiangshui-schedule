@@ -220,7 +220,7 @@ final class ScheduleWidgetData {
         list.removeIf(item -> item.localActivity && list.stream().anyMatch(other ->
                 other != item && !other.localActivity && !other.cancelled &&
                 other.start.compareTo(item.end) < 0 && other.end.compareTo(item.start) > 0));
-        Collections.sort(list, Comparator.comparing(x -> x.start));
+        Collections.sort(list, Comparator.comparing((Item x) -> x.start).thenComparing(x -> x.key == null ? "" : x.key));
         return list;
     }
 
@@ -400,7 +400,7 @@ final class ScheduleWidgetData {
                     if (!date.equals(map.optString("date"))) continue;
                     String candidate = map.optString("fromDate");
                     int candidateDay = LocalDate.parse(candidate).getDayOfWeek().getValue();
-                    if (candidateDay == 7 || (candidateDay >= 1 && candidateDay <= 4)) { origin = candidate; break; }
+                    if ((candidateDay == 7 || (candidateDay >= 1 && candidateDay <= 4)) && inSemesterWeeks(snapshot, candidate)) { origin = candidate; break; }
                 }
                 if (!date.equals(origin)) break;
             }
@@ -530,5 +530,16 @@ final class ScheduleWidgetData {
             result.append(c);
         }
         return result.toString();
+    }
+
+    /**
+     * 调休源日必须落在学期周次 1..weeks 内（D4）：与 web/study.mjs STD-005 的 origin 周次校验一致，
+     * 避免学期外调休源日让小组件多生成一条 App 不显示的晚自习。
+     */
+    private static boolean inSemesterWeeks(JSONObject snapshot, String date) throws Exception {
+        JSONObject semester = snapshot.getJSONObject("semester");
+        LocalDate start = LocalDate.parse(semester.getString("startDate"));
+        int week = (int) Math.floorDiv(ChronoUnit.DAYS.between(start, LocalDate.parse(date)), 7) + 1;
+        return week >= 1 && week <= semester.optInt("weeks", 0);
     }
 }
