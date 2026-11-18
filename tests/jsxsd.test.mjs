@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {PERIOD_TIMES,parseWeekList,parseWeekSpec,parseSegments,buildBundle,normalizeJsxsd} from '../web/jsxsd.mjs';import {addDays,sourceDay,createState,applySnapshot} from '../web/core.mjs';import {normalizeSchool} from '../web/school.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';import {PERIOD_TIMES,SEMESTER_MONDAYS,parseWeekList,parseWeekSpec,parseSegments,buildBundle,normalizeJsxsd,supportedSemesters,semesterMapping,semesterCalendarError,semesterMonday} from '../web/jsxsd.mjs';import {addDays,sourceDay,createState,applySnapshot} from '../web/core.mjs';import {normalizeSchool} from '../web/school.mjs';
 const MONDAY='2026-08-31';
 function rows(){return [
  {kc_mc:'测试课程甲',jg0101mc:'教师甲',sktime:'周二第3、4节{第5-16周}(全部);周四第7、8节{第5-16周}(全部)',skddmc:'B204;B101',jx0404id:'plan-A',kch:'K1'},
@@ -98,4 +98,91 @@ test('同门课程有已排时段与未排时段时保留两部分，仍拒绝�
  const snapshot=normalizeJsxsd(input,{monday:MONDAY,totalWeeks:25});assert.equal(snapshot.rules.length,1);assert.equal(snapshot.unscheduled.length,1);assert.equal(snapshot.unscheduled[0].room,'B202');
  for(const value of ['周三第9xx节{第4周}','第四周',[],42])assert.throws(()=>buildBundle([{...input[0],sktime:value}],{monday:MONDAY,totalWeeks:25}));
  assert.throws(()=>buildBundle([{...input[0],sktime:''}],{monday:MONDAY,totalWeeks:25}),/全学期无课程/);
+});
+
+// ── B1（1.5.0 决策 D-4）学期日历映射：可操作提示、诊断字段与维护流程 ─────────────
+test('已登记学期不受影响：映射命中，buildBundle/normalizeJsxsd 与显式周一结果一致',()=>{
+ assert.ok(supportedSemesters().includes('2026-2027-1'),'已实测学期必须保留在登记表');
+ assert.deepEqual(supportedSemesters(),Object.keys(SEMESTER_MONDAYS),'诊断列表与登记表同源');
+ assert.deepEqual(semesterMapping('2026-2027-1'),{semesterId:'2026-2027-1',registered:true,known:true,monday:MONDAY,supported:Object.keys(SEMESTER_MONDAYS)});
+ assert.equal(semesterMonday('2026-2027-1'),MONDAY);
+ assert.equal(semesterMonday(' 2026-2027-1 '),MONDAY,'首尾空白不影响命中');
+ assert.deepEqual(buildBundle(rows(),{monday:semesterMonday('2026-2027-1'),totalWeeks:25,semesterId:'2026-2027-1'}),buildBundle(rows(),{monday:MONDAY,totalWeeks:25,semesterId:'2026-2027-1'}),'经映射解析与显式周一完全一致');
+ const viaMapping=normalizeJsxsd(rows(),{monday:semesterMonday('2026-2027-1'),totalWeeks:25,semesterId:'2026-2027-1'});
+ assert.equal(viaMapping.semester.startDate,MONDAY);
+ assert.equal(viaMapping.semester.weeks,25);
+ assert.deepEqual(sourceDay(viaMapping,'2026-10-13').map(r=>r.name).sort(),sourceDay(normalizeJsxsd(rows(),{monday:MONDAY,totalWeeks:25,semesterId:'2026-2027-1'}),'2026-10-13').map(r=>r.name).sort());
+});
+
+test('未登记学期：错误升级为可操作提示（说明未登记 + 补映射位置 + 已支持学期 + 维护流程），旧文案不再出现',()=>{
+ for(const semesterId of ['2026-2027-2','2027-2028-1']){
+  const error=semesterCalendarError(semesterId);
+  assert.equal(error.code,'semester-calendar');
+  assert.deepEqual(error.mapping,{semesterId,registered:false,known:false,monday:null,supported:Object.keys(SEMESTER_MONDAYS)});
+  assert.ok(error.message.includes('当前已支持学期：'+Object.keys(SEMESTER_MONDAYS).map(id=>id+'（第一周 '+SEMESTER_MONDAYS[id]+'）').join('、')),'提示必须列出全部已支持学期');
+  for(const fragment of ['该学期尚未登记日历映射','学期 ID：'+semesterId,'已保留旧课表','web/jsxsd.mjs 的 SEMESTER_MONDAYS','补充该学期第一周周一（YYYY-MM-DD 且为周一）','node --test tests/jsxsd.test.mjs'])
+   assert.ok(error.message.includes(fragment),'可操作提示缺少「'+fragment+'」：'+error.message);
+  assert.equal(error.message.includes('学期开始日期未知'),false,'不得回退为无从下手的旧文案');
+  assert.throws(()=>semesterMonday(semesterId),thrown=>thrown.code==='semester-calendar'&&thrown.message===error.message);
+ }
+});
+
+test('登记值不是合法周一时按未命中处理，并提示修正（防御维护失误）',()=>{
+ const id='2099-2100-1';
+ SEMESTER_MONDAYS[id]='2099-09-01'; // 周二，非法
+ try{
+  assert.equal(semesterMapping(id).registered,true);
+  assert.equal(semesterMapping(id).known,false);
+  const error=semesterCalendarError(id);
+  assert.match(error.message,/该学期已登记但日历映射无效/);
+  assert.match(error.message,/修正该学期第一周周一/);
+  assert.throws(()=>semesterMonday(id),/登记值必须是 YYYY-MM-DD 且为周一/);
+ }finally{delete SEMESTER_MONDAYS[id];}
+ assert.equal(semesterMapping(id).registered,false,'测试后恢复登记表');
+});
+
+test('buildBundle 学期起始缺失/非法分别给出可操作提示，未映射时不臆造日期',()=>{
+ assert.throws(()=>buildBundle(rows(),{totalWeeks:25,semesterId:'2026-2027-2'}),error=>error.code==='semester-calendar'&&error.message.includes('SEMESTER_MONDAYS'));
+ assert.throws(()=>buildBundle(rows(),{totalWeeks:25}),error=>error.code==='semester-calendar'&&error.message.includes('未提供学期 ID'));
+ assert.throws(()=>buildBundle(rows(),{monday:'2026-09-01',totalWeeks:25,semesterId:'2026-2027-1'}),/学期开始日期无效：第一周周一必须是周一/);
+ assert.throws(()=>buildBundle(rows(),{monday:'',totalWeeks:25,semesterId:'2026-2027-2'}),error=>error.code==='semester-calendar');
+ assert.equal(buildBundle(rows(),{monday:MONDAY,totalWeeks:25,semesterId:'2026-2027-1'}).weeks.length,25,'已登记学期照常生成');
+});
+
+test('诊断字段 semesterMapping：当前学期、登记与命中、已支持学期，且从不抛错',()=>{
+ const supported=Object.keys(SEMESTER_MONDAYS);
+ assert.deepEqual(semesterMapping('2026-2027-2'),{semesterId:'2026-2027-2',registered:false,known:false,monday:null,supported});
+ assert.deepEqual(semesterMapping(null),{semesterId:'',registered:false,known:false,monday:null,supported});
+ assert.equal(semesterMapping(undefined).semesterId,'');
+ assert.equal(semesterMapping(undefined).known,false);
+ assert.equal(semesterMapping(42).registered,false);
+ assert.equal(semesterMapping('2026-2027-1').known,true);
+ assert.equal(semesterMapping('2026-2027-1').monday,MONDAY);
+});
+
+test('应用接线：读取结果先解析学期映射再应用快照；未映射失败不替换旧课表',()=>{
+ const old=createState(normalizeSchool(buildBundle(rows(),{monday:MONDAY,totalWeeks:25,semesterId:'2026-2027-1'})));
+ const snapshotBefore=old.snapshot;
+ const beforeDay=sourceDay(old.snapshot,'2026-10-13').length;
+ // 与 app.mjs readSchool 相同顺序：先 semesterMonday()，再 buildBundle/normalizeSchool，最后才 applySnapshot
+ const applyRead=result=>applySnapshot(old,normalizeSchool(buildBundle(result.rows,{monday:semesterMonday(result.semesterId),totalWeeks:result.totalWeeks,semesterId:result.semesterId})));
+ assert.throws(()=>applyRead({semesterId:'2026-2027-2',totalWeeks:25,rows:rows()}),error=>error.code==='semester-calendar');
+ assert.equal(old.snapshot,snapshotBefore,'导入失败必须原样保留旧课表快照');
+ assert.equal(sourceDay(old.snapshot,'2026-10-13').length,beforeDay,'旧课表内容不变');
+ const next=applyRead({semesterId:'2026-2027-1',totalWeeks:25,rows:rows()});
+ assert.equal(next.snapshot.semester.startDate,MONDAY,'已登记学期同路径可正常更新');
+ assert.notEqual(next.snapshot,snapshotBefore);
+
+ // app.mjs 接线（app.mjs 依赖 DOM，无法 import，此处按仓库既有做法做源码断言）
+ const app=readFileSync(new URL('../web/app.mjs',import.meta.url),'utf8');
+ assert.ok(app.includes("import {buildBundle,SEMESTER_MONDAYS,semesterMonday,PERIOD_TIMES} from './jsxsd.mjs';"),'import 行应引入可操作映射解析');
+ assert.ok(app.includes('monday:semesterMonday(result.semesterId)'),'导入前必须走可操作映射解析');
+ assert.equal(app.includes('SEMESTER_MONDAYS[result.semesterId]'),false,'不得回退到原始表查找');
+ assert.ok(app.includes("e.code==='semester-calendar'?(e.mapping?.registered?'该学期日历映射无效':'该学期尚未登记日历映射')"),'失败状态条展示可操作标题');
+ const readSchool=/async function readSchool\([\s\S]*?\n\}/.exec(app)?.[0]||'';
+ assert.ok(readSchool.length>0,'找不到 readSchool');
+ assert.ok(readSchool.indexOf('semesterMonday(result.semesterId)')<readSchool.indexOf('applySnapshot(state,result.snapshot)'),'必须先解析映射再应用快照（失败才能保留旧课表）');
+ assert.ok(app.includes('function semesterCalendarStat(){'),'设置页诊断字段');
+ assert.ok(app.includes("' · 日历映射已登记（第一周 '"),'诊断行展示映射命中');
+ assert.ok(app.includes("'日历映射未登记 · 第一周 '"),'诊断行展示未登记');
 });

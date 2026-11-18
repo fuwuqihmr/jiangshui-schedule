@@ -2,10 +2,10 @@
 // 数据来源为实测接口 /jsxsd/xskb/xskb_list.do?viweType=1&needData=1 的 JSON rows。
 // 字段：kc_mc 课程名 / jg0101mc 教师 / sktime 上课时间 / skddmc 上课地点（分号对应段）
 // sktime 段可用单节、枚举节次或范围，如第11节、第9、10、11节、第1-4节；段间以 ; 分隔。
-import {validateSnapshot, addDays, weekday} from './core.mjs';
+import {validateSnapshot, addDays, weekday, validDate} from './core.mjs';
 
-// 实测校历：2026-2027-1 学期第一周周一（与样例课表、手机端第 6 周显示一致）。
-// 其他学期未实测，不臆造：解析时按周次×7 天从该起点展开。
+// 实测校历：2026-2027-1 学期第一周周一（与样例课表、手机端第 6 周显示一致）；其他学期未实测，不臆造日期。
+// 补映射维护流程：本表加一行 '<学期ID>':'第一周周一'（须为周一）→ node --test tests/jsxsd.test.mjs → 真机读取该学期核对周次 → 发版；详见 work/docs/phase-1.5.0/实现报告-B1学期映射.md。
 export const SEMESTER_MONDAYS = {'2026-2027-1':'2026-08-31'};
 
 const DAY = {'一':1,'二':2,'三':3,'四':4,'五':5,'六':6,'日':7};
@@ -96,7 +96,7 @@ export function unscheduledTime(value,totalWeeks){
 export function buildBundle(rows, {semesterId, monday, totalWeeks, slotTimes}={}){
   // rows: 接口 data 数组；返回 normalizeSchool 兼容 bundle
   if(!Array.isArray(rows)||!rows.length)throw Error('学校课表为空，保留旧课表');
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(monday||'')||weekday(monday)!==1)throw Error('学期开始日期未知');
+  if(monday==null||monday==='')throw semesterCalendarError(semesterId); if(!semesterMondayValid(monday))throw Error('学期开始日期无效：第一周周一必须是周一（YYYY-MM-DD），已保留旧课表');
   const weeks=[];
   const n=Number(totalWeeks);
   if(!Number.isInteger(n)||n<1||n>60)throw Error('教学周结构不完整');
@@ -162,4 +162,43 @@ export function normalizeJsxsd(rows, opts={}){
   }
   if(!rules.length)throw Error('全学期无课程：需要人工确认，未覆盖已有课表');
   return validateSnapshot({schemaVersion:1,semester,source:{kind:'school',label:opts.sourceLabel||'学校教务系统 · 本机读取',exportedAt:new Date().toISOString().slice(0,10)},rules,exceptions,remaps:[],closedDates:[],unscheduled:bundle.unscheduled});
+}
+
+// ── 学期日历映射（SEMESTER_MONDAYS）诊断与可操作提示 ────────────────────────────
+// 维护时只需在 SEMESTER_MONDAYS 增加一行；以下函数把「未登记」从无从下手的
+// 「学期开始日期未知」升级为包含补映射位置、当前已支持学期与维护步骤的提示。
+const SEMESTER_MAP_LOCATION = 'web/jsxsd.mjs 的 SEMESTER_MONDAYS';
+const semesterIdText = value => typeof value === 'string' ? value.trim() : '';
+const semesterMondayValid = value => validDate(value) && weekday(value) === 1;
+
+/** 已登记日历映射的学期 ID（按登记顺序）。 */
+export function supportedSemesters(){return Object.keys(SEMESTER_MONDAYS);}
+
+/** 学期日历映射诊断（不抛错）：known 仅在已登记且登记值是合法周一时为 true。 */
+export function semesterMapping(semesterId){
+ const id=semesterIdText(semesterId);
+ const registered=!!id&&Object.prototype.hasOwnProperty.call(SEMESTER_MONDAYS,id);
+ const monday=registered&&semesterMondayValid(SEMESTER_MONDAYS[id])?SEMESTER_MONDAYS[id]:null;
+ return {semesterId:id,registered,known:monday!==null,monday,supported:supportedSemesters()};
+}
+
+/** 未登记/登记无效学期的可操作导入错误：code='semester-calendar'，mapping 字段携带诊断信息。 */
+export function semesterCalendarError(semesterId){
+ const mapping=semesterMapping(semesterId);
+ const supported=Object.keys(SEMESTER_MONDAYS).map(id=>id+'（第一周 '+SEMESTER_MONDAYS[id]+'）').join('、')||'（暂无）';
+ const semesterPart=mapping.semesterId?('学期 ID：'+mapping.semesterId):'未提供学期 ID';
+ const head=mapping.registered
+  ? '该学期已登记但日历映射无效（'+semesterPart+'，登记值必须是 YYYY-MM-DD 且为周一）'
+  : '该学期尚未登记日历映射（'+semesterPart+'）';
+ const error=Error(head+'，无法生成课表，已保留旧课表。请在 '+SEMESTER_MAP_LOCATION+' 中'+(mapping.registered?'修正':'补充')+"该学期第一周周一（YYYY-MM-DD 且为周一）；当前已支持学期："+supported+'。维护步骤见该文件顶部注释，改完运行 node --test tests/jsxsd.test.mjs。');
+ error.code='semester-calendar';
+ error.mapping=mapping;
+ return error;
+}
+
+/** 学期 → 第一周周一；未登记时抛出可操作错误（调用方无需再判断 undefined）。 */
+export function semesterMonday(semesterId){
+ const mapping=semesterMapping(semesterId);
+ if(mapping.known)return mapping.monday;
+ throw semesterCalendarError(semesterId);
 }

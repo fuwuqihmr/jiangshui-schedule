@@ -650,3 +650,28 @@ export function getLeaveRecordsProvider(mode = LEAVE_PROVIDER_MODE) {
   if (mode === 'school') return schoolLeaveRecordsProvider;
   return sampleLeaveRecordsProvider;
 }
+
+// 一次学校假条刷新（请假/续假回包）与上一次缓存的合并规则（1.5.0 task-69 / D-6 ①）。
+// 原生只在续假抓取成功时把续假记录并进 leaveRecordSync 回包；续假失败、12s 超预算或未打开续假页时
+// 回包只有请假记录。为免用户看到上次成功同步的续假记录暂时消失，本次结果不含续假记录时保留旧续假记录
+// （retainedRenew 计数供调用方写诊断）；一旦本次结果带有续假记录就按本次结果整体替换。
+// 请假：回包成功即本次为准，旧请假记录一律不保留（既有行为）。
+// 销假：由独立 refreshCancelStatus 维护、请假回包不含销假记录，旧销假记录保留（既有行为）。
+// 返回新数组、不修改入参；按 id 去重，本次结果优先。
+export function mergeLeaveRecords(previous, fresh) {
+  const prevList = Array.isArray(previous) ? previous.filter(record => record && typeof record === 'object') : [];
+  const freshList = Array.isArray(fresh) ? fresh.filter(record => record && typeof record === 'object') : [];
+  const records = [...freshList];
+  const seen = new Set(records.map(record => record.id));
+  const renewFetched = records.some(record => record.type === 'renew');
+  let retainedRenew = 0;
+  for (const record of prevList) {
+    if (record.type !== 'cancel' && record.type !== 'renew') continue;
+    if (record.type === 'renew' && renewFetched) continue;
+    if (record.id != null && seen.has(record.id)) continue;
+    records.push(record);
+    if (record.id != null) seen.add(record.id);
+    if (record.type === 'renew') retainedRenew += 1;
+  }
+  return {records, retainedRenew};
+}
