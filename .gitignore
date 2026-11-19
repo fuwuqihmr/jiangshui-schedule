@@ -32,6 +32,7 @@
 !/desktop/**
 !/android/**
 !/harmony/**
+!/ios/**
 !/assets/**
 !/tests/**
 !/tools/**
@@ -86,6 +87,15 @@ tools/jsxsd-data.html
 tools/jsxsd-week.html
 tools/jsxsd-kb.html
 tools/jsxsd-rows.json
+# Xcode / iOS 工程产物（2026-11-19 接入 ios/ 时新增）
+# 说明：ios/ 已是白名单放行，这里用后写优先规则把 Xcode 本地产物挡在门外。
+xcuserdata/
+DerivedData/
+ios/build-out/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
 # 系统与编辑器杂项
 .DS_Store
 Thumbs.db

@@ -33,6 +33,15 @@
 /android/**
 /harmony/**
 /harmony/tools/resource-requests/*.json
+
+# iOS 壳工程（WKWebView 壳 + 原生服务 + 文档/测试/工具；
+# project.yml 以 `- path: ../web` 复用仓内共享 web 层，不复制 web 源码）
+/ios/**
+# iOS 二次排除：Xcode 用户数据与本地构建输出不入库（与 .gitignore 同步）
+!/ios/**/xcuserdata/**
+!/ios/**/*.xcuserstate
+!/ios/**/*.xcscmblueprint
+!/ios/build-out/**
 !/harmony/README-Harmony.md
 !/harmony/deveco-setup.md
 !/harmony/**/NAV.md

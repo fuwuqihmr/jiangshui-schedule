@@ -1,0 +1,802 @@
+diff --git a/ios/Jiangshui/App/AppEnvironment.swift b/ios/Jiangshui/App/AppEnvironment.swift
+index f07ce8d214cb75fb0f4d8148b8856c10878d5964..318a9b959660d07514501069cab2d57b72b23820 100644
+--- a/ios/Jiangshui/App/AppEnvironment.swift
++++ b/ios/Jiangshui/App/AppEnvironment.swift
+@@ -28,9 +28,15 @@ final class ShellModel: ObservableObject {
+             presenting: { PresentingViewControllerHolder.shared.topViewController },
+             school: school
+         )
++        let host = WebHost(services: services)
++        // S 档：请假页关闭回到主页面时刷新假条（对应 Android hideWebApp 的 onLeaveServiceReturn）。
++        // weak host：ShellModel 已强持有 host，这里不要形成循环引用。
++        school.onLeaveServiceReturn = { [weak host] in
++            host?.notifyLeaveServiceReturn()
++        }
+         self.school = school
+         self.services = services
+-        self.host = WebHost(services: services)
++        self.host = host
+         // 服务装配完成后注册后台刷新并做一次提醒对账；此时通知权限可能还没查回来，
+         // ClassReminderService 会先清理过期通知、保留现有 pending，等权限回调后再补排。
+         BackgroundReminderScheduler.shared.configure(services: services)
+diff --git a/ios/Jiangshui/School/SchoolProvider.swift b/ios/Jiangshui/School/SchoolProvider.swift
+index d0916bc07766c38408d5572833f6c4ecd9e40859..0571ceea34edcf2506abbaf1be468e240b16e80c 100644
+--- a/ios/Jiangshui/School/SchoolProvider.swift
++++ b/ios/Jiangshui/School/SchoolProvider.swift
+@@ -34,12 +34,24 @@ import Foundation
+ // 本机 Windows 无 Xcode/swiftc，未编译验证；真机验证项见 ios/docs/P2-SCHOOL-READ.md。
+ /// 学校能力的大门：网页只能通过这里请求打开学校页面、读取课表或同步假条。
+ /// 它不直接碰网页内容，只把任务交给后面的浏览器容器和读取状态机。
+-public final class SchoolProvider: SchoolProviding {
++public final class SchoolProvider: SchoolProviding, SchoolReadProgressReporting {
+ 
+     // P1 的教务桩文案。P2 起不再返回它，保留常量是为了让静态门禁能断言它已从实现路径消失。
+     // P1 的占位文案；P2 起真实实现不再返回它，只留作静态门禁的检查标记。
+     public static let readUnavailableMessage = "iOS 端教务读取将在下一阶段提供"
+ 
++    /// 读取阶段进度回调（S 档 onNativeProgress）：BridgeDispatcher 在 capture 前挂上、结束后摘掉。
++    /// 直接转给 SchoolReadController，保证容器顶栏与网页显示同一句阶段文案。
++    public var onReadProgress: ((String) -> Void)? {
++        get { return controller.onProgress }
++        set { controller.onProgress = newValue }
++    }
++
++    /// 从请假服务页回到网页主界面（S 档 onLeaveServiceReturn）；由 App 装配处接到 WebHost。
++    public var onLeaveServiceReturn: (() -> Void)?
++    /// 注销/清理时不发 onLeaveServiceReturn（对齐 Android logout 走 destroyWebApp，不发该回调）。
++    private var suppressLeaveServiceReturn = false
++
+     // 当前使用的学校浏览器；同一时间最多一个，避免两个页面抢同一份登录 Cookie。
+     private var host: SchoolWebViewHost?
+     // capture 从校验到 controller.start 之间可能有一次 0.4s 的重试等待，
+@@ -66,6 +78,8 @@ public final class SchoolProvider: SchoolProviding {
+         try performOnMain {
+             // 对应 Android openSchool 里的 hideWebApp()：切回学校页前先结束请假状态机，
+             // 否则它的 30s 慢加载计时和重定向标志会在学校页上继续生效。
++            // Android hideWebApp() 会顺带发 onLeaveServiceReturn（MainActivity.java:363），这里同语义。
++            self.notifyLeaveServiceReturnIfVisible()
+             self.leaveController.close()
+             guard let presenter = SchoolWebViewHost.topPresenter() else {
+                 throw BridgeFailure.message("学校页面暂时无法打开，请稍后重试")
+@@ -216,7 +230,15 @@ public final class SchoolProvider: SchoolProviding {
+             self.controller.cancel()
+             self.leaveController.close()
+             self.leaveRecords.clearSession()
+-            _ = self.host?.hide(animated: false)
++            if let existing = self.host {
++                // 注销清理不触发 onLeaveServiceReturn：Android logout 走 destroyWebApp，不发该回调。
++                // 只有请假页真的挂在屏幕上时 hide 才会回调 onDismissed，才需要这个 suppress 标记。
++                let attached = existing.presentingViewController != nil || existing.parent != nil
++                self.suppressLeaveServiceReturn = attached && existing.mode == .leaveApp && existing.isUserVisible
++                _ = existing.hide(animated: false)
++            } else {
++                self.suppressLeaveServiceReturn = false
++            }
+             self.host = nil
+         }
+         if Thread.isMainThread {
+@@ -323,6 +345,12 @@ public final class SchoolProvider: SchoolProviding {
+             guard let self = self else { return }
+             if created?.mode == .leaveApp {
+                 self.leaveController.close()
++                // S 档 onLeaveServiceReturn：请假页真的被用户关掉时，让 web 立刻刷新假条状态。
++                // 注销清理走 reset() 的 suppress 标记，与 Android（logout 不经过 hideWebApp）一致。
++                if self.suppressLeaveServiceReturn == false {
++                    self.onLeaveServiceReturn?()
++                }
++                self.suppressLeaveServiceReturn = false
+             } else {
+                 _ = self.controller.cancel()
+             }
+@@ -332,7 +360,16 @@ public final class SchoolProvider: SchoolProviding {
+         return created
+     }
+ 
+-    // UI 操作必须在主线程；桥接层大概率已在主线程，这里只做防御，不制造额外线程语义。
++    // MARK: - 回调与线程
++
++    /// 用户离开请假页回到网页主界面时通知 web（对应 Android hideWebApp 的 onLeaveServiceReturn）。
++    /// 只在请假容器确实被用户看着时发；注销清理由 suppressLeaveServiceReturn 拦住。
++    private func notifyLeaveServiceReturnIfVisible() {
++        guard suppressLeaveServiceReturn == false else { return }
++        guard let host = host, host.mode == .leaveApp, host.isUserVisible else { return }
++        onLeaveServiceReturn?()
++    }
++
+     /// UIKit/WebKit 必须在主线程操作；调用方已在主线程就直接执行，否则同步切过去。
+     private func performOnMain(_ work: () throws -> Void) throws {
+         if Thread.isMainThread {
+diff --git a/ios/Jiangshui/School/SchoolReadController.swift b/ios/Jiangshui/School/SchoolReadController.swift
+index b796d39e579d82d74fa012a063cf8b9bbc08bf77..aadf0d908e50c6201c9cf3561c659e000151c25e 100644
+--- a/ios/Jiangshui/School/SchoolReadController.swift
++++ b/ios/Jiangshui/School/SchoolReadController.swift
+@@ -44,6 +44,8 @@ final class SchoolReadController {
+     private static let portalRetryLimit = 20                    // inspectPortal 的 20 次
+     // 每次找入口间隔 400 毫秒；20 次大约 8 秒。
+     private static let portalRetryInterval: TimeInterval = 0.4  // 400ms
++    // 考试段失败类别白名单：与 Android SchoolClient.java:79 的 5 类逐一相同，未知类别归 other。
++    private static let examErrorKinds: Set<String> = ["http", "session", "timeout", "format", "other"]
+ 
+     // 借来干活的浏览器；用弱引用，避免两者互相抓住不放导致内存泄漏。
+     private weak var host: SchoolWebViewHost?
+@@ -88,6 +90,11 @@ final class SchoolReadController {
+     /// 需要用户登录时拨打这个电话，让 provider 把隐形页面变成可见页面。
+     var onNeedsVisiblePresentation: (() -> Void)?
+ 
++    /// 读取阶段文案回调（S 档 window.onNativeProgress）。
++    /// 与容器顶栏的 note 同时更新：网页看到的文案与学校页顶栏完全一致，不另造文案。
++    /// 由 SchoolProvider 接给桥接层；读取结束（成功/失败/取消）后桥接层会摘掉。
++    var onProgress: ((String) -> Void)?
++
+     // MARK: - 入口（对应 SchoolClient.start）
+ 
+     /// 开始一次读取；host 是浏览器，completion 是读完后回电。
+@@ -539,6 +546,23 @@ final class SchoolReadController {
+         if let profile = profile {
+             payload["studentProfile"] = profile
+         }
++        // 考试三字段透传（S 档）：读取脚本 web/school-reader.js 已把考试列表/时间/失败类别带在结果里，
++        // 这里与 Android SchoolClient.java:78-80 逐字段对齐——存在才透传，失败类别做 5 类白名单归一；
++        // 考试的规范化、容错与“无数据保留旧快照”全部留给共享 web 层（web/jiaowu-exam.mjs），原生不做业务解析。
++        if let exams = result.optArray("exams") {
++            payload["exams"] = exams
++        }
++        let examFetchedAt = result.optString("examFetchedAt")
++        if examFetchedAt.isEmpty == false {
++            payload["examFetchedAt"] = examFetchedAt
++        }
++        var examError = result.optString("examError")
++        if examError.isEmpty == false {
++            if Self.examErrorKinds.contains(examError) == false {
++                examError = "other"
++            }
++            payload["examError"] = examError
++        }
+         persistSessionCookies()
+         finish(.success(payload))
+     }
+@@ -715,8 +739,10 @@ final class SchoolReadController {
+     }
+ 
+     /// 更新浏览器顶部的提示文字；host 不在了就什么也不做。
++    /// S 档：同一句阶段文案同时交给网页（window.onNativeProgress），由桥接层按当前请求 id 转发。
+     private func note(_ text: String) {
+         host?.updateNote(text)
++        onProgress?(text)
+     }
+ 
+     // MARK: - 工具
+diff --git a/ios/Jiangshui/School/SchoolReadProgressReporting.swift b/ios/Jiangshui/School/SchoolReadProgressReporting.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..0a65808ec3e7b3bc0e74cfd0f099a4ba27bdba7a
+--- /dev/null
++++ b/ios/Jiangshui/School/SchoolReadProgressReporting.swift
+@@ -0,0 +1,14 @@
++// 【这个文件干什么】给“学校读取”加一个可选的进度回调能力，让网页能显示“正在检查会话/正在读课表”。
++// 【什么时候会用到它】BridgeDispatcher 启动一次 capture 时挂上，读取结束（成功/失败/取消）后摘掉。
++// 【它和谁配合】SchoolProvider 实现它（把回调转给 SchoolReadController），BridgeDispatcher 用 as? 探测。
++// 【小白提示】这是“可插拔”的小接口：测试替身不实现它也不会坏，只是网页看不到阶段文案。
++import Foundation
++
++/// 学校读取阶段进度回调能力（S 档，对应 Android MainActivity.progress(String)）。
++///
++/// 不放进 Lead 写定的 `ServiceProtocols.swift`（那份契约不允许改签名），而是单独的可选能力：
++/// 桥接层 `services.school as? SchoolReadProgressReporting` 探测，只有真正的 SchoolProvider 会实现。
++public protocol SchoolReadProgressReporting: AnyObject {
++    /// 读取阶段文案回调；nil 表示当前没有读取在等进度（不再转发）。
++    var onReadProgress: ((String) -> Void)? { get set }
++}
+diff --git a/ios/Jiangshui/Web/BridgeDispatcher.swift b/ios/Jiangshui/Web/BridgeDispatcher.swift
+index 491442da34da726f8b63ac23aaeed81dfe17240b..766a9857b2a71d61d6061f670c5e55d1af17b543 100644
+--- a/ios/Jiangshui/Web/BridgeDispatcher.swift
++++ b/ios/Jiangshui/Web/BridgeDispatcher.swift
+@@ -151,7 +151,8 @@ final class BridgeDispatcher: BridgeDispatching {
+                     fail(id, error)
+                 }
+             } else {
+-                runAsync(id) {
++                // S 档：走带进度的读取入口；capture() 语义与回包时机不变。
++                runSchoolRead(id) {
+                     try await self.services.school.capture()
+                 }
+             }
+@@ -189,11 +190,12 @@ final class BridgeDispatcher: BridgeDispatching {
+                 fail(id, error)
+             }
+         case "capture":
+-            runAsync(id) {
++            // S 档：读取阶段文案转发给 window.onNativeProgress（Android MainActivity.progress 同语义）。
++            runSchoolRead(id) {
+                 try await self.services.school.capture()
+             }
+         case "sync":
+-            runAsync(id) {
++            runSchoolRead(id) {
+                 try await self.services.school.capture()
+             }
+         // 请求通知权限、立即发一条本地通知。
+@@ -251,6 +253,10 @@ final class BridgeDispatcher: BridgeDispatching {
+         case "logout":
+             performLogout(id)
+         default:
++            // 1.4.x 的可选 action 先走降级层；仍不认识的才回「不支持的操作」。
++            if OptionalBridgeActions.handle(id: id, action: action, payload: payload, transport: transport) {
++                return
++            }
+             transport.replyFailure(id, message: "不支持的操作")
+         }
+     }
+@@ -326,6 +332,53 @@ final class BridgeDispatcher: BridgeDispatching {
+         }
+     }
+ 
++    // MARK: - 学校读取进度（S 档：window.onNativeProgress）
++
++    /// 当前正在等进度的学校读取请求 id；web 用同一个 id 判断是否还在读取。
++    private var schoolReadRequestId: String?
++
++    /// native → web 事件通道；测试替身没实现时静默降级（请求回包不受影响）。
++    private var eventSink: BridgeEventSending? {
++        return transport as? BridgeEventSending
++    }
++
++    /// 启动一次学校读取，并把状态机阶段文案转成 window.onNativeProgress(id, text)。
++    /// 与 Android MainActivity.progress() 同语义：只转发「当前读取」的 id；回包路径沿用 runAsync。
++    private func runSchoolRead(_ id: String, operation: @escaping () async throws -> Any?) {
++        schoolReadRequestId = id
++        if let reportable = services.school as? SchoolReadProgressReporting {
++            reportable.onReadProgress = { [weak self] text in
++                guard let self = self, let requestId = self.schoolReadRequestId else { return }
++                self.eventSink?.sendReadProgress(id: requestId, text: text)
++            }
++        }
++        Task {
++            do {
++                let value = try await operation()
++                self.finishSchoolRead(id)
++                self.reply(id, value)
++            } catch {
++                self.finishSchoolRead(id)
++                self.fail(id, error)
++            }
++        }
++    }
++
++    /// 读取结束（成功/失败/取消）后摘掉进度回调；只清自己这次请求挂上的，避免误伤下一次读取。
++    private func finishSchoolRead(_ id: String) {
++        let cleanup: () -> Void = { [weak self] in
++            guard let self = self else { return }
++            guard self.schoolReadRequestId == id else { return }
++            self.schoolReadRequestId = nil
++            (self.services.school as? SchoolReadProgressReporting)?.onReadProgress = nil
++        }
++        if Thread.isMainThread {
++            cleanup()
++        } else {
++            DispatchQueue.main.async(execute: cleanup)
++        }
++    }
++
+     // MARK: - payload 取值（对应 Android 的 opt*）
+ 
+     /// 从 payload 里取字符串；取不到就当空串，避免崩。
+diff --git a/ios/Jiangshui/Web/BridgeEvents.swift b/ios/Jiangshui/Web/BridgeEvents.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..47800a5b5333c4b49a5952c21a4a3ad68024430b
+--- /dev/null
++++ b/ios/Jiangshui/Web/BridgeEvents.swift
+@@ -0,0 +1,24 @@
++// 【这个文件干什么】native → web 的“事件通道”：把读取进度、从请假页返回这两类通知发给网页。
++// 【什么时候会用到它】学校课表读取过程中（进度文案）、用户从请假服务页回到主界面时。
++// 【它和谁配合】JSBridge 实现它；BridgeDispatcher / WebHost 通过 as? 探测后使用。
++// 【小白提示】请求回包是“你问我答”（每个 id 只答一次）；事件是“我主动喊你一声”，没有 Promise 可答，
++// 所以单独走一条通道，不占用回包的“同一 id 只回一次”名额。
++import Foundation
++
++/// native → web 的事件通道（S 档）。
++///
++/// 与 `BridgeTransport`（请求回包）分开：
++/// - 回包：`window.onNativeResult(id, {value|error})`，每个请求 id 恰好一次；
++/// - 事件：`window.onNativeProgress(id, text)` / `window.onLeaveServiceReturn()`，可以 0 次或多次。
++///
++/// 由 `JSBridge` 实现；`BridgeDispatcher` 只做 `transport as? BridgeEventSending` 探测，
++/// 因此测试替身（只实现 BridgeTransport）不会因为缺少事件能力而编译失败或运行报错。
++protocol BridgeEventSending: AnyObject {
++    /// 学校读取阶段文案（对应 web/app.mjs 的 window.onNativeProgress）。
++    /// - Parameters:
++    ///   - id: 正在等待回包的桥接请求 id；web 用它判断是否还在读取。
++    ///   - text: 可直接展示的中文阶段文案。
++    func sendReadProgress(id: String, text: String)
++    /// 从请假服务页回到网页主界面（对应 web/app.mjs 的 window.onLeaveServiceReturn）。
++    func sendLeaveServiceReturn()
++}
+diff --git a/ios/Jiangshui/Web/JSBridge.swift b/ios/Jiangshui/Web/JSBridge.swift
+index e68da859c08243979d8bf1851d110efbc3961a5a..bc2bfe3efaf1dcc90a8c76fe29b9a81456f68f3d 100644
+--- a/ios/Jiangshui/Web/JSBridge.swift
++++ b/ios/Jiangshui/Web/JSBridge.swift
+@@ -153,3 +153,29 @@ final class JSBridge: NSObject, WKScriptMessageHandler, BridgeTransport {
+         return String(data: data, encoding: .utf8)
+     }
+ }
++
++// MARK: - native → web 事件（S 档：onNativeProgress / onLeaveServiceReturn）
++
++/// 事件通道：与请求回包共用同一个 WebView 与主线程执行路径，但不占「同一 id 只回一次」的名额。
++extension JSBridge: BridgeEventSending {
++    /// 学校读取阶段文案：window.onNativeProgress(<id>, <text>)
++    /// id 用 JSON 字面量回传，与 onNativeResult 的 id 处理保持一致（防注入）。
++    func sendReadProgress(id: String, text: String) {
++        guard let idJSON = JSBridge.jsonFragment(id),
++              let textJSON = JSBridge.jsonFragment(text) else { return }
++        sendEvent(script: "window.onNativeProgress&&window.onNativeProgress(\(idJSON),\(textJSON));")
++    }
++
++    /// 从请假服务页回到网页主界面：window.onLeaveServiceReturn()
++    func sendLeaveServiceReturn() {
++        sendEvent(script: "window.onLeaveServiceReturn&&window.onLeaveServiceReturn();")
++    }
++
++    /// 在主线程执行一条事件脚本；WebView 已释放或页面未装载时安静放弃（事件不是回包，不能补发）。
++    private func sendEvent(script: String) {
++        DispatchQueue.main.async { [weak self] in
++            guard let self = self, let webView = self.webView else { return }
++            webView.evaluateJavaScript(script, completionHandler: nil)
++        }
++    }
++}
+diff --git a/ios/Jiangshui/Web/OptionalBridgeActions.swift b/ios/Jiangshui/Web/OptionalBridgeActions.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..0a96a22d6c51833f0788d26bf9fdec74e534d639
+--- /dev/null
++++ b/ios/Jiangshui/Web/OptionalBridgeActions.swift
+@@ -0,0 +1,93 @@
++// 【这个文件干什么】1.4.x 新增、但 iOS 还没有对应系统能力的桥接动作（应用内更新/反馈/取消销假）。
++// 【什么时候会用到它】网页调用这些 action，而 iOS 壳给不出真实实现时。
++// 【它和谁配合】BridgeDispatcher 的 default 分支先问这里；这里只回“诚实失败/能力不可用”，绝不假装成功。
++// 【小白提示】能做的不是把功能做出来，而是老实告诉网页“iOS 没有这个能力”，让网页按降级显示，
++// 而不是让用户看到“网络连接失败”这种假故障。
++import Foundation
++
++/// 可选能力 action 的降级路由（S 档，契约 v0 D3 的 OPTIONAL 级）。
++///
++/// 为什么放在 `default` 分支而不是主 switch：
++/// - iOS 契约 §3 的 MUST 集合仍是 35 个；`check-ios.mjs` 的 B1-B5 用 35 做契约/Android/iOS 三向对齐。
++///   这 9 个是 1.4.x 新增、iOS 尚未实现的可选能力，先放在扩展层，门禁语义保持“MUST 35 个”；
++/// - 等 M 档真正实现某个能力（如 cancelRecordSync 走销假表单 278615）时，把它提升进主 switch 即可。
++///
++/// 回包一律沿用桥接信封：`transport.reply(id, value:)` → `{value:...}`，
++/// `transport.replyFailure(id, message:)` → `{error:"..."}`，不发明新格式。
++///
++/// 9 个 action 的“诚实”口径（与 web 1.4.1 的消费方式逐条对齐）：
++/// - feedbackInfo：`{enabled:false}` → web/feedback.mjs 隐藏反馈入口（不显示“打开失败”）；
++/// - openFeedback：失败信封（入口本来就不会渲染，真被调用也不会假装打开）；
++/// - updateInfo：`{enabled:false, currentVersion:...}` → 自动检查更新按“关闭”显示；
++/// - updateSettings：失败信封 → 网页开关回弹并提示原因（不能静默无视用户操作）；
++/// - updateCheck / updateDownload：`{ok:false, errorCode:"unsupported", message:...}`
++///   → web/update.mjs normalizeRelease 走失败分支，提示真实原因而不是“网络连接失败”；
++/// - updateCancel / updateSkip：失败信封。web 对这两个 action 的成功回包会直接提示“已取消/已跳过”，
++///   值回包等于假装成功，所以必须走失败信封（正常流程里它们也不可达：updateCheck 不会返回“有新版本”）；
++/// - cancelRecordSync：`{ok:false, code:"UNSUPPORTED_PLATFORM", message:...}`。
++///   web 的假条 provider 只看 `ok` 与 `code`，不会再把它误映射成“请先打开一次请假服务完成登录”；
++///   M1 实现后改成真实抓取即可（web 侧建议同时识别 UNSUPPORTED_PLATFORM，见交付说明的 web 清单）。
++enum OptionalBridgeActions {
++
++    /// 应用内更新在 iOS 上不提供：侧载/TestFlight 渠道与 App Store 审核都不适合“下载安装包自更新”。
++    static let unsupportedUpdate = "iOS 版暂不支持应用内更新，请通过安装渠道获取新版本"
++    /// 应用内反馈入口在 iOS 上不提供（问卷星页面由 Android 原生容器承载）。
++    static let unsupportedFeedback = "iOS 版暂不支持应用内反馈，请通过项目反馈渠道提交"
++    /// 取消销假（销假表单 278615）属 M 档，S 档先明确“能力缺口”。
++    static let unsupportedCancelRecord = "iOS 版暂不支持取消销假，请在学校页面查看销假记录"
++
++    /// 处理一个可选 action；返回 true 表示已回包（调用方不要再回“不支持的操作”）。
++    static func handle(id: String, action: String, payload: JSONObject, transport: BridgeTransport) -> Bool {
++        switch action {
++        case "cancelRecordSync":
++            // 与 SchoolProviding.leaveRecordSync 的失败形状一致（{ok:false, code}），不抛异常、不伪造记录。
++            transport.reply(id, value: [
++                "ok": false,
++                "code": "UNSUPPORTED_PLATFORM",
++                "message": unsupportedCancelRecord,
++            ])
++        case "feedbackInfo":
++            // 形状对齐 Android FeedbackConfig（enabled/title/intro/url），只是永久 disabled。
++            transport.reply(id, value: [
++                "enabled": false,
++                "title": "意见反馈",
++                "intro": "",
++                "url": "",
++            ])
++        case "openFeedback":
++            transport.replyFailure(id, message: unsupportedFeedback)
++        case "updateInfo":
++            // 形状对齐 Android UpdateChecker.info()：enabled/currentVersion/skippedVersion/lastAutoCheckAt。
++            // iOS 没有应用内更新与自动检查，所以 enabled 恒为 false；currentVersion 是 App 的真实版本。
++            transport.reply(id, value: [
++                "enabled": false,
++                "currentVersion": appVersion(),
++                "skippedVersion": "",
++                "lastAutoCheckAt": 0,
++            ])
++        case "updateSettings":
++            // 用户手动拨了“自动检查更新”开关：必须让开关回弹并给出原因，不能静默忽略。
++            transport.replyFailure(id, message: unsupportedUpdate)
++        case "updateCheck", "updateDownload":
++            // 失败信封形状对齐 Android UpdateChecker 的 error()：{ok:false, errorCode, message}。
++            transport.reply(id, value: [
++                "ok": false,
++                "errorCode": "unsupported",
++                "message": unsupportedUpdate,
++            ])
++        case "updateCancel", "updateSkip":
++            // 这两个动作如果回成功值，web 会直接提示“已取消/已跳过”= 假装成功，因此必须回失败信封。
++            transport.replyFailure(id, message: unsupportedUpdate)
++        default:
++            return false
++        }
++        return true
++    }
++
++    /// 读取 App 的真实版本号（Info.plist 的 CFBundleShortVersionString，由 MARKETING_VERSION 展开）。
++    /// 读不到时回空串，交给 web normalizeUpdateInfo 显示“未知”，不编造版本。
++    private static func appVersion() -> String {
++        let value = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
++        return value
++    }
++}
+diff --git a/ios/Jiangshui/Web/WebHost.swift b/ios/Jiangshui/Web/WebHost.swift
+index 5c29b0484ad01e0c99a3fb23dbdc42a90d41e4e0..42f7e7f772b778ff81ae7fb4295f262c34934aab 100644
+--- a/ios/Jiangshui/Web/WebHost.swift
++++ b/ios/Jiangshui/Web/WebHost.swift
+@@ -284,6 +284,13 @@ final class WebHost: NSObject, ObservableObject {
+         webView.evaluateJavaScript(script, completionHandler: nil)
+     }
+ 
++    /// 从请假服务页回到主页面时通知网页刷新假条（S 档 onLeaveServiceReturn）。
++    /// 对应 Android hideWebApp()（MainActivity.java:363）：只在页面已装载时发；没加载就什么都不做。
++    func notifyLeaveServiceReturn() {
++        guard pageLoaded else { return }
++        bridge.sendLeaveServiceReturn()
++    }
++
+     /// 重新加载当前本地页面（注销清缓存、WebKit 崩溃后都用它）。
+     private func reloadFromServer() {
+         guard let port = server.port else { return }
+diff --git a/ios/Jiangshui.xcodeproj/project.pbxproj b/ios/Jiangshui.xcodeproj/project.pbxproj
+index a957871ff85b1c231474aeb7ebdb9accffc7d65d..bd37b3fc0202b8079bc38542a3827ff8434aa5c5 100644
+--- a/ios/Jiangshui.xcodeproj/project.pbxproj
++++ b/ios/Jiangshui.xcodeproj/project.pbxproj
+@@ -19,6 +19,7 @@
+ 		EB0ED92FA350F6BA35D2D901 /* SchoolLocationPermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE836578C6E2765373FC4F3A /* SchoolLocationPermission.swift */; };
+ 		BC669648A889B9D70B9CC6F7 /* SchoolProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52DBE9FFB7B980FCA48604D0 /* SchoolProvider.swift */; };
+ 		2A0CB6C312F213BAF427AE68 /* SchoolReadController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D79C01C9A7AA62ECC20E53E3 /* SchoolReadController.swift */; };
++		CDAACBBA88C819F108206EAB /* SchoolReadProgressReporting.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF10AEB540C46C4856FC15B9 /* SchoolReadProgressReporting.swift */; };
+ 		2700105179C790D296F35D48 /* SchoolURLPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 877C5C21E3C401B4FA9A2223 /* SchoolURLPolicy.swift */; };
+ 		24433AFD233DC693B5E9A8C1 /* SchoolWebViewHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 672E69794F733D233D3C3DBF /* SchoolWebViewHost.swift */; };
+ 		C884E350D205B63B03973D50 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C66360829112D3D7348B53 /* CalendarService.swift */; };
+@@ -39,8 +40,10 @@
+ 		C8A3A4BBA56F0908A9C8D87B /* SystemNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2345052CAF7B20676CCBCE5 /* SystemNotificationService.swift */; };
+ 		5BA480A273352698FF195A17 /* ThemeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C4A355563E533F8B41D918D /* ThemeController.swift */; };
+ 		98092B9AFC13BEB9B6D5F69D /* BridgeDispatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00A5755BEC11C83067DF2863 /* BridgeDispatcher.swift */; };
++		295773DD26AB9327BA316E36 /* BridgeEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6584346F91D079A8C37F0CE9 /* BridgeEvents.swift */; };
+ 		36BF60CCD27BFA83873DBCBD /* JSBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 547DB86CEEA9D60B502DCDD0 /* JSBridge.swift */; };
+ 		264E1EF74E58308348B6CE5E /* LocalServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5A6AB1CBC7A30CDE726B40C /* LocalServer.swift */; };
++		2EDE987BC2ABBFF3D86645AB /* OptionalBridgeActions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1ADA383AB2E698257FA1F184 /* OptionalBridgeActions.swift */; };
+ 		2DABAA513F3287FED4FBE1A7 /* WebAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54CE49AE83B519B0DB0628AE /* WebAssets.swift */; };
+ 		14DB7928D63C5E2D9F1F47AE /* WebHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CB8CEB2EFB12EFFA0E5B9A6 /* WebHost.swift */; };
+ 		1B5117E47D7E40F7025F3877 /* ClassActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC64A684CAF64CE9CCCD9CBD /* ClassActivityAttributes.swift */; };
+@@ -95,6 +98,7 @@
+ 		DE836578C6E2765373FC4F3A /* SchoolLocationPermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchoolLocationPermission.swift; sourceTree = "<group>"; };
+ 		52DBE9FFB7B980FCA48604D0 /* SchoolProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchoolProvider.swift; sourceTree = "<group>"; };
+ 		D79C01C9A7AA62ECC20E53E3 /* SchoolReadController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchoolReadController.swift; sourceTree = "<group>"; };
++		AF10AEB540C46C4856FC15B9 /* SchoolReadProgressReporting.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchoolReadProgressReporting.swift; sourceTree = "<group>"; };
+ 		877C5C21E3C401B4FA9A2223 /* SchoolURLPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchoolURLPolicy.swift; sourceTree = "<group>"; };
+ 		672E69794F733D233D3C3DBF /* SchoolWebViewHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SchoolWebViewHost.swift; sourceTree = "<group>"; };
+ 		60C66360829112D3D7348B53 /* CalendarService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarService.swift; sourceTree = "<group>"; };
+@@ -115,8 +119,10 @@
+ 		B2345052CAF7B20676CCBCE5 /* SystemNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemNotificationService.swift; sourceTree = "<group>"; };
+ 		5C4A355563E533F8B41D918D /* ThemeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeController.swift; sourceTree = "<group>"; };
+ 		00A5755BEC11C83067DF2863 /* BridgeDispatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeDispatcher.swift; sourceTree = "<group>"; };
++		6584346F91D079A8C37F0CE9 /* BridgeEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BridgeEvents.swift; sourceTree = "<group>"; };
+ 		547DB86CEEA9D60B502DCDD0 /* JSBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JSBridge.swift; sourceTree = "<group>"; };
+ 		A5A6AB1CBC7A30CDE726B40C /* LocalServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalServer.swift; sourceTree = "<group>"; };
++		1ADA383AB2E698257FA1F184 /* OptionalBridgeActions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OptionalBridgeActions.swift; sourceTree = "<group>"; };
+ 		54CE49AE83B519B0DB0628AE /* WebAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAssets.swift; sourceTree = "<group>"; };
+ 		4CB8CEB2EFB12EFFA0E5B9A6 /* WebHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebHost.swift; sourceTree = "<group>"; };
+ 		4ABAFB7C569A54278CFB2EBD /* ClassActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClassActivityWidget.swift; sourceTree = "<group>"; };
+@@ -179,6 +185,7 @@
+ 				DE836578C6E2765373FC4F3A /* SchoolLocationPermission.swift */,
+ 				52DBE9FFB7B980FCA48604D0 /* SchoolProvider.swift */,
+ 				D79C01C9A7AA62ECC20E53E3 /* SchoolReadController.swift */,
++				AF10AEB540C46C4856FC15B9 /* SchoolReadProgressReporting.swift */,
+ 				877C5C21E3C401B4FA9A2223 /* SchoolURLPolicy.swift */,
+ 				672E69794F733D233D3C3DBF /* SchoolWebViewHost.swift */,
+ 			);
+@@ -213,8 +220,10 @@
+ 			isa = PBXGroup;
+ 			children = (
+ 				00A5755BEC11C83067DF2863 /* BridgeDispatcher.swift */,
++				6584346F91D079A8C37F0CE9 /* BridgeEvents.swift */,
+ 				547DB86CEEA9D60B502DCDD0 /* JSBridge.swift */,
+ 				A5A6AB1CBC7A30CDE726B40C /* LocalServer.swift */,
++				1ADA383AB2E698257FA1F184 /* OptionalBridgeActions.swift */,
+ 				54CE49AE83B519B0DB0628AE /* WebAssets.swift */,
+ 				4CB8CEB2EFB12EFFA0E5B9A6 /* WebHost.swift */,
+ 			);
+@@ -385,6 +394,7 @@
+ 				EB0ED92FA350F6BA35D2D901 /* SchoolLocationPermission.swift in Sources */,
+ 				BC669648A889B9D70B9CC6F7 /* SchoolProvider.swift in Sources */,
+ 				2A0CB6C312F213BAF427AE68 /* SchoolReadController.swift in Sources */,
++				CDAACBBA88C819F108206EAB /* SchoolReadProgressReporting.swift in Sources */,
+ 				2700105179C790D296F35D48 /* SchoolURLPolicy.swift in Sources */,
+ 				24433AFD233DC693B5E9A8C1 /* SchoolWebViewHost.swift in Sources */,
+ 				C884E350D205B63B03973D50 /* CalendarService.swift in Sources */,
+@@ -405,8 +415,10 @@
+ 				C8A3A4BBA56F0908A9C8D87B /* SystemNotificationService.swift in Sources */,
+ 				5BA480A273352698FF195A17 /* ThemeController.swift in Sources */,
+ 				98092B9AFC13BEB9B6D5F69D /* BridgeDispatcher.swift in Sources */,
++				295773DD26AB9327BA316E36 /* BridgeEvents.swift in Sources */,
+ 				36BF60CCD27BFA83873DBCBD /* JSBridge.swift in Sources */,
+ 				264E1EF74E58308348B6CE5E /* LocalServer.swift in Sources */,
++				2EDE987BC2ABBFF3D86645AB /* OptionalBridgeActions.swift in Sources */,
+ 				2DABAA513F3287FED4FBE1A7 /* WebAssets.swift in Sources */,
+ 				14DB7928D63C5E2D9F1F47AE /* WebHost.swift in Sources */,
+ 				1B5117E47D7E40F7025F3877 /* ClassActivityAttributes.swift in Sources */,
+diff --git a/ios/docs/S-TIER-1.5.0.md b/ios/docs/S-TIER-1.5.0.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..fa6f4e6c5ded8a5c2b8f99231da5fd11e1bae44e
+--- /dev/null
++++ b/ios/docs/S-TIER-1.5.0.md
+@@ -0,0 +1,93 @@
++# iOS S 档追平（1.5.0）· 改动说明
++
++- 日期：2026-11-18
++- 来源任务：V-IOS（task-62）/ A7 决定「iOS 纳入重构并追平，先做 S 档」。
++- 基线：本仓快照 = v1.3.1-rc1 / vC48 / 35 action（zip sha256 2b81f61d…b7487b）。
++- 证据等级：**静态检查**。本机（Windows）无 Xcode/swiftc，**未编译、未真机**；编译与真机验收步骤见
++  `work/docs/phase-1.5.0/ios-s/交给卢同志的说明.md`。
++
++## 0. 一句话
++
++iOS 壳补上 1.4.x 共享 web 需要的四类能力：**9 个可选 action 的诚实降级**、**考试三字段透传**、
++**onNativeProgress / onLeaveServiceReturn 两个回调**；权限面板的 `supported` 属于共享 web 层，
++本次**不改 web/**，只在交付目录给出精确的 web 改动清单。
++
++## 1. 没有改 MUST 契约（为什么 9 个 action 不在主 switch 里）
++
++`docs/IOS-PORT-CONTRACT.md` §3 的 35 个 action 是 MUST 集合，`tools/check-ios.mjs` 的 B1–B5
++用「契约 = Android = iOS = 35」做三向对齐。S 档新增的 9 个 action 是 1.4.x 的 **OPTIONAL 能力**
++（契约 v0 D3），iOS 还没有真实实现，所以：
++
++- 主 `switch action` 保持 35 个 case 不动 → B1–B5、`tests/actions.test.mjs` 继续通过；
++- 9 个 action 走 `default` 分支里的 `OptionalBridgeActions.handle(...)` **降级层**；
++- 未登记的 action 仍回 `{error:"不支持的操作"}`（B6 继续通过）。
++
++等 M 档真正实现某个能力时（如 cancelRecordSync 走销假表单 278615），把它提升进主 switch 即可。
++
++## 2. 9 个诚实降级 action（`Jiangshui/Web/OptionalBridgeActions.swift`）
++
++| action | 回包 | web 1.4.1 的消费结果 |
++|---|---|---|
++| cancelRecordSync | `{ok:false, code:"UNSUPPORTED_PLATFORM", message:"…"}`（值回包） | 不再被误映射成「请先打开一次请假服务完成登录」；当前 web 对未知 code 显示通用不可用，建议 web 侧加一条 code 映射（见交付清单） |
++| feedbackInfo | `{enabled:false, title, intro:"", url:""}` | 反馈入口隐藏，不显示“打开失败” |
++| openFeedback | `{error:"iOS 版暂不支持应用内反馈…"}` | 入口本来不渲染；真被调用也不假装打开 |
++| updateInfo | `{enabled:false, currentVersion:<真实版本>, skippedVersion:"", lastAutoCheckAt:0}` | 自动检查更新按“关闭”显示 |
++| updateSettings | `{error:"iOS 版暂不支持应用内更新…"}` | 开关回弹并 toast 原因（不静默忽略） |
++| updateCheck | `{ok:false, errorCode:"unsupported", message:"…"}` | 提示真实原因，不再是「网络连接失败，请检查网络后重试」 |
++| updateDownload | `{ok:false, errorCode:"unsupported", message:"…"}` | 正常流程不可达（check 不会返回有新版本） |
++| updateCancel | `{error:"…"}` | 成功值会被 web 当成“已取消”提示 → 必须失败信封；正常流程不可达 |
++| updateSkip | `{error:"…"}` | 成功值会被 web 当成“已跳过”提示 → 必须失败信封；正常流程不可达 |
++
++> `updateInstall` 是 web 从不调用的死 API（platform-reconnect §7.1），S 档不登记，仍回「不支持的操作」。
++
++## 3. 考试三字段透传（`School/SchoolReadController.swift` handleReadResult）
++
++读取脚本 `web/school-reader.js` 已在结果里带 `{exams, examFetchedAt, examError}`；
++原生此前只拷贝 `rows/totalWeeks/semesterId/studentProfile`，考试数据被丢弃。现已与
++Android `SchoolClient.java:78-80` 逐字段对齐：
++
++- `exams`：原样透传（数组才透传），解析/容错在共享层 `web/jiaowu-exam.mjs`；
++- `examFetchedAt`：非空才透传；
++- `examError`：非空才透传，并做 `{http,session,timeout,format,other}` 5 类白名单归一（未知归 `other`）。
++
++要求：iOS 打包的 `web/` 必须是含考试读取的 1.4.x 版本；旧 1.3.1 web 的 reader 不产生这些字段，
++web 侧会按“老壳”路径保留旧快照（`attachExamPayload` 对两个字段都缺省直接返回，不报错）。
++
++## 4. 两个回调
++
++### 4.1 `window.onNativeProgress(id, text)`（学校读取阶段文案）
++
++- `SchoolReadController.note(_:)` 在更新容器顶栏的同时调用 `onProgress`；
++- `SchoolProvider` 通过新可选协议 `SchoolReadProgressReporting` 转出；
++- `BridgeDispatcher.runSchoolRead(id:)` 在 capture / sync / openSchool(mobile:false) 前挂回调，
++  以**当前桥接请求 id** 调 `JSBridge.sendReadProgress` → `window.onNativeProgress(<id>,<text>)`；结束（成功/失败/取消）后摘掉。
++- 与 Android `MainActivity.progress()`（MainActivity.java:213）同语义；web 只在 `busy && androidCallbacks.has(id)` 时接收。
++
++### 4.2 `window.onLeaveServiceReturn()`（从请假服务页返回）
++
++- `SchoolProvider` 在请假容器 `onDismissed` 且 `mode == .leaveApp` 时触发 `onLeaveServiceReturn`；
++- `ShellModel` 把它接到 `WebHost.notifyLeaveServiceReturn()` → `JSBridge.sendLeaveServiceReturn()` →
++  `window.onLeaveServiceReturn()`（对应 Android `hideWebApp()`，MainActivity.java:363）；
++- 注销清理（`SchoolProvider.reset()`）用 `suppressLeaveServiceReturn` 抑制，避免登出后误刷新（Android logout 走 `destroyWebApp`，不发该回调）；
++- `openSchool(mobile:true)` 从请假页切走时按 Android `hideWebApp()` 语义补发一次。
++
++## 5. 共享 web 侧（本次未改）
++
++权限面板 `supported` 的整行隐藏逻辑（旧 web 有，当前 1.4.1 web 丢失）属于共享层，
++本仓不改 `web/`。精确改动清单与补丁见：
++`work/docs/phase-1.5.0/ios-s/web-side/权限面板-supported-改动清单.md`（+ 同目录 `.patch`）。
++
++## 6. 静态验证（Windows 可跑）
++
++```bash
++node ios/tools/gen-pbxproj.mjs      # 新 .swift 必须重跑，纳入 Sources
++node ios/tools/check-ios.mjs        # 48 项静态门禁，必须 0 fail
++node --test ios/tests/              # 含新增 s-tier.test.mjs
++```
++
++## 7. 已知限制
++
++- 未编译：Swift 语法/类型错误只能靠 Mac/CI 首次编译暴露（预计问题集中在新文件与回调闭包捕获）。
++- 未真机：进度文案是否实时显示、请假返回是否即时刷新、考试卡片是否出现，均需真机验收。
++- 考试透传依赖学校考试接口可读（iOS 容器内未验证）。
++- `updateCheck` 的 `errorCode:"unsupported"` 是 web 未登记的新 code，web 会回退到 message 文案；若以后要在 UI 上特殊化，需 web 加映射。
+diff --git a/ios/tests/index.mjs b/ios/tests/index.mjs
+index 8b3d18c21fc7df7bd263ea989515fd7f828de85c..7ce31d751c8a222f0c8723ecd368e53cdd728941 100644
+--- a/ios/tests/index.mjs
++++ b/ios/tests/index.mjs
+@@ -9,3 +9,4 @@ import './baseline.test.mjs';
+ import './reminder-schedule.test.mjs';
+ import './live-activity.test.mjs';
+ import './full-suite.test.mjs';
++import './s-tier.test.mjs';
+diff --git a/ios/tests/s-tier.test.mjs b/ios/tests/s-tier.test.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..150212ea4c191dfe7215451b56d3f437a01a7d5d
+--- /dev/null
++++ b/ios/tests/s-tier.test.mjs
+@@ -0,0 +1,145 @@
++// S 档（1.5.0）回归测试：可选 action 的诚实降级、考试三字段透传、两个 native→web 回调。
++// 目标：把“iOS 追平 1.4.x”的四个 S 项钉在静态检查上，防止以后有人把它们删回“不支持的操作”。
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { ROOT, loadSwiftFiles, parseSwiftCases } from '../tools/check-ios.mjs';
++
++const files = loadSwiftFiles(ROOT);
++
++const dispatcher = files['Jiangshui/Web/BridgeDispatcher.swift'];
++const optional = files['Jiangshui/Web/OptionalBridgeActions.swift'];
++const jsbridge = files['Jiangshui/Web/JSBridge.swift'];
++const webhost = files['Jiangshui/Web/WebHost.swift'];
++const controller = files['Jiangshui/School/SchoolReadController.swift'];
++const provider = files['Jiangshui/School/SchoolProvider.swift'];
++const env = files['Jiangshui/App/AppEnvironment.swift'];
++
++// 9 个 S 档降级 action：与 platform-reconnect §5.5-S1 清单逐字一致。
++const S_ACTIONS = [
++  'cancelRecordSync',
++  'feedbackInfo',
++  'openFeedback',
++  'updateInfo',
++  'updateSettings',
++  'updateCheck',
++  'updateDownload',
++  'updateCancel',
++  'updateSkip'
++];
++
++/** 找到包含 action 的 case 语句（支持 case "a", "b": 合并写法），返回语句起点与冒号后位置。 */
++function caseStatement(source, action) {
++  const re = /case\s+([^:\n]+):/g;
++  let match;
++  while ((match = re.exec(source))) {
++    const names = [...match[1].matchAll(/"([^"]+)"/g)].map((item) => item[1]);
++    if (names.includes(action)) return { start: match.index, end: re.lastIndex };
++  }
++  return null;
++}
++
++/** 截取某个 action 的分支体（到下一个 case 之前）。 */
++function actionBlock(source, action) {
++  const statement = caseStatement(source, action);
++  if (!statement) return '';
++  const rest = source.slice(statement.end);
++  const next = rest.search(/\n\s*case\s+/);
++  return next < 0 ? rest : rest.slice(0, next);
++}
++
++test('S 档不改变 MUST 契约：BridgeDispatcher 主 switch 仍是 35 个 action', () => {
++  const parsed = parseSwiftCases(dispatcher);
++  assert.equal(parsed.cases.length, 35);
++  assert.equal(new Set(parsed.cases).size, 35);
++  for (const action of S_ACTIONS) {
++    assert.ok(!parsed.cases.includes(action), '可选 action 不应提前进 MUST switch：' + action);
++  }
++});
++
++test('未知 action 仍先问可选降级路由，再回「不支持的操作」', () => {
++  const parsed = parseSwiftCases(dispatcher);
++  assert.equal(parsed.hasDefault, true);
++  const handleIndex = parsed.defaultText.indexOf('OptionalBridgeActions.handle');
++  assert.ok(handleIndex >= 0, 'default 未调用 OptionalBridgeActions.handle');
++  const replyIndex = parsed.defaultText.search(/replyFailure\s*\(\s*id,\s*message:\s*"不支持的操作"\)/);
++  assert.ok(replyIndex >= 0, 'default 未回「不支持的操作」');
++  assert.ok(replyIndex > handleIndex, '「不支持的操作」必须在降级路由之后');
++  assert.ok(!/(^|[^A-Za-z])reply\s*\(/.test(parsed.defaultText), 'default 不得出现成功回包 reply(');
++});
++
++test('9 个可选 action 全部登记在 OptionalBridgeActions', () => {
++  assert.ok(optional, '缺少 Jiangshui/Web/OptionalBridgeActions.swift');
++  for (const action of S_ACTIONS) {
++    assert.ok(caseStatement(optional, action), action + ' 未登记');
++  }
++  // 降级层只允许诚实失败/能力不可用，不允许任何 ok:true 值回包。
++  assert.ok(!/"ok"\s*:\s*true/.test(optional), '降级层不得回 {"ok":true}');
++});
++
++test('updateCheck / updateDownload 回 {ok:false,errorCode:"unsupported"} 而不是假故障', () => {
++  for (const action of ['updateCheck', 'updateDownload']) {
++    const block = actionBlock(optional, action);
++    assert.ok(block, action + ' 未登记');
++    assert.ok(/"ok"\s*:\s*false/.test(block), action + ' 必须回 ok:false');
++    assert.ok(/"errorCode"\s*:\s*"unsupported"/.test(block), action + ' 必须回 errorCode=unsupported');
++    assert.ok(/"message"/.test(block), action + ' 必须带可直接展示的中文 message');
++  }
++});
++
++test('updateCancel / updateSkip / openFeedback / updateSettings 走失败信封（不得假装成功）', () => {
++  for (const action of ['updateCancel', 'updateSkip', 'openFeedback', 'updateSettings']) {
++    const block = actionBlock(optional, action);
++    assert.ok(block, action + ' 未登记');
++    assert.ok(/replyFailure\s*\(/.test(block), action + ' 必须走 replyFailure');
++    assert.ok(!/transport\.reply\s*\(\s*id/.test(block), action + ' 不得回成功值');
++  }
++});
++
++test('feedbackInfo / updateInfo 回 enabled:false；cancelRecordSync 回明确的平台缺口', () => {
++  for (const action of ['feedbackInfo', 'updateInfo']) {
++    const block = actionBlock(optional, action);
++    assert.ok(/"enabled"\s*:\s*false/.test(block), action + ' 必须回 enabled:false');
++  }
++  const cancelBlock = actionBlock(optional, 'cancelRecordSync');
++  assert.ok(/"ok"\s*:\s*false/.test(cancelBlock));
++  assert.ok(/"code"\s*:\s*"UNSUPPORTED_PLATFORM"/.test(cancelBlock));
++  assert.ok(/unsupportedCancelRecord/.test(cancelBlock));
++  // 不能再用「不支持的操作」当失败文案：web 会把它误判成“未登录”。
++  assert.ok(!/replyFailure\s*\([^)]*不支持的操作/.test(optional), '降级层不得回「不支持的操作」');
++});
++
++test('考试三字段透传：handleReadResult 带 exams / examFetchedAt / examError，并做 5 类白名单', () => {
++  const start = controller.indexOf('private func handleReadResult');
++  assert.ok(start >= 0);
++  const next = controller.indexOf('\n    private func ', start + 10);
++  const body = controller.slice(start, next < 0 ? controller.length : next);
++  assert.ok(/payload\["exams"\]\s*=\s*exams/.test(body), '缺 exams 透传');
++  assert.ok(/payload\["examFetchedAt"\]/.test(body), '缺 examFetchedAt 透传');
++  assert.ok(/payload\["examError"\]/.test(body), '缺 examError 透传');
++  assert.ok(/examErrorKinds/.test(controller), '缺考试失败类别白名单');
++  for (const kind of ['http', 'session', 'timeout', 'format', 'other']) {
++    assert.ok(new RegExp('"' + kind + '"').test(controller), '白名单缺 ' + kind);
++  }
++});
++
++test('onNativeProgress：读取阶段文案带请求 id 转发给网页', () => {
++  assert.ok(/var onProgress: \(\(String\) -> Void\)\?/.test(controller), 'SchoolReadController 缺 onProgress');
++  assert.ok(/onProgress\?\(text\)/.test(controller), 'note() 未转发 onProgress');
++  assert.ok(/func runSchoolRead\(/.test(dispatcher), 'BridgeDispatcher 缺 runSchoolRead');
++  assert.ok(/sendReadProgress\(id: requestId, text: text\)/.test(dispatcher), 'Dispatcher 未按请求 id 转发进度');
++  assert.ok(/SchoolReadProgressReporting/.test(provider), 'SchoolProvider 未接入进度协议');
++  assert.ok(/func sendReadProgress\(id: String, text: String\)/.test(jsbridge), 'JSBridge 缺 sendReadProgress');
++  assert.ok(/window\.onNativeProgress&&window\.onNativeProgress/.test(jsbridge), '事件脚本不是 onNativeProgress');
++});
++
++test('onLeaveServiceReturn：请假页关闭时通知网页刷新假条', () => {
++  assert.ok(/var onLeaveServiceReturn: \(\(\) -> Void\)\?/.test(provider), 'SchoolProvider 缺 onLeaveServiceReturn');
++  assert.ok(/onLeaveServiceReturn\?\(\)/.test(provider), '请假页关闭未触发回调');
++  assert.ok(/notifyLeaveServiceReturnIfVisible/.test(provider), '缺少可见性判断（避免注销时误发）');
++  assert.ok(/suppressLeaveServiceReturn/.test(provider), '缺少注销抑制标记');
++  assert.ok(/func sendLeaveServiceReturn\(\)/.test(jsbridge), 'JSBridge 缺 sendLeaveServiceReturn');
++  assert.ok(/func notifyLeaveServiceReturn\(\)/.test(webhost), 'WebHost 缺 notifyLeaveServiceReturn');
++  assert.ok(/window\.onLeaveServiceReturn&&window\.onLeaveServiceReturn/.test(jsbridge), '事件脚本不是 onLeaveServiceReturn');
++  assert.ok(/school\.onLeaveServiceReturn\s*=/.test(env), 'AppEnvironment 未把 SchoolProvider 接到 WebHost');
++  assert.ok(/host\?\.notifyLeaveServiceReturn\(\)/.test(env), 'AppEnvironment 未调用 WebHost.notifyLeaveServiceReturn');
++});
