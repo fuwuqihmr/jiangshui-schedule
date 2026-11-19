@@ -2,7 +2,7 @@
 
 > JiangShui Schedule —— 本机优先的课表客户端：只读学校教务系统，把课表、变更和提醒留在这台设备上。
 
-江水课表读取你在学校教务系统里已有的课表，展示今天的课和这一周的安排，并比较前后两次读取的差异，在本机提醒你上课与课表变化。它有两个客户端形态：Android 原生应用（Java 外壳 + WebView 加载的前端）和 HarmonyOS NEXT 应用（ArkTS 独立实现）。
+江水课表读取你在学校教务系统里已有的课表，展示今天的课和这一周的安排，并比较前后两次读取的差异，在本机提醒你上课与课表变化。它有多个客户端形态：Android 原生应用（Java 外壳 + WebView 加载的前端）、HarmonyOS NEXT 应用（ArkTS 独立实现），以及 **iOS 端（实验性／未完成）**——iOS 工程以 WKWebView 壳复用同一套 `web/` 前端，目前仍停留在 1.3.1 基线、正在追平，未经 Mac 编译与真机验证，尚不可发布。
 
 项目**没有服务器**：不运营后台，不提供账号体系、云同步或远程推送。数据留在你自己的设备上，换设备就是重新登录、重新读取。
 
@@ -64,6 +64,7 @@
 | --- | --- | --- |
 | Android（minSdk 26 / targetSdk 35） | 主要维护目标 | Java 外壳 + WebView 加载 `web/` 的 ES Module 前端；不使用 AndroidX 与第三方 UI 库 |
 | HarmonyOS NEXT（API 26） | 独立实现，功能持续补齐，与 Android 版不完全对等 | ArkTS（Stage 模型），工程在 `harmony/` |
+| iOS | **实验性／未完成**：仍停留在 1.3.1 基线、正在追平；未编译、未签名、未真机验证，不提供安装包 | Swift + WKWebView 壳，复用 `web/` 前端；工程说明见 [ios/README.md](ios/README.md)，构建需 macOS + Xcode |
 | Windows 桌面 | 已停止维护，仅保留源码 | Electron 外壳，`desktop/` |
 
 前端 `web/` 没有打包器，也没有前端框架：`index.html` 直接加载 `bootstrap.mjs`，其余是原生 ES Module、CSS 变量主题和一条严格的 CSP（`script-src 'self'`）。Android 与鸿蒙各自在自己的原生层实现读取、会话、通知、组件与系统集成，前端只通过一层很小的桥接调用它们。
@@ -75,6 +76,7 @@ web/        前端页面逻辑（ES Module，无打包器、无框架）：解�
 web/data/   合成示例数据：示例课表、调休、节假日（不是任何人的真实课表）
 android/    原生外壳：WebView 与会话保险库、通知卡片、桌面小组件、日历同步、启动与回前台核对
 harmony/    HarmonyOS NEXT 工程（ArkTS，Stage 模型）
+ios/        iOS 工程（Swift + WKWebView，实验性／未完成；说明见 ios/README.md）
 desktop/    Electron 桌面外壳（历史，不再维护）
 tests/      纯逻辑回归测试（Node 内置 test runner）
 tools/      构建、图标导出、清单校验与上传范围守卫脚本
@@ -212,6 +214,7 @@ Android 版在 **设置 → 关于与隐私 → 意见反馈** 里提供一条�
 
 ## 相关文档
 
+- [ios/README.md](ios/README.md)：iOS 端（实验性／未完成；1.3.1 基线，正在追平）的来源、当前状态、Mac 构建入口与已知缺口
 - [NOTIFICATIONS.md](NOTIFICATIONS.md)：Android 通知与锁屏卡片的实现说明
 - [XIAOMI-NOTIFICATIONS.md](XIAOMI-NOTIFICATIONS.md)：小米聚焦通知的接入说明
 - [SECURITY.md](SECURITY.md)：安全与隐私说明、漏洞上报
