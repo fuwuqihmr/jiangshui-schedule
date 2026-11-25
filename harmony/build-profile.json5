@@ -1,0 +1,43 @@
+// 职责：鸿蒙工程根构建配置，声明 default 产品、API 12 与单 entry HAP。
+// 依赖方向：无代码依赖；签名配置留空，由发布流程注入。
+// 阶段：P0 骨架；未编译，仅静态骨架。
+// 待确认：SDK 版本字符串与签名字段以官方 command-line-tools 模板为准。
+{
+  "app": {
+    "signingConfigs": [],
+    "products": [
+      {
+        "name": "default",
+        "signingConfig": "",
+        "compileSdkVersion": 12,
+        "compatibleSdkVersion": 12,
+        "targetSdkVersion": 12,
+        "runtimeOS": "HarmonyOS",
+        "versionCode": 1,
+        "versionName": "1.0.0"
+      }
+    ],
+    "buildModeSet": [
+      {
+        "name": "debug"
+      },
+      {
+        "name": "release"
+      }
+    ]
+  },
+  "modules": [
+    {
+      "name": "entry",
+      "srcPath": "./entry",
+      "targets": [
+        {
+          "name": "default",
+          "applyToProducts": [
+            "default"
+          ]
+        }
+      ]
+    }
+  ]
+}

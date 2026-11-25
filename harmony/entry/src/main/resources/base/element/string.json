@@ -1,0 +1,852 @@
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "江水课表"
+    },
+    {
+      "name": "module_desc",
+      "value": "江水课表主模块"
+    },
+    {
+      "name": "entryability_desc",
+      "value": "江水课表主窗口"
+    },
+    {
+      "name": "permission_internet_reason",
+      "value": "用于访问学校教务与学工系统"
+    },
+    {
+      "name": "tab_today",
+      "value": "今日课表"
+    },
+    {
+      "name": "tab_full",
+      "value": "完整课表"
+    },
+    {
+      "name": "tab_changes",
+      "value": "变更记录"
+    },
+    {
+      "name": "tab_settings",
+      "value": "设置与数据"
+    },
+    {
+      "name": "settings_title",
+      "value": "设置与数据"
+    },
+    {
+      "name": "settings_intro",
+      "value": "你的课表，由你掌握。"
+    },
+    {
+      "name": "settings_group_auto",
+      "value": "自动更新"
+    },
+    {
+      "name": "settings_group_display",
+      "value": "课表与显示"
+    },
+    {
+      "name": "settings_group_leave",
+      "value": "请假与调休"
+    },
+    {
+      "name": "settings_group_course",
+      "value": "课程与提醒"
+    },
+    {
+      "name": "settings_group_data",
+      "value": "数据与同步"
+    },
+    {
+      "name": "settings_group_about",
+      "value": "关于与隐私"
+    },
+    {
+      "name": "settings_expand_all",
+      "value": "全部展开"
+    },
+    {
+      "name": "settings_collapse_all",
+      "value": "全部收起"
+    },
+    {
+      "name": "settings_expand",
+      "value": "展开"
+    },
+    {
+      "name": "settings_collapse",
+      "value": "收起"
+    },
+    {
+      "name": "settings_accessibility_expanded",
+      "value": "已展开"
+    },
+    {
+      "name": "settings_accessibility_collapsed",
+      "value": "已收起"
+    },
+    {
+      "name": "settings_arrow_expanded",
+      "value": "▾"
+    },
+    {
+      "name": "settings_arrow_collapsed",
+      "value": "▸"
+    },
+    {
+      "name": "settings_auto_hint",
+      "value": "打开应用时自动核对学校课表。P3 接入前为占位。"
+    },
+    {
+      "name": "settings_display_hint",
+      "value": "主题、首页概览与完整课表显示设置。"
+    },
+    {
+      "name": "settings_leave_hint",
+      "value": "请假服务入口、假条状态与调休设置。"
+    },
+    {
+      "name": "settings_course_hint",
+      "value": "晚自习、自定义课程与上课提醒。"
+    },
+    {
+      "name": "settings_data_hint",
+      "value": "教务同步、导入导出与系统日历。"
+    },
+    {
+      "name": "settings_about_hint",
+      "value": "用户协议、隐私说明与应用信息。"
+    },
+    {
+      "name": "settings_calendar_unavailable",
+      "value": "仅 HarmonyOS 支持写入系统日历"
+    },
+    {
+      "name": "placeholder_page",
+      "value": "页面骨架，功能待实现"
+    },
+    {
+      "name": "placeholder_secondary",
+      "value": "二级页面入口占位"
+    },
+    {
+      "name": "placeholder_web",
+      "value": "教务网页容器占位"
+    },
+    {
+      "name": "not_implemented",
+      "value": "该功能将在后续阶段实现"
+    },
+    {
+      "name": "tag_conflict",
+      "value": "冲突"
+    },
+    {
+      "name": "next_day",
+      "value": "下一天"
+    },
+    {
+      "name": "change_empty_hint",
+      "value": "发生课表变化后会显示在这里。"
+    },
+    {
+      "name": "source_school",
+      "value": "学校"
+    },
+    {
+      "name": "detail_title",
+      "value": "课程详情"
+    },
+    {
+      "name": "detail_time",
+      "value": "时间"
+    },
+    {
+      "name": "source_custom",
+      "value": "自定义"
+    },
+    {
+      "name": "prev_week",
+      "value": "上一周"
+    },
+    {
+      "name": "change_open_day",
+      "value": "查看当天"
+    },
+    {
+      "name": "tag_modified",
+      "value": "已修改"
+    },
+    {
+      "name": "status_vacant",
+      "value": "无课"
+    },
+    {
+      "name": "weekday_tue",
+      "value": "周二"
+    },
+    {
+      "name": "sample_badge",
+      "value": "示例数据"
+    },
+    {
+      "name": "weekday_fri",
+      "value": "周五"
+    },
+    {
+      "name": "day_title_today",
+      "value": "今天"
+    },
+    {
+      "name": "detail_teacher",
+      "value": "教师"
+    },
+    {
+      "name": "status_moved",
+      "value": "已调课"
+    },
+    {
+      "name": "change_type_remove",
+      "value": "删除"
+    },
+    {
+      "name": "status_cancelled",
+      "value": "已停课"
+    },
+    {
+      "name": "tag_overlap",
+      "value": "重叠"
+    },
+    {
+      "name": "detail_room",
+      "value": "地点"
+    },
+    {
+      "name": "change_mark_read",
+      "value": "标记已读"
+    },
+    {
+      "name": "change_type_time",
+      "value": "时间"
+    },
+    {
+      "name": "source_study",
+      "value": "晚自习"
+    },
+    {
+      "name": "moved_to",
+      "value": "调至"
+    },
+    {
+      "name": "change_type_add",
+      "value": "新增"
+    },
+    {
+      "name": "detail_status",
+      "value": "状态"
+    },
+    {
+      "name": "detail_close",
+      "value": "关闭"
+    },
+    {
+      "name": "weekday_wed",
+      "value": "周三"
+    },
+    {
+      "name": "day_empty_title",
+      "value": "今日无课"
+    },
+    {
+      "name": "prev_day",
+      "value": "上一天"
+    },
+    {
+      "name": "source_local",
+      "value": "本地修改"
+    },
+    {
+      "name": "weekday_mon",
+      "value": "周一"
+    },
+    {
+      "name": "a11y_change",
+      "value": "课表变更"
+    },
+    {
+      "name": "week_label",
+      "value": "周次"
+    },
+    {
+      "name": "day_empty_hint",
+      "value": "这一天没有课程安排。"
+    },
+    {
+      "name": "day_title_yesterday",
+      "value": "昨天"
+    },
+    {
+      "name": "next_week",
+      "value": "下一周"
+    },
+    {
+      "name": "a11y_course",
+      "value": "课程"
+    },
+    {
+      "name": "detail_leave",
+      "value": "请假"
+    },
+    {
+      "name": "detail_source",
+      "value": "来源"
+    },
+    {
+      "name": "weekday_thu",
+      "value": "周四"
+    },
+    {
+      "name": "change_type_update",
+      "value": "更新"
+    },
+    {
+      "name": "a11y_moved",
+      "value": "调课"
+    },
+    {
+      "name": "change_all_read",
+      "value": "全部知道了"
+    },
+    {
+      "name": "tag_makeup",
+      "value": "补课"
+    },
+    {
+      "name": "tag_custom",
+      "value": "自定义"
+    },
+    {
+      "name": "change_earlier",
+      "value": "更早"
+    },
+    {
+      "name": "day_title_tomorrow",
+      "value": "明天"
+    },
+    {
+      "name": "change_today",
+      "value": "今天"
+    },
+    {
+      "name": "day_title_selected",
+      "value": "所选日期"
+    },
+    {
+      "name": "status_leave_pending",
+      "value": "待审批"
+    },
+    {
+      "name": "detail_moved",
+      "value": "调课"
+    },
+    {
+      "name": "change_empty_title",
+      "value": "还没有变更记录"
+    },
+    {
+      "name": "period_label",
+      "value": "节次"
+    },
+    {
+      "name": "weekday_sat",
+      "value": "周六"
+    },
+    {
+      "name": "change_type_teacher",
+      "value": "教师"
+    },
+    {
+      "name": "weekday_sun",
+      "value": "周日"
+    },
+    {
+      "name": "status_leave_approved",
+      "value": "已请假"
+    },
+    {
+      "name": "status_study",
+      "value": "晚自习"
+    },
+    {
+      "name": "change_unread",
+      "value": "未读"
+    },
+    {
+      "name": "change_type_room",
+      "value": "教室"
+    },
+    {
+      "name": "status_normal",
+      "value": "正常"
+    },
+    {
+      "name": "day_leave_status_entry",
+      "value": "假条状态"
+    },
+    {
+      "name": "week_today",
+      "value": "本周"
+    },
+    {
+      "name": "data_source_line",
+      "value": "当前来源"
+    },
+    {
+      "name": "leave_action_renew",
+      "value": "续假"
+    },
+    {
+      "name": "about_agreement",
+      "value": "用户协议与隐私"
+    },
+    {
+      "name": "data_action_read",
+      "value": "读取学校课表"
+    },
+    {
+      "name": "leave_card_desc_1",
+      "value": "只提供学校学工系统入口，登录、填写和提交都在学校页面完成。"
+    },
+    {
+      "name": "about_oss",
+      "value": "开源与致谢"
+    },
+    {
+      "name": "leave_action_leave",
+      "value": "请假"
+    },
+    {
+      "name": "data_action_portal",
+      "value": "登录学校门户"
+    },
+    {
+      "name": "data_sync_hint",
+      "value": "优先复用本机登录态静默读取；失败会保留上次课表。"
+    },
+    {
+      "name": "data_action_mobile",
+      "value": "移动教务入口"
+    },
+    {
+      "name": "about_card_title",
+      "value": "关于"
+    },
+    {
+      "name": "leave_action_cancel",
+      "value": "销假"
+    },
+    {
+      "name": "leave_card_title",
+      "value": "请假服务"
+    },
+    {
+      "name": "data_not_read",
+      "value": "未读取"
+    },
+    {
+      "name": "leave_card_badge",
+      "value": "实验"
+    },
+    {
+      "name": "data_not_configured",
+      "value": "未配置"
+    },
+    {
+      "name": "data_last_success",
+      "value": "最近成功读取"
+    },
+    {
+      "name": "about_version_format",
+      "value": "版本"
+    },
+    {
+      "name": "leave_unavailable_hint",
+      "value": "当前设备不支持在应用内打开学校页面"
+    },
+    {
+      "name": "about_version_line",
+      "value": "版本信息"
+    },
+    {
+      "name": "leave_card_desc_2",
+      "value": "本应用不保存账号密码，也不代填或代提交。"
+    },
+    {
+      "name": "data_sync_title",
+      "value": "教务系统"
+    },
+    {
+      "name": "permission_action_open",
+      "value": "去开启"
+    },
+    {
+      "name": "settings_group_summary_empty",
+      "value": "暂无摘要"
+    },
+    {
+      "name": "permission_notification",
+      "value": "通知"
+    },
+    {
+      "name": "permission_calendar",
+      "value": "日历"
+    },
+    {
+      "name": "permission_state_granted",
+      "value": "已开启"
+    },
+    {
+      "name": "permission_card_title",
+      "value": "权限检查"
+    },
+    {
+      "name": "permission_state_unavailable",
+      "value": "本机暂不可用"
+    },
+    {
+      "name": "permission_card_desc",
+      "value": "这些权限用于准时提醒与后台核对，可随时跳过。"
+    },
+    {
+      "name": "permission_background",
+      "value": "后台运行"
+    },
+    {
+      "name": "calendar_phase_status",
+      "value": "Phase 6 接入，暂不可用"
+    },
+    {
+      "name": "calendar_card_title",
+      "value": "日历同步"
+    },
+    {
+      "name": "permission_action_granted",
+      "value": "已开启"
+    },
+    {
+      "name": "calendar_desc",
+      "value": "写入系统日历需在 Phase 6 接入，现在可在系统日历手动添加课程。"
+    },
+    {
+      "name": "calendar_permission_hint",
+      "value": "了解日历权限说明"
+    },
+    {
+      "name": "calendar_action_disabled",
+      "value": "暂不可用"
+    },
+    {
+      "name": "permission_state_denied",
+      "value": "未开启"
+    },
+    {
+      "name": "permission_action_unavailable",
+      "value": "不可用"
+    },
+    {
+      "name": "settings_group_toggle_hint",
+      "value": "点击展开或收起分组"
+    },
+    {
+      "name": "settings_summary_auto",
+      "value": "打开应用时自动核对课表"
+    },
+    {
+      "name": "settings_summary_display",
+      "value": "主题、首页与完整课表显示"
+    },
+    {
+      "name": "settings_data_export",
+      "value": "导出课表"
+    },
+    {
+      "name": "settings_display_week",
+      "value": "完整课表"
+    },
+    {
+      "name": "settings_data_diagnostics",
+      "value": "导出排查日志"
+    },
+    {
+      "name": "settings_summary_course",
+      "value": "上课提醒、晚自习与自定义课程"
+    },
+    {
+      "name": "settings_summary_data",
+      "value": "教务同步、日历、导出与排查"
+    },
+    {
+      "name": "settings_auto_action",
+      "value": "立即核对"
+    },
+    {
+      "name": "settings_summary_leave",
+      "value": "请假服务与调休、休假设置"
+    },
+    {
+      "name": "settings_course_reminder",
+      "value": "上课提醒"
+    },
+    {
+      "name": "settings_summary_about",
+      "value": "版本、用户协议与开源致谢"
+    },
+    {
+      "name": "settings_display_home",
+      "value": "首页显示"
+    },
+    {
+      "name": "settings_course_study",
+      "value": "晚自习状态"
+    },
+    {
+      "name": "settings_display_theme",
+      "value": "外观主题"
+    },
+    {
+      "name": "settings_course_custom",
+      "value": "自定义课程"
+    },
+    {
+      "name": "settings_leave_phase4",
+      "value": "调休安排 Phase 4 接入"
+    },
+    {
+      "name": "settings_leave_phase5",
+      "value": "休假设置 Phase 5 接入"
+    },
+    {
+      "name": "leave_status_approved",
+      "value": "已批准"
+    },
+    {
+      "name": "leave_status_rejected",
+      "value": "已驳回"
+    },
+    {
+      "name": "web_office_not_open",
+      "value": "教务页面暂未开放"
+    },
+    {
+      "name": "web_office_loading",
+      "value": "正在加载教务页面…"
+    },
+    {
+      "name": "leave_status_total",
+      "value": "总数"
+    },
+    {
+      "name": "leave_detail_title",
+      "value": "假条详情"
+    },
+    {
+      "name": "leave_detail_submitted_label",
+      "value": "提交时间"
+    },
+    {
+      "name": "common_back",
+      "value": "返回"
+    },
+    {
+      "name": "leave_detail_not_provided",
+      "value": "未提供"
+    },
+    {
+      "name": "leave_status_data_as_of",
+      "value": "数据截至 %s"
+    },
+    {
+      "name": "leave_status_unknown",
+      "value": "未知"
+    },
+    {
+      "name": "leave_detail_comment_label",
+      "value": "审批意见"
+    },
+    {
+      "name": "web_office_copied",
+      "value": "链接已复制"
+    },
+    {
+      "name": "web_office_copy_link",
+      "value": "复制链接"
+    },
+    {
+      "name": "leave_detail_period_label",
+      "value": "起止时间"
+    },
+    {
+      "name": "leave_status_expired",
+      "value": "已过期"
+    },
+    {
+      "name": "leave_detail_approver_label",
+      "value": "审批人"
+    },
+    {
+      "name": "leave_status_empty",
+      "value": "暂无假条记录"
+    },
+    {
+      "name": "leave_status_pending",
+      "value": "待审批"
+    },
+    {
+      "name": "web_office_copy_failed",
+      "value": "复制失败，请手动选择链接复制"
+    },
+    {
+      "name": "leave_detail_open",
+      "value": "查看详情"
+    },
+    {
+      "name": "leave_record_reason_summary",
+      "value": "事由：%s"
+    },
+    {
+      "name": "leave_detail_reason_label",
+      "value": "休假原因"
+    },
+    {
+      "name": "leave_record_approver_summary",
+      "value": "审批人：%s"
+    },
+    {
+      "name": "web_office_invalid_url",
+      "value": "链接无效或不在白名单，已阻止打开"
+    },
+    {
+      "name": "settings_demo_badge",
+      "value": "示例数据"
+    },
+    {
+      "name": "web_portal_title",
+      "value": "登录学校门户"
+    },
+    {
+      "name": "settings_demo_mode",
+      "value": "示例模式"
+    },
+    {
+      "name": "web_mobile_title",
+      "value": "移动教务入口"
+    },
+    {
+      "name": "web_office_title_cancel",
+      "value": "销假"
+    },
+    {
+      "name": "web_available_hint",
+      "value": "本机支持在学校页面登录"
+    },
+    {
+      "name": "web_office_title_renew",
+      "value": "续假"
+    },
+    {
+      "name": "permission_state_prompt",
+      "value": "待授权"
+    },
+    {
+      "name": "settings_hint_card_title",
+      "value": "说明"
+    },
+    {
+      "name": "web_unavailable_hint",
+      "value": "当前环境未提供 Web 能力（静态版本）——可复制链接到系统浏览器打开"
+    },
+    {
+      "name": "web_office_title_leave",
+      "value": "请假"
+    },
+    {
+      "name": "web_office_unavailable_title",
+      "value": "学校页面暂不可用"
+    },
+    {
+      "name": "leave_status_title",
+      "value": "假条状态"
+    },
+    {
+      "name": "privacy_summary",
+      "value": "本地数据与隐私说明"
+    },
+    {
+      "name": "web_office_error_hint",
+      "value": "页面加载失败，请检查网络后重试"
+    },
+    {
+      "value": "切换到示例数据",
+      "name": "data_switch_demo"
+    },
+    {
+      "value": "切换示例模式会显示内置示例数据，不影响已保存课表",
+      "name": "data_switch_confirm"
+    },
+    {
+      "value": "取消",
+      "name": "common_cancel"
+    },
+    {
+      "value": "切换到示例",
+      "name": "data_switch_demo_confirm"
+    },
+    {
+      "name": "calendar_action_write",
+      "value": "写入系统日历"
+    },
+    {
+      "name": "calendar_action_remove",
+      "value": "从系统日历移除"
+    },
+    {
+      "name": "calendar_action_open",
+      "value": "打开系统日历"
+    },
+    {
+      "name": "calendar_last_sync",
+      "value": "上次同步"
+    },
+    {
+      "name": "leave_status_read_error",
+      "value": "读取失败，可稍后重试"
+    },
+    {
+      "name": "leave_status_loading",
+      "value": "正在读取…"
+    },
+    {
+      "name": "web_office_static_unavailable",
+      "value": "当前环境未提供 Web 能力（静态版本）"
+    },
+    {
+      "value": "当前静态版本未提供该能力",
+      "name": "permission_unavailable_hint"
+    },
+    {
+      "value": "当前静态版本未提供系统日历能力",
+      "name": "calendar_unavailable_hint"
+    },
+    {
+      "value": "当前环境不支持",
+      "name": "calendar_last_sync_unsupported"
+    },
+    {
+      "value": "尚未同步",
+      "name": "calendar_last_sync_none"
+    }
+  ]
+}

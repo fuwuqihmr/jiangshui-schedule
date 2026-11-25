@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {courseOngoing} from '../web/course-time.mjs';
+const row={date:'2026-10-13',startTime:'19:00',endTime:'20:25'};
+test('上课开始包含、结束不包含，界面用中国时间和组件一致',()=>{for(const [time,expected] of [['2026-10-13T18:59:59+08:00',false],['2026-10-13T19:00:00+08:00',true],['2026-10-13T20:24:59+08:00',true],['2026-10-13T20:25:00+08:00',false],['2026-10-14T19:05:00+08:00',false]])assert.equal(courseOngoing(row,Date.parse(time)),expected,time);});
+test('停课、灰色空位、未知时间均不能标成进行中',()=>{const now=Date.parse('2026-10-13T19:30:00+08:00');assert.equal(courseOngoing({...row,cancelled:true},now),false);assert.equal(courseOngoing({...row,vacant:true},now),false);assert.equal(courseOngoing({...row,startTime:'不确定'},now),false);assert.equal(courseOngoing(null,now),false);});

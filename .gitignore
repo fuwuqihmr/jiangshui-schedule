@@ -1,0 +1,23 @@
+# 构建产物
+build-out/
+DerivedData/
+build/
+*.xcuserstate
+xcuserdata/
+.gradle/
+*.apk
+*.ipa
+# 日志与临时文件
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+# 交接包与大压缩包
+*.zip
+*.7z
+# 敏感物料
+*.p12
+*.mobileprovision
+*.jks
+*.keystore
+.env

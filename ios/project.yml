@@ -1,0 +1,93 @@
+# 江水课表 iOS 壳（XcodeGen 描述文件）。
+# 生成工程：在 ios/ 目录执行 \`xcodegen generate\`（需要 macOS + XcodeGen）。
+# 本机 Windows 不能跑 xcodegen，直接使用已提交的 Jiangshui.xcodeproj（由 ios/tools/gen-pbxproj.mjs 生成）。
+name: Jiangshui
+options:
+  minimumXcodeGenVersion: "2.32.0"
+  bundleIdPrefix: cn.local.tomorrow
+  deploymentTarget:
+    iOS: "15.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  generateEmptyDirectories: true
+  xcodeVersion: "14.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "15.0"
+    SDKROOT: iphoneos
+    MARKETING_VERSION: "1.5.0"
+    CURRENT_PROJECT_VERSION: "64"
+    TARGETED_DEVICE_FAMILY: "1,2"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    SWIFT_EMIT_LOC_STRINGS: YES
+targets:
+  Jiangshui:
+    type: application
+    platform: iOS
+    deploymentTarget: "15.0"
+    sources:
+      # 源码 + Resources（xcassets / PrivacyInfo.xcprivacy / AppIcon-1024.png 自动进 Resources 阶段）
+      - path: Jiangshui
+        excludes:
+          - "Resources/Info.plist"
+      # 实时活动共享契约：同一份 .swift 同时编译进主 App 与 Widget Extension
+      # （ClassActivityAttributes 本身标了 @available(iOS 16.1, *)，15.0 的 App 可编译）
+      - path: JiangshuiWidgets/Shared
+      # web/ 以 folder reference 进 bundle：bundle 内路径仍是 web/...（LocalServer 的根）
+      - path: ../web
+        type: folder
+        name: web
+    dependencies:
+      # .appex 由 XcodeGen 自动放进 "Embed App Extensions" 阶段
+      - target: JiangshuiWidgets
+        embed: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.local.tomorrow
+        PRODUCT_NAME: Jiangshui
+        INFOPLIST_FILE: Jiangshui/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        MARKETING_VERSION: "1.5.0"
+        CURRENT_PROJECT_VERSION: "64"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+  JiangshuiWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.1"
+    sources:
+      - path: JiangshuiWidgets
+        excludes:
+          - "Info.plist"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cn.local.tomorrow.widgets
+        PRODUCT_NAME: JiangshuiWidgetsExtension
+        INFOPLIST_FILE: JiangshuiWidgets/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SKIP_INSTALL: YES
+        APPLICATION_EXTENSION_API_ONLY: YES
+        MARKETING_VERSION: "1.5.0"
+        CURRENT_PROJECT_VERSION: "64"
+        SWIFT_VERSION: "5.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "16.1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+schemes:
+  Jiangshui:
+    build:
+      targets:
+        Jiangshui: all
+        JiangshuiWidgets: all
+    run:
+      config: Debug
+    archive:
+      config: Release

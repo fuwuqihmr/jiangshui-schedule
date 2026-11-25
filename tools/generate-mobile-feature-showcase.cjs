@@ -1,0 +1,73 @@
+const {_electron:electron}=require('playwright');
+const fs=require('node:fs/promises'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..'),out='D:/ChatGPT/2026-10-10/files-pasted-by-the-user-d/outputs/江水课表-1.1.4-手机版功能截图';
+(async()=>{
+ await fs.mkdir(out,{recursive:true});
+ const {createState,clone,effectiveDay,saveOverride,applySnapshot,today,weekday,weekOf,addDays}=await import('../web/core.mjs');
+ const {saveCustomCourse}=await import('../web/custom-courses.mjs');
+ const {withStudyPolicy}=await import('../web/study.mjs');
+ const base=JSON.parse(await fs.readFile(path.join(root,'web/data/baseline.json'),'utf8')),calendar=JSON.parse(await fs.readFile(path.join(root,'web/data/holidays.json'),'utf8'));
+ const date=today(),week=weekOf(base,date),day=weekday(date),moment=date+'T07:00:00+08:00';
+ base.source={kind:'school',label:'学校教务系统 · 演示课表'};base.remaps=[];base.closedDates=[];base.exceptions=[];
+ const row=(id,name,room,startTime,endTime,periods,weekday=day)=>({id,name,room,teacher:'张老师',weekday,weeks:[week,week+1],periods,startTime,endTime});
+ base.rules=[row('math','高等数学 B（上）','南 C303','08:30','09:55',[1,2]),row('english','大学英语','北 B201','10:15','11:40',[3,4]),row('programming','程序设计基础','实验楼 302','14:00','15:25',[5,6],day===7?1:day+1),row('sports','大学体育','田径场','15:45','17:10',[7,8],day>5?3:day+2)];
+ const fixture=()=>{const s=createState(withStudyPolicy(base,{enrollmentYear:2026},calendar,{studyPolicy:{userEnabled:true}}));s.theme='light';s.lastSuccess=moment;s._revision=1;return s;};
+ const app=await electron.launch({args:['--force-device-scale-factor=3',root],env:{...process.env,TOMORROW_TEST:'1'}}),records=[];
+ try{
+  await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().forEach(w=>{w.setPosition(-5000,0);w.showInactive();}));
+  const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.setViewportSize({width:430,height:932});const cdp=await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setDeviceMetricsOverride',{width:430,height:932,deviceScaleFactor:3,mobile:true,screenWidth:430,screenHeight:932});
+  const shot=async(title,intro,full=false)=>{await page.evaluate(()=>document.querySelectorAll('#notification-root .notice-close').forEach(button=>button.click()));await page.waitForFunction(()=>!document.querySelector('#notification-root')?.children.length);const offset=await page.evaluate(()=>{document.activeElement?.blur();return {x:scrollX,y:scrollY,height:Math.max(document.documentElement.scrollHeight,document.body.scrollHeight)};});const file=`${String(records.length+1).padStart(2,'0')}-${title}.png`;const image=await cdp.send('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:full,clip:{x:full?0:offset.x,y:full?0:offset.y,width:430,height:full?offset.height:932,scale:1}});await fs.writeFile(path.join(out,file),Buffer.from(image.data,'base64'));records.push({file,title,intro});};
+  await page.locator('#consent-check').waitFor();await shot('首次启动与用户授权','首次使用须阅读并主动同意用户协议，授权在本机保存与复用学校登录 Cookie。确认后才能进入应用。');
+  await page.locator('#consent-check').check();await page.locator('#consent-accept').click();await page.locator('.day-swipe').waitFor();
+  const agreement=JSON.parse(await fs.readFile(path.join(root,'web/agreement.json'),'utf8'));
+  await app.evaluate(({ipcMain},version)=>{global.showcaseState=null;global.showcaseMode='success';ipcMain.removeHandler('app:request');ipcMain.handle('app:request',async(_e,a,p={})=>{
+   if(a==='consentStatus')return {version,acceptedAt:'2026-10-10T00:00:00Z'};
+   if(a==='loadState')return global.showcaseState;
+   if(a==='saveState'){global.showcaseState=p.state;global.showcaseState._revision++;return {revision:global.showcaseState._revision};}
+   if(a==='runtimeStatus')return {enabled:true,exact:true,next:Date.parse('2026-10-12T22:00:00+08:00')};
+   if(['sync','capture','openSchool'].includes(a)){if(global.showcaseMode==='failure'){await new Promise(r=>setTimeout(r,1800));throw Error('学校服务暂时无法连接，已保留上次成功读取的课表');}return {snapshot:JSON.parse(JSON.stringify(global.showcaseState.snapshot))};}
+   return {ok:true};
+  });},agreement.version);
+  const load=async(state)=>{await app.evaluate((_e,value)=>{global.showcaseState=value;global.showcaseMode='success';},clone(state));await page.reload();await page.locator('.day-swipe').waitFor();await page.locator('#sync-status [data-state=success]').waitFor();await page.evaluate(()=>document.querySelectorAll('#notification-root .notice-close').forEach(button=>button.click()));await page.waitForFunction(()=>!document.querySelector('#notification-root')?.children.length);await page.evaluate(async()=>{globalThis.Android={};await globalThis.onNativeResume();});await page.locator('#day-date').fill(date);await page.locator('#day-date').dispatchEvent('change');await page.evaluate(()=>scrollTo(0,0));};
+  const close=async()=>{await page.locator('.modal [data-action=close]').first().click();};
+  const settings=async()=>{await page.locator('.nav [data-tab=settings]').click();};
+  const panel=async(title)=>{await page.locator('.settings-grid .panel').filter({has:page.getByRole('heading',{name:title,exact:true})}).scrollIntoViewIfNeeded();};
+  await load(fixture());await shot('今日课表首页','默认打开今天的课表，展示日期、星期、教学周、课程数量和上课安排。课程卡片直接给出时间、教室与教师，左右滑动可切换日期。');
+  await page.locator('.nav [data-tab=week]').click();await page.selectOption('#week-select',String(week));await page.locator(`[data-action=select-week-date][data-date="${addDays(date,1)}"]`).click();await shot('完整周课表与日期高亮','按周展示一周课程，点击日期高亮整列。日期栏支持左右滑动切换整周，也可选择周次或返回本周；无课时段保留白色表格。',true);
+  await page.locator('#search').fill('高数');await shot('模糊课程搜索','搜索课程名、教师或教室，支持简称和忽略大小写。例如输入“高数”即可找到“高等数学”。');
+  await load(fixture());await page.locator('.course-list .course-card').first().click();await shot('课程详情','查看课程时间、地点、教师、排课周次和来源。通过详情可修改当天安排，或统一设置同类课程属性。');
+  await page.locator('.modal [data-action=edit]').click();await page.locator('#edit-form [name=room]').fill('南 C305');await shot('单日课程修改','只修改所选日期的教室、教师、开始及结束时间，也可标记当天停课。其他日期继续使用原安排，并支持撤销修改。');await close();
+  await page.locator('[data-action=course-manager]').click();await shot('课程统一设置入口','按课程管理整个学期的教室和教师，减少重复修改；晚自习提供独立的固定地点设置。');
+  await page.locator('[data-action=course-settings][data-name="高等数学 B（上）"]').click();await page.locator('#course-settings-form [name=room]').fill('固定教室 C204');await shot('同类课程统一属性','勾选需要统一的教室或教师，应用到本学期所有同名课程，包括调休后的课程。同步后设置仍保留；学校修改相同属性时提示冲突。');await close();
+  await page.locator('[data-action=study-settings]').first().click();await page.locator('#study-settings-form [name=room]').fill('南 C204');await shot('可选晚自习设置','晚自习默认关闭，可确认年级、开启安排并填写固定教室。当前规则为大一周日至周四 19:00–20:30，跟随调休，法定假日取消，与学校晚课冲突时让位。');await close();
+  await page.locator('[data-action=remap]').first().click();await shot('添加调休安排','选择新的上课日期与采用哪一天的课表。调休覆盖目标日原课程，原日期移走课程后不重复上课，支持撤销。');await close();
+  const moved=fixture();moved.localMaps=[{id:'showcase-move',date:addDays(date,4),fromDate:date,mode:'replace'}];await load(moved);await shot('调休后的灰色空位','原课程调走后以灰色空位保留，显示调往哪一天，并明确此时段不上课。灰色记录不计入当天课程数量。');
+  await load(fixture());await page.locator('[data-action=custom-course]').click();await page.locator('#custom-course-form [name=name]').fill('社团摄影课程');await page.locator('[name=weekdays][value="3"]').check();await page.locator('[name=startWeek]').fill(String(week));await page.locator('[name=endWeek]').fill('16');await page.selectOption('[name=weekPattern]','odd');await shot('自定义课程规律上课','统一入口内选择“规律上课”，可多选星期、指定开始和结束周，以及每周、单周或双周重复。适合社团课程、长期固定安排等。');
+  await page.locator('[name=startTime]').fill('17:30');await page.locator('[name=endTime]').fill('18:20');await page.locator('[name=room]').fill('活动中心 201');await page.locator('#custom-course-form [type=submit]').scrollIntoViewIfNeeded();await shot('自定义课程时间与地点','规律课程和独立加课都可填写具体起止时间、教室和教师。自定义课程保存在本机，学校同步不会覆盖，与其他课程重叠时会提示。');
+  await page.locator('[name=custom-mode][value=once]').check();await page.locator('[name=date]').fill(date);await page.locator('#custom-course-form [name=name]').fill('临时实验加课');await page.locator('.modal').evaluate(n=>n.scrollTop=0);await shot('自定义课程独立加课','选择“独立加课”，在指定日期增加一次课程。它固定在该日期，不随整日调休移动，也可安排学期之外的课程。');await close();
+  let custom=saveCustomCourse(fixture(),{mode:'weekly',name:'社团摄影课程',room:'活动中心 201',teacher:'陈老师',startTime:'17:30',endTime:'18:20',semesterId:base.semester.id,semesterStartDate:base.semester.startDate,startWeek:week,endWeek:16,weekPattern:'every',weekdays:[day,day===7?1:day+1]});custom=saveCustomCourse(custom,{mode:'once',name:'临时实验加课',room:'实验楼 302',teacher:'李老师',date,startTime:'20:40',endTime:'21:30'});
+  await load(custom);await settings();await panel('自定义课程');await shot('自定义课程管理','设置页集中列出已添加的自定义课程，展示重复规律、时间、地点与教师，可编辑整个安排或删除。删除前需确认。');
+  await page.locator('.nav [data-tab=tomorrow]').click();await page.locator('.course-list .course-card').filter({hasText:'社团摄影课程'}).click();await shot('自定义课程详情与管理','自定义课程与学校课程一起显示，并标明来源。详情支持只修改某一天，或编辑、删除整个自定义课程。');
+  const updated=clone(base);updated.rules[0].room='南 C305';updated.rules[1].startTime='14:00';updated.rules[1].endTime='15:25';updated.rules[1].periods=[5,6];const changes=applySnapshot(fixture(),updated,moment);
+  await load(changes);await shot('课程更新醒目提示','读取发现课程变化后，首页显示变化数量，并在课程卡片标红新值、划去旧值。时间、教室和教师等变化可及时查看。');
+  await page.locator('.nav [data-tab=changes]').click();await shot('变更记录前后对照','每次学校课表更新的差异留在变更记录，保留原值、新值、发现时间和未读状态。可跳转查看当天，或标记“知道了”。');
+  let conflict=saveOverride(fixture(),effectiveDay(base,date)[0],{room:'本人设置 C204'},moment);conflict=applySnapshot(conflict,updated,moment);await load(conflict);await page.locator('.course-card.conflicted').first().click();await shot('学校更新与本人修改冲突','学校更新与本人修改同一字段时，同时保留学校版本和本地版本，显示冲突提示，由用户选择采用学校版或保留本人修改。');
+  const overlap=fixture();overlap.snapshot.rules=[base.rules[0],{...clone(base.rules[0]),id:'theory',name:'军事理论',room:'北 A101'}];await load(overlap);await shot('课程重叠保留双方','两门课程时间重叠时都保留，显示“时段重叠”标记，避免静默覆盖漏掉课程。详情会提醒核实实际安排。');
+  await load(fixture());await app.evaluate(()=>{global.showcaseMode='failure';});await page.locator('[data-action=sync]').click();await page.locator('.read-spinner').waitFor();await shot('读取进度与已有课表','读取学校课表时显示当前阶段和耗时，已有课表仍可查看；手机端提供取消操作，减少等待时的不确定感。');await page.locator('.read-error').waitFor();await shot('读取失败保留上次课表','学校连接异常或读取失败时显示提示，并继续保留上次成功读取的课程，方便查看已有安排。');
+  const empty=fixture();empty.snapshot.rules=[];empty.snapshot.studyPolicy.userEnabled=false;empty.snapshot.studyPolicy.enabled=false;await load(empty);await shot('当天无课清晰提示','没有课程时明确显示当天无课状态和零课程数量，帮助用户区分“确实没有安排”和正在读取课表。');
+  await load(fixture());await page.locator('[data-action=theme-settings]').click();await shot('外观主题选择','支持跟随系统、江水蓝、黑色、白色和紫色。跟随系统时自动切换深浅外观，用户也可选择固定主题。');await page.locator('[data-action=set-theme][data-theme=dark]').click();await close();await shot('黑色主题','深色界面适合夜间查看，课程颜色、文字与提示保持清晰；外观偏好在本机保存。');
+  await load(fixture());await page.locator('[data-action=theme-settings]').click();await page.locator('[data-action=set-theme][data-theme=blue]').click();await close();await shot('江水蓝主题','以水宝宝图标的蓝色为主题，搭配浅蓝日期卡片和简洁课程列表，保留清晰的内容层次。');
+  await page.locator('[data-action=theme-settings]').click();await page.locator('[data-action=set-theme][data-theme=purple]').click();await close();await shot('紫色主题','紫色用于导航、按钮和日期高亮，课程卡片继续按课程区分，便于识别当前选择。');
+  await load(fixture());await settings();await panel('教务系统');await shot('学校登录与课表读取入口','设置页提供学校门户、移动教务及读取课表入口。优先复用本机登录状态静默读取，需要登录时才显示学校页面。');
+  await panel('提醒与运行方式');await shot('每日自动检查与后台设置','手机端可开启每日自动核对并自定义检查时间（默认北京时间 22:00），也可立即后台检查或打开后台运行设置。自动检查依赖有效登录状态与系统调度。');
+  await panel('课表与本地修改');await shot('课表导入导出与恢复','支持导入和导出 JSON 课表，查看已保存修改与调休，并还原来源课表。导出包含自定义课程，不包含学校登录凭据。');
+  await panel('用户协议与隐私');await shot('本机数据与隐私说明','Cookie 保存在本机，供学校登录与读取使用，不上传到开发者或第三方云端。可随时查看协议，注销时清除本机数据并撤回授权。');
+  await page.locator('#sample-mode-entry').scrollIntoViewIfNeeded();await shot('设置底部示例模式入口','示例模式统一放在设置页最下方。进入只切换显示内置演示课表，个人课表、修改和登录状态都保留。');
+  await page.locator('[data-action=sample-mode]').click();await shot('示例模式二次确认','进入示例模式前再次确认，并明确说明个人课表、手动修改、调休与登录状态保留，避免误操作。');await page.locator('[data-action=sample-confirm]').click();await page.locator('#day-date').fill(addDays(date,1));await page.locator('#day-date').dispatchEvent('change');await page.evaluate(()=>scrollTo(0,0));await shot('示例模式只读预览','顶部明确标注正在查看示例课表，可浏览日课表、周课表和详情。退出后恢复最新保存的个人课表，重启应用也回到个人课表。');
+  await page.locator('[data-action=sample-exit]').first().click();await settings();await page.locator('[data-action=logout]').click();await shot('注销与数据清除确认','注销前再次确认，明确告知将删除本机学校会话、课表和修改记录，并撤回 Cookie 授权。');
+  assert.deepEqual(errors,[]);
+  await fs.writeFile(path.join(out,'截图索引.json'),JSON.stringify({version:'1.1.4',date,records},null,2),'utf8');
+  console.log(`MOBILE FEATURE SCREENSHOTS COMPLETE: ${records.length} images at ${out}`);
+ }finally{await app.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

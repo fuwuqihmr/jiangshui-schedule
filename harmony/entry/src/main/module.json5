@@ -1,0 +1,54 @@
+// 职责：entry 模块配置，单 EntryAbility、launcher 入口、仅声明 INTERNET 权限。
+// 依赖方向：pages/core/data/platform；P0 仅骨架，不接 Kit。
+// 阶段：P0 骨架；日历/通知/后台权限留到 P3/P6 运行时申请。
+// 待确认：requestPermissions 的 reason 资源键与 usedScene 字段以官方文档为准。
+{
+  "module": {
+    "name": "entry",
+    "type": "entry",
+    "description": "$string:module_desc",
+    "mainElement": "EntryAbility",
+    "deviceTypes": [
+      "phone",
+      "tablet"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "pages": "$profile:main_pages",
+    "abilities": [
+      {
+        "name": "EntryAbility",
+        "srcEntry": "./ets/entryability/EntryAbility.ets",
+        "description": "$string:entryability_desc",
+        "icon": "$media:app_icon",
+        "label": "$string:app_name",
+        "startWindowIcon": "$media:app_icon",
+        "startWindowBackground": "$color:background",
+        "exported": true,
+        "skills": [
+          {
+            "entities": [
+              "entity.system.home"
+            ],
+            "actions": [
+              "action.system.home"
+            ]
+          }
+        ]
+      }
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET",
+        "reason": "$string:permission_internet_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
+      }
+      // 日历、通知、提醒与后台任务权限不在 P0 静态申请，P3/P6 按需运行时申请。
+    ]
+  }
+}

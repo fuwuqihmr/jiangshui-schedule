@@ -1,0 +1,7 @@
+<resources>
+  <color name="notification_ink">#192C37</color>
+  <color name="notification_muted">#5B6C76</color>
+  <color name="notification_accent">#007EA8</color>
+  <color name="notification_action">#E8F4FA</color>
+  <color name="notification_divider">#D8E2E8</color>
+</resources>

@@ -1,0 +1,309 @@
+复制 17 个纯逻辑文件，测试 45 项：43 通过 / 2 失败
+TAP version 13
+# Subtest: 1) 单双周：第1周有单周课、第2周没有；全周课每周都有
+ok 1 - 1) 单双周：第1周有单周课、第2周没有；全周课每周都有
+  ---
+  duration_ms: 5.0183
+  type: 'test'
+  ...
+# Subtest: 2) localMaps：目标日按原日上课，原日变 moved 占位
+ok 2 - 2) localMaps：目标日按原日上课，原日变 moved 占位
+  ---
+  duration_ms: 14.7686
+  type: 'test'
+  ...
+# Subtest: 2b) snapshot.remaps：学期内调休目标日与原日停课
+ok 3 - 2b) snapshot.remaps：学期内调休目标日与原日停课
+  ---
+  duration_ms: 1.9667
+  type: 'test'
+  ...
+# Subtest: 3) 调休 replace：调休日原有课被替换
+ok 4 - 3) 调休 replace：调休日原有课被替换
+  ---
+  duration_ms: 0.5216
+  type: 'test'
+  ...
+# Subtest: 4) 寒假/暑假：普通课停课，晚自习按 skipStudy 规则保留
+ok 5 - 4) 寒假/暑假：普通课停课，晚自习按 skipStudy 规则保留
+  ---
+  duration_ms: 0.4025
+  type: 'test'
+  ...
+# Subtest: 5) 单日休假：停课但晚自习按 skipStudy 规则保留
+ok 6 - 5) 单日休假：停课但晚自习按 skipStudy 规则保留
+  ---
+  duration_ms: 0.4604
+  type: 'test'
+  ...
+# Subtest: 6) 单日休假：skipStudy=true 时晚自习也停
+ok 7 - 6) 单日休假：skipStudy=true 时晚自习也停
+  ---
+  duration_ms: 1.6687
+  type: 'test'
+  ...
+# Subtest: 7) 晚自习：大一显示、非大一隐藏、userEnabled=false 隐藏
+ok 8 - 7) 晚自习：大一显示、非大一隐藏、userEnabled=false 隐藏
+  ---
+  duration_ms: 0.8061
+  type: 'test'
+  ...
+# Subtest: 8) 晚自习：与学校课冲突时不显示，overlap 标记生效
+ok 9 - 8) 晚自习：与学校课冲突时不显示，overlap 标记生效
+  ---
+  duration_ms: 1.8305
+  type: 'test'
+  ...
+# Subtest: 9) 自定义课程：weekly 指定周次/星期、once 单日出现
+ok 10 - 9) 自定义课程：weekly 指定周次/星期、once 单日出现
+  ---
+  duration_ms: 1.5488
+  type: 'test'
+  ...
+# Subtest: 10) 请假联动：approved 左闭右开、pending 标记、rejected 不标记
+ok 11 - 10) 请假联动：approved 左闭右开、pending 标记、rejected 不标记
+  ---
+  duration_ms: 1.8453
+  type: 'test'
+  ...
+# Subtest: 11) diffState：新增/删除/改教室各 1 条，无变化 0 条，首次基线不刷屏
+ok 12 - 11) diffState：新增/删除/改教室各 1 条，无变化 0 条，首次基线不刷屏
+  ---
+  duration_ms: 2.7018
+  type: 'test'
+  ...
+# Subtest: 12) StateRepository：save→load 往返一致、revision 递增、空值容错
+ok 13 - 12) StateRepository：save→load 往返一致、revision 递增、空值容错
+  ---
+  duration_ms: 2.4917
+  type: 'test'
+  ...
+# Subtest: 13) StateRepository：空/坏 JSON 容错，schema 版本迁移失败
+ok 14 - 13) StateRepository：空/坏 JSON 容错，schema 版本迁移失败
+  ---
+  duration_ms: 1.0182
+  type: 'test'
+  ...
+# Subtest: 14) StateRepository：写失败回滚，主键不残留、revision 回退
+ok 15 - 14) StateRepository：写失败回滚，主键不残留、revision 回退
+  ---
+  duration_ms: 1.0243
+  type: 'test'
+  ...
+# Subtest: 15) StateRepository：revision 冲突拒绝写入
+ok 16 - 15) StateRepository：revision 冲突拒绝写入
+  ---
+  duration_ms: 0.6536
+  type: 'test'
+  ...
+# Subtest: 16) key 唯一：同一日期重复解析 key 一致，学期内 key 不重复
+ok 17 - 16) key 唯一：同一日期重复解析 key 一致，学期内 key 不重复
+  ---
+  duration_ms: 2.8137
+  type: 'test'
+  ...
+# Subtest: 17) 寒假/暑假 skipStudy=false 仍保留晚自习
+ok 18 - 17) 寒假/暑假 skipStudy=false 仍保留晚自习
+  ---
+  duration_ms: 0.6238
+  type: 'test'
+  ...
+# Subtest: 18) diffState：同课跨周 stableKey 一致
+ok 19 - 18) diffState：同课跨周 stableKey 一致
+  ---
+  duration_ms: 1.0132
+  type: 'test'
+  ...
+# Subtest: 19) diffState：已结束课程不产生变更
+ok 20 - 19) diffState：已结束课程不产生变更
+  ---
+  duration_ms: 0.3392
+  type: 'test'
+  ...
+# Subtest: 20) StateRepository：坏 snapshot 降级不崩
+ok 21 - 20) StateRepository：坏 snapshot 降级不崩
+  ---
+  duration_ms: 0.543
+  type: 'test'
+  ...
+# Subtest: 21) 请假：cancel 不标记；approved+pending 多假条各自生效
+ok 22 - 21) 请假：cancel 不标记；approved+pending 多假条各自生效
+  ---
+  duration_ms: 0.5766
+  type: 'test'
+  ...
+# Subtest: 22) StateRepository：主文件写成功后 revision 写失败 → 回滚文件与 revision
+ok 23 - 22) StateRepository：主文件写成功后 revision 写失败 → 回滚文件与 revision
+  ---
+  duration_ms: 0.5044
+  type: 'test'
+  ...
+# Subtest: 23) StateRepository：删 tmp 失败路径 → STATE_WRITE_FAILED 且 revision 不递增
+ok 24 - 23) StateRepository：删 tmp 失败路径 → STATE_WRITE_FAILED 且 revision 不递增
+  ---
+  duration_ms: 0.3395
+  type: 'test'
+  ...
+# Subtest: 24) StateRepository：坏文件保留 .corrupt 副本并降级为空态
+ok 25 - 24) StateRepository：坏文件保留 .corrupt 副本并降级为空态
+  ---
+  duration_ms: 0.3231
+  type: 'test'
+  ...
+# Subtest: 25) 错误码：STATE_CORRUPT 与 STATE_MIGRATION_FAILED 可区分；空文件返回空态
+ok 26 - 25) 错误码：STATE_CORRUPT 与 STATE_MIGRATION_FAILED 可区分；空文件返回空态
+  ---
+  duration_ms: 0.2355
+  type: 'test'
+  ...
+# Subtest: 26) StateRepository：migrate 保留 events/overrides/localMaps/customCourses
+ok 27 - 26) StateRepository：migrate 保留 events/overrides/localMaps/customCourses
+  ---
+  duration_ms: 0.2983
+  type: 'test'
+  ...
+# Subtest: day approved leave gold
+ok 28 - day approved leave gold
+  ---
+  duration_ms: 8.6924
+  type: 'test'
+  ...
+# Subtest: day pending leave
+ok 29 - day pending leave
+  ---
+  duration_ms: 0.4422
+  type: 'test'
+  ...
+# Subtest: day empty weekend
+ok 30 - day empty weekend
+  ---
+  duration_ms: 0.273
+  type: 'test'
+  ...
+# Subtest: day invalid date
+ok 31 - day invalid date
+  ---
+  duration_ms: 0.2947
+  type: 'test'
+  ...
+# Subtest: day no semester
+ok 32 - day no semester
+  ---
+  duration_ms: 0.1856
+  type: 'test'
+  ...
+# Subtest: day edge moved
+ok 33 - day edge moved
+  ---
+  duration_ms: 19.9365
+  type: 'test'
+  ...
+# Subtest: day edge make-up day
+ok 34 - day edge make-up day
+  ---
+  duration_ms: 2.4849
+  type: 'test'
+  ...
+# Subtest: day edge cancelled day
+ok 35 - day edge cancelled day
+  ---
+  duration_ms: 1.3576
+  type: 'test'
+  ...
+# Subtest: day title selected
+ok 36 - day title selected
+  ---
+  duration_ms: 0.7946
+  type: 'test'
+  ...
+# Subtest: format periods/range
+ok 37 - format periods/range
+  ---
+  duration_ms: 1.5721
+  type: 'test'
+  ...
+# Subtest: week normal first week
+ok 38 - week normal first week
+  ---
+  duration_ms: 3.3885
+  type: 'test'
+  ...
+# Subtest: week selected columns
+ok 39 - week selected columns
+  ---
+  duration_ms: 1.2258
+  type: 'test'
+  ...
+# Subtest: week edge week six
+ok 40 - week edge week six
+  ---
+  duration_ms: 1.0759
+  type: 'test'
+  ...
+# Subtest: change empty
+ok 41 - change empty
+  ---
+  duration_ms: 0.3018
+  type: 'test'
+  ...
+# Subtest: change groups unread
+ok 42 - change groups unread
+  ---
+  duration_ms: 0.2493
+  type: 'test'
+  ...
+# Subtest: change markRead immutable
+not ok 43 - change markRead immutable
+  ---
+  duration_ms: 0.3123
+  type: 'test'
+  location: 'D:\\ChatGPT\\JiangshuiSchedule-1.2.0-archive\\source\\course-change\\harmony\\tools\\tests\\core-viewmodel.test.mjs:51:1'
+  failureType: 'testCodeFailure'
+  error: 'records is not iterable'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    Module.markChangeRead (file:///C:/Users/fuwuq/AppData/Local/Temp/jiangshui-core-v8aGzY/core/viewmodel/ChangeViewModel.ts:117:24)
+    TestContext.<anonymous> (file:///D:/ChatGPT/JiangshuiSchedule-1.2.0-archive/source/course-change/harmony/tools/tests/core-viewmodel.test.mjs:51:132)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: change markAllRead
+not ok 44 - change markAllRead
+  ---
+  duration_ms: 0.3002
+  type: 'test'
+  location: 'D:\\ChatGPT\\JiangshuiSchedule-1.2.0-archive\\source\\course-change\\harmony\\tools\\tests\\core-viewmodel.test.mjs:52:1'
+  failureType: 'testCodeFailure'
+  error: 'records is not iterable'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    Module.markAllChangeRead (file:///C:/Users/fuwuq/AppData/Local/Temp/jiangshui-core-v8aGzY/core/viewmodel/ChangeViewModel.ts:134:24)
+    TestContext.<anonymous> (file:///D:/ChatGPT/JiangshuiSchedule-1.2.0-archive/source/course-change/harmony/tools/tests/core-viewmodel.test.mjs:52:125)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: schema default changeRecords
+ok 45 - schema default changeRecords
+  ---
+  duration_ms: 0.1451
+  type: 'test'
+  ...
+1..45
+# tests 45
+# suites 0
+# pass 43
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 362.9883

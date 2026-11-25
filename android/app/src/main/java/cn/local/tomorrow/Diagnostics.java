@@ -1,0 +1,19 @@
+package cn.local.tomorrow;
+import android.content.Context;import android.content.pm.PackageInfo;import android.os.Build;import android.webkit.WebView;import android.net.Uri;import org.json.*;import java.io.*;import java.nio.charset.StandardCharsets;
+public final class Diagnostics {
+ static String page(String url){try{Uri u=Uri.parse(url);String host=u.getHost(),path=u.getPath();if("portal.juwp.edu.cn".equals(host))return "portal";if("eapp2.juwp.edu.cn".equals(host)||"eapp2.nit.edu.cn".equals(host))return "school-login";if("jiaowuh5.juwp.edu.cn".equals(host))return "mobile-academic";if("jiaowu.juwp.edu.cn".equals(host))return path!=null&&path.startsWith("/jsxsd/xskb/")?"timetable":path!=null&&path.startsWith("/jsxsd/framework/")?"academic-home":"academic";}catch(Exception ignored){}return "school";}
+ static String method(String value){return "GET".equals(value)||"POST".equals(value)?value:"OTHER";}
+ static String label(String page){return "school-login".equals(page)||"portal".equals(page)?"学校登录页面":"学校教务页面";}
+ public static JSONObject read(Context c)throws Exception {
+  JSONObject result=new JSONObject();result.put("platform","android");result.put("appVersion",c.getPackageManager().getPackageInfo(c.getPackageName(),0).versionName);result.put("systemVersion",Build.VERSION.RELEASE);result.put("androidApi",Build.VERSION.SDK_INT);result.put("notificationStatus",ClassReminders.notificationStatus(c));
+  PackageInfo engine=WebView.getCurrentWebViewPackage();if(engine!=null)result.put("engineVersion",engine.versionName);
+  JSONArray lines=new JSONArray();File dir=c.getExternalFilesDir(null);if(dir==null)dir=c.getFilesDir();File file=new File(dir,"applog.txt");
+  // The web formatter independently whitelists every line before it is written to a file.
+  // Pass only scalar diagnostic records; ignore paths and all arbitrary messages here as well.
+  if(file.exists())try(RandomAccessFile input=new RandomAccessFile(file,"r")){long offset=Math.max(0,input.length()-131072);input.seek(offset);byte[] bytes=new byte[(int)(input.length()-offset)];input.readFully(bytes);for(String line:new String(bytes,StandardCharsets.UTF_8).split("\\r?\\n")){
+   if(line.length()>600)continue;
+   if(line.matches("\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} (?:school-page http-error=\\d{3}|school-page network-error=-?\\d+|read-start background=(?:true|false) profile-known=(?:true|false)|read-failed background=(?:true|false)|school-login (?:awaiting-user|accepted)|school-session expired; recovery-used=(?:true|false)|school-session tgc-expired|school-ssl-error page=(?:portal|school-login|academic-home|timetable|academic|mobile-academic|school)|session-cookie-state tgc=(?:true|false) academic=(?:true|false)|session-cookie-restore tgc=(?:true|false) academic=(?:true|false)|session-cookie-restored name=(?:tgc|academic)|session-store (?:read-failed|write-failed|clear-failed)|session-renewal start reason=(?:expired-school-cookie|missing-school-cookie)|session-renewal reached-academic-home|session-renewal failed reason=repeat|web-read ok weeks=\\d+ rows=\\d+ elapsed-ms=\\d+ sso=(?:true|false) background=(?:true|false)|reader-selection semester=(?:\\d{4}-\\d{4}-[12]|unknown) mode-known=(?:true|false) calendar-cached=(?:true|false)|school-page (?:http-error=\\d{3}|network-error=-?\\d+) page=(?:portal|school-login|academic-home|timetable|academic|mobile-academic|school) method=(?:GET|POST|OTHER)|reader-error stage=(?:weeks|courses|unknown) http-status=\\d{1,3} kind=(?:http|session|timeout|format|other)|import-error kind=(?:http|cancelled|session|timeout|structure|network|other) http-status=\\d{1,3})"))lines.put(line);
+   else {java.util.regex.Matcher m=java.util.regex.Pattern.compile("^(\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) profile-read recognized=(true|false) links=(\\d+)(?: path=.*)?$").matcher(line);if(m.matches())lines.put(m.group(1)+" profile-read recognized="+m.group(2)+" links="+m.group(3));}
+  }}result.put("events",lines);return result;
+ }
+}

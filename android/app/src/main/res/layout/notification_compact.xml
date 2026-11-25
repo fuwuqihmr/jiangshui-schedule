@@ -1,0 +1,14 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent" android:layout_height="48dp"
+  android:orientation="vertical" android:gravity="center_vertical">
+  <TextView android:id="@+id/notice_headline" android:layout_width="match_parent" android:layout_height="wrap_content"
+    android:textColor="@color/notification_ink" android:textSize="15sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end"/>
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+    <TextView android:id="@+id/notice_course" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+      android:layout_marginEnd="10dp" android:textColor="@color/notification_muted" android:textSize="12sp" android:maxLines="1" android:ellipsize="end"/>
+    <Chronometer android:id="@+id/notice_clock" android:layout_width="wrap_content" android:layout_height="wrap_content"
+      android:textColor="@color/notification_accent" android:textSize="12sp" android:textStyle="bold" android:singleLine="true"/>
+    <TextView android:id="@+id/notice_status" android:layout_width="wrap_content" android:layout_height="wrap_content"
+      android:textColor="@color/notification_accent" android:textSize="12sp" android:textStyle="bold" android:maxLines="1"/>
+  </LinearLayout>
+</LinearLayout>

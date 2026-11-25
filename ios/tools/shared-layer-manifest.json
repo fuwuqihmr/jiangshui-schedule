@@ -1,0 +1,764 @@
+{
+  "formatVersion": 1,
+  "source": {
+    "description": "web/ + android/ 共享层冻结清单；由 git 工作树派生，不含时间戳",
+    "include": [
+      "web/**",
+      "android/**"
+    ],
+    "exclude": [
+      "*.apk",
+      "*.zip",
+      "**/build/**",
+      "**/.gradle/**"
+    ],
+    "hash": "git hash-object（按 .gitattributes 规范化行尾）",
+    "regenerate": "node ios/tools/check-ios.mjs --write-shared-manifest"
+  },
+  "files": [
+    {
+      "path": "android/app/build.gradle",
+      "blob": "c1ab7bf38a5c49ebd4c9f9dbc7ef4f768f41d4e4"
+    },
+    {
+      "path": "android/app/src/main/AndroidManifest.xml",
+      "blob": "35585eb201d11f183e49d9ca6bb1d3ca8037500e"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/BackgroundCheck.java",
+      "blob": "ef8c0a8c9d7f8f7c3913105437944086a14afb07"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/CalendarSync.java",
+      "blob": "0ce8a35b2fd054359d4b8a573bacc9def51ab55b"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/CheckScheduler.java",
+      "blob": "82c49f7fbc15cab263f83f076002afa73b4beda6"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/CheckTime.java",
+      "blob": "0204c10109ab136d5296778fcc661f830c5f4661"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/ClassReminderPlan.java",
+      "blob": "d6685f278ba0a98106e7dea77e998464d7320819"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/ClassReminderReceiver.java",
+      "blob": "865788cf2041a8e9b89c3493b771ca411b6348c9"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/ClassReminders.java",
+      "blob": "a3e23d462561b6a1867c9266d628216b2272bca2"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/DailyCheckService.java",
+      "blob": "0cbe8e0df3fdb17bca685a06cae5e7884071661c"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/DailyJob.java",
+      "blob": "2a2ddce3b0a05a10dea834d17bdac8c2ec750bad"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/Diagnostics.java",
+      "blob": "5a82e664a3c432ff857c892025a45b7c8e34a2db"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/FocusTemplate.java",
+      "blob": "641c609c2500523212e2d7bfc3f20bf3aa61a36e"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/LandscapeScheduleWidgetProvider.java",
+      "blob": "57b800a351855ae9b77064d7b20c154b8b00dc00"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/MainActivity.java",
+      "blob": "b3cab68d58e23117454ed9f344012fdb8c35f09c"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/NotificationCards.java",
+      "blob": "a51cf69a802540abcdc884d9a857dea592cb4d4a"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/ScheduleReceiver.java",
+      "blob": "8810273e6c9bcb22dae4bc8898623faeebde6388"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/ScheduleWidgetData.java",
+      "blob": "018e0943a0f5610e830aac7809169e8c54a79695"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/ScheduleWidgetListService.java",
+      "blob": "394d64be37d239feaf38900a62c325cd64e30ea5"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/ScheduleWidgetProvider.java",
+      "blob": "04f594b4bd76d35e5deee399f2d19566dc4f4927"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/SchoolClient.java",
+      "blob": "40d1cb7ef20072fb61ac1f3f90eb478062218ba4"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/SessionCookies.java",
+      "blob": "ffd23bb8e7a098ea3c740d7296fb9bedd9855294"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/SessionVault.java",
+      "blob": "b84f011f372d6baa6f0dbdd854212a726dd6c5ce"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/SmallScheduleWidgetProvider.java",
+      "blob": "9265a3a4b686ccdc94c1f9e927fb97f5123791f3"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/StateStore.java",
+      "blob": "99b4364754bfea8acaff3a2c7217a03fc3a459ff"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/TallScheduleWidgetProvider.java",
+      "blob": "a7f9711e9fc5e9777ec95d954b985f37381786ba"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/UserConsent.java",
+      "blob": "475c341938578a1c2d00517ea77f8d5805afb84b"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/WideScheduleWidgetProvider.java",
+      "blob": "795a5f7aa93e5dbbf70904c56935bbf6c9751b22"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/WidgetRefreshReceiver.java",
+      "blob": "9dcd70135b301e0937e9891fb9f67392578b3775"
+    },
+    {
+      "path": "android/app/src/main/java/cn/local/tomorrow/XiaomiFocus.java",
+      "blob": "80bc91b60b811b4ba9219c009ff32f9b25221584"
+    },
+    {
+      "path": "android/app/src/main/res/drawable-nodpi/ic_launcher_foreground.png",
+      "blob": "862996063ab3420eb7f59398d68e5a9632d45879"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_calendar.xml",
+      "blob": "0c11d0ccd8a935eaf6bfd3e5dab0bd2b1a574d30"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_icon_background.xml",
+      "blob": "d8f0e63d3229121ad43c85a4eb6da50e906af00e"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/notification_action.xml",
+      "blob": "ca928a943339a10518a9951fc8f975d8ef3c8728"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/widget_background.xml",
+      "blob": "448d8884bdca2cc545e557e654229e63aa6f5fc1"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/widget_course_active.xml",
+      "blob": "fcf1cb2ce04fd4b6f771531bd54a257fb5ca8a1b"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/widget_course_normal.xml",
+      "blob": "41918d9867819f53cd6c2ed02da15d1d3e067796"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/widget_divider.xml",
+      "blob": "0d05d4d5e3d087a17fccb8e907ab5589dc95252d"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/widget_header.xml",
+      "blob": "b14c540cd019903d81f9ee18c21840da810e4896"
+    },
+    {
+      "path": "android/app/src/main/res/layout/notification_compact.xml",
+      "blob": "f87b6ba27f52b7677d8003a6156c37e4eeb0bf12"
+    },
+    {
+      "path": "android/app/src/main/res/layout/notification_expanded.xml",
+      "blob": "fa408d8848dc8b7d8c06bd774c187f61e5c33d2c"
+    },
+    {
+      "path": "android/app/src/main/res/layout/notification_heads_up.xml",
+      "blob": "efb4fb193664560b97a14c38fc957c6c05404863"
+    },
+    {
+      "path": "android/app/src/main/res/layout/widget_course_row.xml",
+      "blob": "0e0a98a48be992dd38725897c53d1b875d5165e1"
+    },
+    {
+      "path": "android/app/src/main/res/layout/widget_schedule_landscape.xml",
+      "blob": "93d078df72f6679632d3b22dd493ff8b775750f0"
+    },
+    {
+      "path": "android/app/src/main/res/layout/widget_schedule_small.xml",
+      "blob": "71fcf437e6d77848f61cf53fc5443790332cb4cf"
+    },
+    {
+      "path": "android/app/src/main/res/layout/widget_schedule_tall.xml",
+      "blob": "a032dae8e7b28a31cdeda371a42a9baeb62b99fc"
+    },
+    {
+      "path": "android/app/src/main/res/layout/widget_schedule_wide.xml",
+      "blob": "b895d17857265cc70424d98b7a055fa9d9351e44"
+    },
+    {
+      "path": "android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+      "blob": "b517d21193c8e3aaedc50188b7abc0ee76cddd06"
+    },
+    {
+      "path": "android/app/src/main/res/mipmap-hdpi/ic_launcher.png",
+      "blob": "2b15657635aeb495b1e3be15d43cb140c89f650f"
+    },
+    {
+      "path": "android/app/src/main/res/mipmap-mdpi/ic_launcher.png",
+      "blob": "0a2712d6a6ec3266060bd921ac66e60641b0a49b"
+    },
+    {
+      "path": "android/app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+      "blob": "2eeec88c33cdc020ecbb0d6052eea283930c8f64"
+    },
+    {
+      "path": "android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
+      "blob": "091e0122b3dc6567547754580029a46626755de4"
+    },
+    {
+      "path": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+      "blob": "85ea7d60c00fbc0af50c722a1fc92c0059af1b9e"
+    },
+    {
+      "path": "android/app/src/main/res/values-night/notification_colors.xml",
+      "blob": "503cf682301623359a30b7c4a6ca2b751b545542"
+    },
+    {
+      "path": "android/app/src/main/res/values/notification_colors.xml",
+      "blob": "f20f9de992639b317e12f50d43820d655ef74027"
+    },
+    {
+      "path": "android/app/src/main/res/xml/network_security_config.xml",
+      "blob": "bd930a0e2599362db66f1603a557e6686e05ace6"
+    },
+    {
+      "path": "android/app/src/main/res/xml/widget_schedule_landscape_info.xml",
+      "blob": "f27b78e677af5abdb87ba83d024f33c7e57f518d"
+    },
+    {
+      "path": "android/app/src/main/res/xml/widget_schedule_small_info.xml",
+      "blob": "0937f632aec8397c2deafd3e3bee5730c50fb4b2"
+    },
+    {
+      "path": "android/app/src/main/res/xml/widget_schedule_tall_info.xml",
+      "blob": "541daeae004311e84c4bca6771205fc601a7d960"
+    },
+    {
+      "path": "android/app/src/main/res/xml/widget_schedule_wide_info.xml",
+      "blob": "769d53e10c5a803b81542b08ac4a30144dba4527"
+    },
+    {
+      "path": "android/build.gradle",
+      "blob": "e5ce0d95c7f5f20385cd3f1bbfe77db777662d94"
+    },
+    {
+      "path": "android/direct-build/AndroidManifest.xml",
+      "blob": "f8b91c6a719247f1e9bea7ac9118c71e34221b76"
+    },
+    {
+      "path": "android/direct-build/classes.jar",
+      "blob": "8b145b3460b53a0f6f2f8c098a5f4ccae4c04447"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/BackgroundCheck$1.class",
+      "blob": "7ae43e80f67363c3f333e71d20a05e47ada28bac"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/BackgroundCheck$2.class",
+      "blob": "d0d423e86280e82e9019061e895f7f11f1a176cf"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/BackgroundCheck$Done.class",
+      "blob": "28662ca09f49f2689d10551d25656cfb23c9f860"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/BackgroundCheck.class",
+      "blob": "5b7a6f773eda637da3b972cbbaf48fe95b4bf2ca"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/CheckScheduler.class",
+      "blob": "20e8c00746b69ccc4b532aa64a5a795da3ab1119"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/CheckTime.class",
+      "blob": "c24e850d43509bd1dc49889208cd9fa9948cf556"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ClassReminderPlan$Event.class",
+      "blob": "f17a9de68a50da9f70d013146c9922f1d7f00eaf"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ClassReminderPlan$Settings.class",
+      "blob": "1cedb0a7ec55f10a6189efc50edb2bab95979637"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ClassReminderPlan.class",
+      "blob": "0a30ba55e55dca2454d63d0d6013e6d668efd594"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ClassReminderReceiver.class",
+      "blob": "b582efc5303322dc4db8523dffc030f1ee350d9e"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ClassReminders.class",
+      "blob": "a71960b82a1671ba92a1cf8657d3fa9bcb68c071"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/DailyCheckService.class",
+      "blob": "5bd7e63f2747281d14bd44c8d7fa1a7447e37a86"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/DailyJob.class",
+      "blob": "3955bc8ab0268275d380976d0599b3ce1a64e7c4"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/Diagnostics.class",
+      "blob": "e52883dd46dbb92c20885f20165b77c4be02a444"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/FocusTemplate.class",
+      "blob": "8f6611065851e7dac72653fa1a26e708ca9106fc"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/LandscapeScheduleWidgetProvider.class",
+      "blob": "97e973c5fca86f005c70a360f8aba0b69601eb24"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/MainActivity$1.class",
+      "blob": "0187f89d21d31918c8e8924d915e42f9bab9dd86"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/MainActivity$2.class",
+      "blob": "cd8eb80a2d1c3a79af5515c08899bce1eefe95cb"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/MainActivity$3.class",
+      "blob": "d39563c8bb77e7ea807dda141a1193322de9faa7"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/MainActivity$4.class",
+      "blob": "3fdfd0e3bc8867393b2d027b9073e2693c12c1ee"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/MainActivity$5.class",
+      "blob": "a9bea7bc18262647562758f2a3696371f6d2740a"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/MainActivity$Bridge.class",
+      "blob": "80742d32e822f0f36970bf070be244ec420b0416"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/MainActivity.class",
+      "blob": "f86d83b140c3035ec8c05ee8d50ed5a616dbd798"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/NotificationCards.class",
+      "blob": "243c78ca934a90b54d20ba1d1469d6b16578c534"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/R$color.class",
+      "blob": "1b468b5642c82c7227ce05e00bd446390882c1dd"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/R$drawable.class",
+      "blob": "915780d87b321949cf9d51d7a6ddd98fc085de44"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/R$id.class",
+      "blob": "868ed428763560a1f1c333747c3943411a3d6884"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/R$layout.class",
+      "blob": "2ca3883919fd984cd9de1fecdcc4c0f8539be999"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/R$mipmap.class",
+      "blob": "b2d985d3b81e97ca5d7818c5c9ad44095cd5ad07"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/R$xml.class",
+      "blob": "0d9946dd734bbd37f6cb3be53b9dd41d9abaf57a"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/R.class",
+      "blob": "c202658e8a7fea1e33add9ccf9620694238a6063"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ScheduleReceiver.class",
+      "blob": "0d95d9811f8c35ed2b00d27a966b65ef2d086d24"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ScheduleWidgetData$Item.class",
+      "blob": "715af17752c0b1afb18521dc59b98fca38c57e9b"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ScheduleWidgetData$WidgetData.class",
+      "blob": "68a8847a58a426a20a66e3c615b81f57548925af"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ScheduleWidgetData.class",
+      "blob": "9f1b7b575c811470f4ac35855625b546b9662b9b"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ScheduleWidgetListService$CourseFactory.class",
+      "blob": "69f1298b849410101c7b7a2bb515c68834f13ffc"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ScheduleWidgetListService.class",
+      "blob": "20e04683bfdb487f84fc4a0db780acde1817e80d"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/ScheduleWidgetProvider.class",
+      "blob": "840f97b77723866787ad9ad057c9696e91a44b9f"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/SchoolClient$1.class",
+      "blob": "5d700190801c4c622b354fb20b4f81a5d5e03334"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/SchoolClient$Listener.class",
+      "blob": "ca0b8a73ef0c68a663e4adb525f23d7672536b07"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/SchoolClient.class",
+      "blob": "2f293ce75d85eb7d543df5d582fb59275ff78f68"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/SessionCookies.class",
+      "blob": "8e215ac991096e4bb39249577d9014e84bf588d4"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/SessionVault.class",
+      "blob": "d68c31df759b086659d77620149950ed11cfe4d0"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/SmallScheduleWidgetProvider.class",
+      "blob": "1380b70c0ca5b446ddeb2ba19b5f737522ab9a02"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/StateStore$1.class",
+      "blob": "3b5c5853329b02f75d3428d0819ad89f07af5a59"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/StateStore.class",
+      "blob": "8624c9b80844ccf2746cc95bb9e6f3be9ef03be0"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/TallScheduleWidgetProvider.class",
+      "blob": "ab1680a0f08516ebca5c399068c0673b0958dee3"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/UserConsent.class",
+      "blob": "c858542242e8baecbecfb27179331e36fdf6f870"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/WideScheduleWidgetProvider.class",
+      "blob": "41a6c52182567f146917ef9852c28ca38f18ac43"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/WidgetRefreshReceiver.class",
+      "blob": "20849cc78468f2cd3cc97962334350f79c88a173"
+    },
+    {
+      "path": "android/direct-build/classes/cn/local/tomorrow/XiaomiFocus.class",
+      "blob": "0bcf83bb54e70a6c5b7c254aa757dce85da219c3"
+    },
+    {
+      "path": "android/direct-build/dex/classes.dex",
+      "blob": "dbf4dda81b1fe2953216c0c3430d69290c4998cf"
+    },
+    {
+      "path": "android/direct-build/gen/cn/local/tomorrow/R.java",
+      "blob": "cb7e58f9f0d26ce977a6b0498985c5391fce3925"
+    },
+    {
+      "path": "android/gradle.properties",
+      "blob": "de46cfbe4eb9f74893c181048f5d42b98ee52d94"
+    },
+    {
+      "path": "android/settings.gradle",
+      "blob": "548cb4ef0638a195adcfa6bd0a6113c0989ec082"
+    },
+    {
+      "path": "android/widget-device-check/classes.jar",
+      "blob": "68b974fa886ca2f67cfeb79b5df620bf3e9e259e"
+    },
+    {
+      "path": "android/widget-device-check/classes/cn/local/tomorrow/WidgetDeviceCheck.class",
+      "blob": "fdeb4c99871d68dd99c5d672a8985468b0254770"
+    },
+    {
+      "path": "android/widget-device-check/dex/classes.dex",
+      "blob": "56841b1b9a3b801059f1247c656108b9da257467"
+    },
+    {
+      "path": "android/widget-device-check/widget-tests.apk.idsig",
+      "blob": "db234ad2a314e28f1d1e9a5edb1b50b4668481c2"
+    },
+    {
+      "path": "android/widget-test/ClassReminderCheck.java",
+      "blob": "8cca194b2f56ba3d3d0484359c475c1247e11d67"
+    },
+    {
+      "path": "android/widget-test/CustomWidgetCheck.java",
+      "blob": "557dfa19857f8ac5de2dd50f35ea7375a40114e8"
+    },
+    {
+      "path": "android/widget-test/WidgetModelCheck.java",
+      "blob": "087dafdbbeb40e60e51a8c95964ef93d5cc924e3"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/ClassReminderCheck.class",
+      "blob": "5a7046cc15900bc868232cee03106a7b32d7ce98"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/ClassReminderPlan$Event.class",
+      "blob": "f17a9de68a50da9f70d013146c9922f1d7f00eaf"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/ClassReminderPlan$Settings.class",
+      "blob": "1cedb0a7ec55f10a6189efc50edb2bab95979637"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/ClassReminderPlan.class",
+      "blob": "0a30ba55e55dca2454d63d0d6013e6d668efd594"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/CustomWidgetCheck.class",
+      "blob": "4e9c1becdcd83ab2d62ea381ee47aeea533549b3"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/R$drawable.class",
+      "blob": "895fe964db223e417dbf454ac1286224564ebf25"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/R$id.class",
+      "blob": "80a00177b77844f94057830af54bc19044d1701f"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/R$layout.class",
+      "blob": "852e7454ca0817e5ccab98bc38d82f8123a653f7"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/R$mipmap.class",
+      "blob": "7d3f4198535e6a7ca431d226f290c9ac1c287a40"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/R$xml.class",
+      "blob": "04903d6a75b2cb032c3b2091192ae0a3dd39a7ca"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/R.class",
+      "blob": "91cdaf91a3bd72dd34978f40e195b3366ae959c8"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/ScheduleWidgetData$Item.class",
+      "blob": "715af17752c0b1afb18521dc59b98fca38c57e9b"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/ScheduleWidgetData$WidgetData.class",
+      "blob": "68a8847a58a426a20a66e3c615b81f57548925af"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/ScheduleWidgetData.class",
+      "blob": "9f1b7b575c811470f4ac35855625b546b9662b9b"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/StateStore$1.class",
+      "blob": "8a11481c950480ba8aa175e623ac54928d30c608"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/StateStore.class",
+      "blob": "7530c481f0cca3e4380d367f50783ba95b1fc4c9"
+    },
+    {
+      "path": "android/widget-test/classes/cn/local/tomorrow/WidgetModelCheck.class",
+      "blob": "04cfef2f4e7db3cfed2f9254ff808ea289703474"
+    },
+    {
+      "path": "android/widget-test/custom-fixtures.json",
+      "blob": "91c7d556bcaab3cef1154ead2b5059823366bfbf"
+    },
+    {
+      "path": "android/widget-test/json-20240303.jar",
+      "blob": "3de65235382da564dc138eafa20899101d250f9e"
+    },
+    {
+      "path": "android/widget-test/reminder-fixtures.json",
+      "blob": "dcd805689a98e53b9d97bd844fa0f89a21b84f89"
+    },
+    {
+      "path": "web/agreement.json",
+      "blob": "8d1ae108c2bf9fe646994674a3e937e953bb6b44"
+    },
+    {
+      "path": "web/app.mjs",
+      "blob": "0b30330fe0b1653338f61f7dc8f4156ecc5b2fc4"
+    },
+    {
+      "path": "web/assets/app-icon.png",
+      "blob": "5f647d6904ff23a70f9cf9d50d7e2608be6b0209"
+    },
+    {
+      "path": "web/bootstrap.mjs",
+      "blob": "79dbe0e4813ad86bfa4b6971ee9ae074f7d357d8"
+    },
+    {
+      "path": "web/bridge.mjs",
+      "blob": "7021542cb82f9904904e39dca950a59d2e08f296"
+    },
+    {
+      "path": "web/calendar-events.mjs",
+      "blob": "6939283b95043573ca4a0de5462ffe0831f4b087"
+    },
+    {
+      "path": "web/consent.mjs",
+      "blob": "dcf093b36ea06981c3e5b425d711ecc2ed9da096"
+    },
+    {
+      "path": "web/core.mjs",
+      "blob": "fe53dcf5cd54884a73491d8b156cebeb6c94315f"
+    },
+    {
+      "path": "web/course-time.mjs",
+      "blob": "a9f193f0393ec938810ada8bb76844b2a117d93b"
+    },
+    {
+      "path": "web/custom-courses.mjs",
+      "blob": "f86168dce4517419c107f3635f12f4b4269cb7b6"
+    },
+    {
+      "path": "web/data/adjusted.json",
+      "blob": "4a3f7d388cbc6ab7a308909574f2c60a394918d3"
+    },
+    {
+      "path": "web/data/baseline.json",
+      "blob": "99722299c13d6c87e977b3eec83e5de45134c3b0"
+    },
+    {
+      "path": "web/data/holidays.json",
+      "blob": "262a86b8be57d90866f514f8050b24fa2d1be136"
+    },
+    {
+      "path": "web/diagnostics.mjs",
+      "blob": "495e519549db3b88990eab1baac9a01ad83f553c"
+    },
+    {
+      "path": "web/feedback.json",
+      "blob": "6db6cb40c43c47e17dd7dd6cab6b415b6b1b5d56"
+    },
+    {
+      "path": "web/feedback.mjs",
+      "blob": "5a32b8c0f355d5a010e175bc366a8be897443b9e"
+    },
+    {
+      "path": "web/holiday-settings.mjs",
+      "blob": "cfd919ddd67e28218627a3f75dbb14499bd7765d"
+    },
+    {
+      "path": "web/index.html",
+      "blob": "63202b06c54e682686669a2fb080131fddbf7388"
+    },
+    {
+      "path": "web/interactions.mjs",
+      "blob": "1ca94b1d4172bbc9f05714b2eacac0d6a38d91de"
+    },
+    {
+      "path": "web/jiaowu-exam.mjs",
+      "blob": "64f2be7aa959e5c8bf4aa0bfafec5e3d30228b8f"
+    },
+    {
+      "path": "web/jsxsd.mjs",
+      "blob": "cd1e3097ee87fd5006f37b159ebe726f44954f9f"
+    },
+    {
+      "path": "web/leave-status.mjs",
+      "blob": "35336c07413383ed7b9b63dd8cd9bbfbd8cb3432"
+    },
+    {
+      "path": "web/leave.mjs",
+      "blob": "e3fa26e1ae8d7e8e30c1ac9fbd4215fa7c0729a3"
+    },
+    {
+      "path": "web/mobile.css",
+      "blob": "618be49fa82e72488875171f9384ecfe096f7961"
+    },
+    {
+      "path": "web/notifications.css",
+      "blob": "73167d2b0bbc657f57dd085091fe55b1006b5ff2"
+    },
+    {
+      "path": "web/notifications.mjs",
+      "blob": "0286652a65b31738cf5915a30f24dbca1c6c7a59"
+    },
+    {
+      "path": "web/profile-reader.js",
+      "blob": "681b0626198ac7d2e0dbdb5c3976909b92ce1078"
+    },
+    {
+      "path": "web/reminders.mjs",
+      "blob": "dd9eb5704dba099345385d35a865d5c58e0c4113"
+    },
+    {
+      "path": "web/sample-menu.mjs",
+      "blob": "fd7bfcf0168a944a256993495e75ad2a67083059"
+    },
+    {
+      "path": "web/schedule-diagnostics.mjs",
+      "blob": "c715a8840a81406f54f6c0460b40bfefb157550d"
+    },
+    {
+      "path": "web/school-reader.js",
+      "blob": "ab4eba21cbc007986bcc7159a61858592d84c036"
+    },
+    {
+      "path": "web/school.mjs",
+      "blob": "4b731d925676b33e471e1cbe775fc631daa2515a"
+    },
+    {
+      "path": "web/sort.mjs",
+      "blob": "6212930509bb7519029413836e8d3a1ba6334079"
+    },
+    {
+      "path": "web/state-sync.mjs",
+      "blob": "8475d4986c7e32454ad203cd38022418ac40286f"
+    },
+    {
+      "path": "web/study.mjs",
+      "blob": "746837552ef0154364773936bc7c0320a7966f28"
+    },
+    {
+      "path": "web/style.css",
+      "blob": "7864380d14aa7fa94d55589da367592775eb30eb"
+    },
+    {
+      "path": "web/theme.mjs",
+      "blob": "243d7223357df78dfec4b5cebf4facb2391b7bcd"
+    },
+    {
+      "path": "web/themes.css",
+      "blob": "fb4107fd4a6abcc5909107c8c164a7607e3da75e"
+    },
+    {
+      "path": "web/timetable-export.mjs",
+      "blob": "03d7be99f9c55ae18b229cea5d0f95f87b9fb7ec"
+    },
+    {
+      "path": "web/update.mjs",
+      "blob": "4b436473db423683e36606f63b73c2323b4a49e0"
+    },
+    {
+      "path": "web/week-layout.mjs",
+      "blob": "c1a0021bb4d09e216b521485a454013353d7bfb8"
+    }
+  ]
+}

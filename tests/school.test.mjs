@@ -1,0 +1,7 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {normalizeSchool} from '../web/school.mjs';import {addDays,sourceDay} from '../web/core.mjs';
+function fixture(){return {weeks:[1,2].map(w=>({week:w,date:Array.from({length:7},(_,i)=>({mxrq:addDays('2026-08-31',(w-1)*7+i)})),item:[{classTime:'20304',courseName:'测试课程',teacherName:'测试教师',location:w===1?'A101':'B202',startTime:'10:15',endTIme:'11:40',classWeek:'1-2',jx0408id:'fixture-plan'}]}))};}
+test('学校字段结构：按真实周日历建立规则与一次性例外',()=>{const s=normalizeSchool(fixture());assert.equal(s.rules.length,1);assert.equal(s.semester.startDate,'2026-08-31');assert.equal(sourceDay(s,'2026-09-01')[0].room,'A101');assert.equal(sourceDay(s,'2026-09-08')[0].room,'B202');});
+test('缺少周次或课程字段一律拒绝',()=>{const x=fixture();x.weeks[1].week=3;assert.throws(()=>normalizeSchool(x));const y=fixture();delete y.weeks[0].item[0].endTIme;assert.throws(()=>normalizeSchool(y));});
+test('重复课程标识与空学期不能静默覆盖',()=>{const x=fixture();x.weeks[0].item.push(x.weeks[0].item[0]);assert.throws(()=>normalizeSchool(x));const y=fixture();y.weeks.forEach(w=>w.item=[]);assert.throws(()=>normalizeSchool(y));});
+
+test('实际应用的 bundle 归一化保留无课表课程，不加入日课表',()=>{const x=fixture();x.unscheduled=[{id:'pending-1',name:'认识实习',teacher:'教师',room:'—',weeks:[1]}];const s=normalizeSchool(x);assert.deepEqual(s.unscheduled,x.unscheduled);assert.equal(sourceDay(s,'2026-09-01').length,1);s.unscheduled[0].name='changed';assert.equal(x.unscheduled[0].name,'认识实习');});

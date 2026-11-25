@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createState,clone,effectiveDay,timetableDay,saveOverride,saveCourseSettings,applySnapshot,adoptSchoolSnapshot} from '../web/core.mjs';
+import {saveCustomCourse,deleteCustomCourse,customCourseDay,customCourseBackup,importCustomCourses,normalizeCustomCourse} from '../web/custom-courses.mjs';
+const base=JSON.parse(readFileSync(new URL('../web/data/baseline.json',import.meta.url),'utf8'));base.rules=[];base.remaps=[];base.closedDates=[];base.exceptions=[];
+const weekly=(extra={})=>({mode:'weekly',name:'个人规律课程',room:'C204',teacher:'老师',startTime:'12:20',endTime:'13:00',semesterId:base.semester.id,semesterStartDate:base.semester.startDate,weekdays:[1,3],startWeek:7,endWeek:10,weekPattern:'every',...extra});
+const once=(extra={})=>({mode:'once',name:'独立加课',room:'',teacher:'',date:'2026-10-12',startTime:'20:30',endTime:'21:10',...extra});
+const rows=(s,d)=>effectiveDay(s.snapshot,d,s.overrides,s.localMaps,s.courseSettings,s.customCourses);
+test('规律课程按多星期、周次边界、单双周排课，不改学校源课表',()=>{let state=saveCustomCourse(createState(base),weekly({weekPattern:'odd'}));assert.deepEqual(rows(state,'2026-10-12').map(r=>r.name),['个人规律课程']);assert.equal(rows(state,'2026-10-14').length,1);assert.equal(rows(state,'2026-10-13').length,0);assert.equal(rows(state,'2026-10-19').length,0);assert.equal(rows(state,'2026-10-26').length,1);assert.equal(rows(state,'2026-11-09').length,0);assert.equal(rows(state,'2026-10-05').length,0);assert.equal(state.snapshot.rules.length,0);state=saveCustomCourse(state,weekly({id:state.customCourses[0].id,weekPattern:'even'}));assert.equal(rows(state,'2026-10-12').length,0);assert.equal(rows(state,'2026-10-19').length,1);assert.equal(state.customCourses.length,1);});
+test('独立加课只显示指定日期，支持学期之外日期，教室教师可空',()=>{const s=saveCustomCourse(createState(base),once({date:'2027-02-01'}));assert.equal(rows(s,'2026-10-12').length,0);const r=rows(s,'2027-02-01')[0];assert.equal(r.room,'—');assert.equal(r.teacher,'—');assert.equal(rows(s,'2027-02-02').length,0);});
+test('规律课程跟随调休，独立加课留在原日期且可显式加在停课日',()=>{let s=saveCustomCourse(saveCustomCourse(createState(base),weekly()),once());s.localMaps=[{id:'move',date:'2026-10-16',fromDate:'2026-10-12',mode:'replace'}];assert.deepEqual(rows(s,'2026-10-12').map(r=>r.name),['独立加课']);const moved=rows(s,'2026-10-16')[0];assert.equal(moved.originDate,'2026-10-12');assert.equal(moved.remapId,'move');assert.equal(moved.name,'个人规律课程');const vacancy=timetableDay(s.snapshot,'2026-10-12',s.overrides,s.localMaps,s.courseSettings,s.customCourses).find(r=>r.vacant);assert.equal(vacancy.name,'个人规律课程');s.localMaps=[];s.snapshot.closedDates=['2026-10-12'];assert.deepEqual(rows(s,'2026-10-12').map(r=>r.name),['独立加课']);});
+test('学校来源调休按原周次排规律课程并替换目标日安排',()=>{const s=saveCustomCourse(createState(base),weekly({weekPattern:'odd'}));s.snapshot.remaps=[{id:'school-map',date:'2026-10-19',fromDate:'2026-10-12',mode:'replace'}];assert.equal(rows(s,'2026-10-19').length,1);assert.equal(rows(s,'2026-10-19')[0].originDate,'2026-10-12');});
+test('与学校课程重叠双方保留，不能当作可选晚自习自动让位',()=>{const source=clone(base);source.rules=[{id:'school',name:'学校课程',room:'C1',teacher:'甲',weekday:1,weeks:[7],periods:[3,4],startTime:'10:15',endTime:'11:40'}];const s=saveCustomCourse(createState(source),weekly({startTime:'11:00',endTime:'12:00'}));assert.equal(rows(s,'2026-10-12').length,2);assert.ok(rows(s,'2026-10-12').every(r=>r.overlap));});
+test('刷新、失败后的状态、首次采用学校课表以及新学期保留个人课程；旧学期规律不自动套用',()=>{let s=saveCustomCourse(saveCustomCourse(createState(base),weekly()),once());const saved=clone(s.customCourses);s=applySnapshot(JSON.parse(JSON.stringify(s)),clone(base));assert.deepEqual(s.customCourses,saved);assert.equal(rows(s,'2026-10-12').length,2);s=adoptSchoolSnapshot(s,{...clone(base),source:{kind:'school'}});assert.deepEqual(s.customCourses,saved);s.snapshot.semester.id='next';assert.deepEqual(rows(s,'2026-10-12').map(r=>r.name),['独立加课']);});
+test('单日修改仅影响当天，修改整个规律后仍保留当天特例',()=>{let s=saveCustomCourse(createState(base),weekly());s=saveOverride(s,rows(s,'2026-10-12')[0],{room:'单日教室'});assert.equal(rows(s,'2026-10-12')[0].room,'单日教室');assert.equal(rows(s,'2026-10-14')[0].room,'C204');s=saveCustomCourse(s,weekly({id:s.customCourses[0].id,room:'整个规律的新教室'}));assert.equal(rows(s,'2026-10-12')[0].room,'单日教室');assert.equal(rows(s,'2026-10-12')[0].conflict,undefined);assert.equal(rows(s,'2026-10-14')[0].room,'整个规律的新教室');});
+test('删除课程同时清理其单日修改，旧修改也不得复活已删课程',()=>{let s=saveCustomCourse(createState(base),weekly());s=saveOverride(s,rows(s,'2026-10-12')[0],{room:'单日教室'});const oldOverrides=s.overrides;s=deleteCustomCourse(s,s.customCourses[0].id);assert.equal(s.overrides.length,0);assert.equal(rows(s,'2026-10-12').length,0);s.overrides=oldOverrides;assert.equal(rows(s,'2026-10-12').length,0);});
+test('同名自定义课程的设置独立于学校课程',()=>{const source=clone(base);source.rules=[{id:'school',name:'个人规律课程',room:'学校教室',teacher:'甲',weekday:1,weeks:[7],periods:[3,4],startTime:'10:15',endTime:'11:40'}];let s=saveCustomCourse(createState(source),weekly());s=saveCourseSettings(s,rows(s,'2026-10-12').find(r=>r.customCourse),{room:'自定义固定教室'});assert.equal(rows(s,'2026-10-12').find(r=>!r.customCourse).room,'学校教室');assert.equal(rows(s,'2026-10-12').find(r=>r.customCourse).room,'自定义固定教室');});
+test('导出和导入保留自定义课程，按标识去重且不清除其他本机自定义课',()=>{const first=saveCustomCourse(createState(base),weekly());const backup=customCourseBackup(first);assert.equal(backup.customCourses.length,1);assert.equal(first.snapshot.customCourses,undefined);let second=saveCustomCourse(createState(base),once());second=importCustomCourses(second,backup.customCourses);second=importCustomCourses(second,backup.customCourses);assert.equal(second.customCourses.length,2);assert.equal(rows(second,'2026-10-12').length,2);});
+
+test('学校快照更换来源标识后仍保留并显示同一学期的已导入自定义课',()=>{
+ const source=clone(base);source.rules=[];
+ let s=createState(source);
+ s=importCustomCourses(s,[{id:'custom-import-mismatch',mode:'weekly',name:'导入课程10:10',room:'C204',teacher:'老师',startTime:'10:10',endTime:'11:40',semesterId:'sample-term-id',semesterStartDate:source.semester.startDate,weekdays:[4],startWeek:7,endWeek:7,weekPattern:'every'}]);
+ const school={...clone(source),semester:{...clone(source.semester),id:'school-2026-08-31'},source:{kind:'school',label:'学校课表'}};
+ assert.equal(s.customCourses[0].semesterId,source.semester.id,'导入时先匹配当前学期');
+ assert.deepEqual(rows(s,'2026-10-15').map(r=>r.name),['导入课程10:10']);
+ let adopted=adoptSchoolSnapshot(s,school);
+ assert.equal(adopted.customCourses[0].semesterId,'school-2026-08-31');
+ const adoptedRows=timetableDay(adopted.snapshot,'2026-10-15',adopted.overrides,adopted.localMaps,adopted.courseSettings,adopted.customCourses);
+ assert.deepEqual(adoptedRows.map(r=>[r.name,r.startTime,r.endTime]),[['导入课程10:10','10:10','11:40']]);
+});
+test('导入自定义课程的非标准起点仍完整出现在对应周课表',()=>{
+ const source=clone(base);source.rules=[];
+ let s=importCustomCourses(createState(source),[{id:'custom-import-1010',mode:'weekly',name:'导入课程10:10',room:'C204',teacher:'老师',startTime:'10:10',endTime:'11:40',semesterId:base.semester.id,semesterStartDate:base.semester.startDate,weekdays:[1],startWeek:7,endWeek:7,weekPattern:'every'}]);
+ const rows=timetableDay(s.snapshot,'2026-10-12',s.overrides,s.localMaps,s.courseSettings,s.customCourses);
+ assert.equal(rows.length,1);assert.equal(rows[0].startTime,'10:10');assert.equal(rows[0].endTime,'11:40');
+ const backup=customCourseBackup(s),target=importCustomCourses(createState(source),backup.customCourses);
+ const imported=timetableDay(target.snapshot,'2026-10-12',target.overrides,target.localMaps,target.courseSettings,target.customCourses);
+ assert.deepEqual(imported.map(r=>[r.name,r.startTime,r.endTime]),[['导入课程10:10','10:10','11:40']]);
+});
+test('拒绝非法时间、日期、周次和未选择星期，不产生半份记录',()=>{const s=createState(base);for(const bad of [weekly({weekdays:[]}),weekly({startWeek:11,endWeek:10}),weekly({endWeek:19}),weekly({startWeek:8,endWeek:8,weekPattern:'odd'}),once({date:'2026-02-30'}),once({startTime:'22:00',endTime:'20:00'}),once({name:' '})])assert.throws(()=>saveCustomCourse(s,bad));assert.throws(()=>importCustomCourses(s,[{...once(),id:'wrong-id'}]));assert.throws(()=>normalizeCustomCourse({...weekly(),id:'custom-test',startTime:'29:00'}));assert.equal(s.customCourses.length,0);});
+test('首次采用学校课表保留自定义课程的单日修改',()=>{let s=saveCustomCourse(createState(base),weekly());s=saveOverride(s,rows(s,'2026-10-12')[0],{room:'自定义当天地点'});s=adoptSchoolSnapshot(s,{...clone(base),source:{kind:'school'}});assert.equal(s.overrides.length,1);assert.equal(rows(s,'2026-10-12')[0].room,'自定义当天地点');});

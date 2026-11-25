@@ -1,0 +1,288 @@
+name: iOS 编译（模拟器）
+
+# 目的：在没有 Mac 的情况下，用 GitHub 的 macOS runner 拿到真实编译结果。
+# 设计：每一步都记录自己的退出码到 ios/build-out/rc-*，最后由「判定」步骤统一决定成败。
+# 这样即使中间某步崩了，job summary 也会写清楚是哪一步、什么错误，不会只剩一句 exit code 1。
+
+on:
+  push:
+    branches: [main, ios-ci]
+    paths:
+      - 'ios/**'
+      - 'web/**'
+      - '.github/workflows/ios-build.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ios-build-main
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: xcodebuild 模拟器编译
+    runs-on: macos-15-intel
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 准备输出目录
+        run: mkdir -p ios/build-out
+
+      - name: 环境信息
+        run: |
+          OUT=ios/build-out
+          set +e
+          {
+            echo 'runner:'; sw_vers
+            echo 'xcode:'; xcodebuild -version
+            echo 'swift:'; xcrun swift --version
+            echo 'node:'; node -v
+            echo 'pwd:'; pwd
+          } > "$OUT/env.txt" 2>&1 || true
+          cat "$OUT/env.txt"
+
+      - name: 重新生成 Xcode 工程（幂等）
+        working-directory: ios
+        run: |
+          OUT=build-out
+          set +e
+          set -o pipefail
+          node tools/gen-pbxproj.mjs 2>&1 | tee "$OUT/gen.log"
+          echo $? > "$OUT/rc-gen"
+
+      - name: 静态门禁 48 项
+        working-directory: ios
+        run: |
+          OUT=build-out
+          set +e
+          set -o pipefail
+          node tools/check-ios.mjs 2>&1 | tee "$OUT/check.log"
+          echo $? > "$OUT/rc-check"
+
+      - name: 校验器自测 72 项
+        working-directory: ios
+        run: |
+          OUT=build-out
+          set +e
+          set -o pipefail
+          node --test tests/ 2>&1 | tee "$OUT/test.log"
+          echo $? > "$OUT/rc-test"
+
+      - name: 编译（iOS Simulator，Debug，不签名）
+        working-directory: ios
+        run: |
+          OUT=build-out
+          set +e
+          set -o pipefail
+          xcodebuild build \
+            -project Jiangshui.xcodeproj \
+            -target Jiangshui \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            SYMROOT=$PWD/build-out/build \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$OUT/xcodebuild.log"
+          echo $? > "$OUT/rc-build"
+
+      - name: 编译 Release（验发布配置，不签名）
+        working-directory: ios
+        run: |
+          OUT=build-out
+          set +e
+          set -o pipefail
+          xcodebuild build \
+            -project Jiangshui.xcodeproj \
+            -target Jiangshui \
+            -configuration Release \
+            -sdk iphonesimulator \
+            SYMROOT=$PWD/build-out/build-release \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$OUT/xcodebuild-release.log"
+          echo $? > "$OUT/rc-release"
+
+      - name: 编译真机包（iphoneos，不签名，供侧载签名）
+        working-directory: ios
+        run: |
+          OUT=build-out
+          set +e
+          set -o pipefail
+          xcodebuild build \
+            -project Jiangshui.xcodeproj \
+            -target Jiangshui \
+            -configuration Release \
+            -sdk iphoneos \
+            SYMROOT=$PWD/build-out/build-device \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee "$OUT/xcodebuild-device.log"
+          echo $? > "$OUT/rc-device"
+
+      - name: 打包未签名 IPA（爱思助手 / Sideloadly 签名后侧载）
+        working-directory: ios
+        run: |
+          OUT=build-out
+          APP="$OUT/build-device/Release-iphoneos/Jiangshui.app"
+          rm -rf "$OUT/ipa" "$OUT/Jiangshui-unsigned.ipa"
+          {
+            echo '== 真机产物 =='
+            ls -la "$APP"
+            echo '== 架构（应为 arm64） =='
+            lipo -info "$APP/Jiangshui"
+            echo '== 打包 =='
+            mkdir -p "$OUT/ipa/Payload"
+            cp -R "$APP" "$OUT/ipa/Payload/"
+            ( cd "$OUT/ipa" && zip -qry ../Jiangshui-unsigned.ipa Payload )
+            ls -la "$OUT/Jiangshui-unsigned.ipa"
+            echo '== IPA 目录（前 8 行） =='
+            unzip -l "$OUT/Jiangshui-unsigned.ipa" | head -8
+          } > "$OUT/ipa.log" 2>&1
+          tail -30 "$OUT/ipa.log"
+          rc=0
+          [ -f "$OUT/Jiangshui-unsigned.ipa" ] || rc=1
+          lipo -info "$APP/Jiangshui" > "$OUT/lipo.txt" 2>&1 || rc=1
+          grep -q arm64 "$OUT/lipo.txt" || rc=1
+          if grep -q x86_64 "$OUT/lipo.txt"; then rc=1; fi
+          echo "$rc" > "$OUT/rc-ipa"
+      - name: 在模拟器里启动并截图（运行验证）
+        working-directory: ios
+        timeout-minutes: 6
+        continue-on-error: true
+        run: |
+          OUT=build-out
+          set +e
+          set -o pipefail
+          {
+            echo "== 可用模拟器（前 20 行） =="
+            xcrun simctl list devices available | head -20
+            UDID=$(xcrun simctl list devices available | grep -E '^ +iPhone' | head -1 | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}')
+            echo "选中 UDID=$UDID"
+            if [ -n "$UDID" ]; then
+              xcrun simctl boot "$UDID"
+              xcrun simctl bootstatus "$UDID" -b
+              xcrun simctl install "$UDID" build-out/build/Debug-iphonesimulator/Jiangshui.app
+              echo "== 启动 =="
+              xcrun simctl launch "$UDID" cn.local.tomorrow
+              sleep 30
+              echo "== 进程是否还活着 =="
+              xcrun simctl spawn "$UDID" launchctl list | grep -i jiangshui
+              echo "== 截图 1：首启（预期是同意页或错误页） =="
+              xcrun simctl io "$UDID" screenshot "$OUT/simulator-1-first-launch.png"
+              ls -la "$OUT/simulator-1-first-launch.png"
+              echo "== 第 2 次启动：用启动参数预置「已同意」（UserDefaults 的 NSArgumentDomain，不改产品代码） =="
+              VERSION=$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('../web/agreement.json','utf8')).version)")
+              echo "协议版本=$VERSION"
+              xcrun simctl terminate "$UDID" cn.local.tomorrow
+              xcrun simctl launch "$UDID" cn.local.tomorrow -user-consent.version "$VERSION" -user-consent.acceptedAt 1700000000000
+              sleep 25
+              echo "== 截图 2：进门后（预期是课表主界面） =="
+              xcrun simctl io "$UDID" screenshot "$OUT/simulator-2-main.png"
+              ls -la "$OUT/simulator-2-main.png"
+              echo "== 应用日志（最近 3 分钟） =="
+              xcrun simctl spawn "$UDID" log show --last 3m --predicate 'process == "Jiangshui"' --style compact | tail -160
+
+            else
+              echo "没有可用的 iPhone 模拟器"
+              false
+            fi
+          } 2>&1 | tee "$OUT/simulator.log"
+          echo $? > "$OUT/rc-sim"
+          echo "== 关键标记 =="
+          grep -E "loopback 服务已启动|页面服务未启动|均被占用|创建失败" "$OUT/simulator.log" | head -6 || true
+          ls -la "$OUT"/simulator-*.png 2>/dev/null || true
+
+      - name: 汇总（每一步的退出码与错误）
+        if: always()
+        run: |
+          OUT=ios/build-out
+          set +e
+          {
+            echo '## 各步骤退出码（0 = 通过）'
+            echo ''
+            echo '```'
+            for k in gen check test build release device ipa sim; do
+              printf '%s: ' "$k"
+              cat "$OUT/rc-$k" 2>/dev/null || echo '（未产生）'
+            done
+            echo '```'
+            echo ''
+            echo '## 环境'
+            echo '```'
+            cat "$OUT/env.txt" 2>/dev/null || echo '（未产生）'
+            echo '```'
+            echo '## gen / check / test 输出尾部'
+            echo '```'
+            tail -5 "$OUT/gen.log" 2>/dev/null
+            tail -5 "$OUT/check.log" 2>/dev/null
+            tail -8 "$OUT/test.log" 2>/dev/null
+            echo '```'
+            echo '## IPA / 真机包'
+            echo '```'
+            tail -12 "$OUT/ipa.log" 2>/dev/null
+            cat "$OUT/lipo.txt" 2>/dev/null
+            echo '```'
+            echo '## 编译错误（去重）'
+            echo '```'
+            grep -E '(^| )error: ' "$OUT"/xcodebuild*.log 2>/dev/null | sed -E 's|^.*/ios/||' | sort -u | head -60
+            echo '```'
+            echo '## build-out 目录'
+            echo '```'
+            ls -la "$OUT" 2>/dev/null || echo '（目录不存在）'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: 上传全部日志
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: ios/build-out/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: 上传未签名 IPA（可直接交给签名工具）
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jiangshui-unsigned-ipa
+          path: ios/build-out/Jiangshui-unsigned.ipa
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: 把失败原因写成 annotations（不用点开日志也能看见）
+        if: always()
+        run: |
+          OUT=ios/build-out
+          set +e
+          for k in gen check test build release device ipa sim; do
+            rc=$(cat "$OUT/rc-$k" 2>/dev/null)
+            if [ -n "$rc" ] && [ "$rc" != "0" ]; then
+              first=$(grep -m1 -iE 'error|失败|fail' "$OUT/$k.log" 2>/dev/null | tr -d '\r' | cut -c1-300)
+              echo "::error title=$k 退出码 $rc::${first:-（该步没有输出日志）}"
+            fi
+          done
+          if [ -f "$OUT/xcodebuild.log" ]; then
+            grep -E '(^| )error: ' "$OUT"/xcodebuild*.log 2>/dev/null | sed -E 's|^.*/ios/||' | sort -u | head -12 | while IFS= read -r line; do
+              echo "::error::$(printf '%s' "$line" | cut -c1-300)"
+            done
+          fi
+
+      - name: 判定（任一步非 0 则失败）
+        if: always()
+        run: |
+          OUT=ios/build-out
+          set +e
+          cat "$OUT/rc-gen" "$OUT/rc-check" "$OUT/rc-test" "$OUT/rc-build" "$OUT/rc-release" "$OUT/rc-device" "$OUT/rc-ipa" 2>/dev/null | grep -qv '^0$'
+          if [ $? -eq 0 ]; then
+            echo '有步骤失败，详见 job summary。'
+            exit 1
+          fi
+          if [ ! -f "$OUT/rc-build" ]; then
+            echo '编译步骤没有产生退出码（可能被跳过或环境异常）。'
+            exit 1
+          fi
+          echo '全部通过。'

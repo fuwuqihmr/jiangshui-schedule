@@ -1,0 +1,27 @@
+/* Notices are outside #app so page rendering never restarts their countdown. */
+#notification-root{position:fixed;top:var(--notice-top,12px);left:12px;left:max(12px,env(safe-area-inset-left));width:calc(100vw - 24px);max-width:320px;z-index:80;pointer-events:none;display:flex;flex-direction:column;gap:8px}
+.notice-slot{min-width:0;flex:none}
+.notice-card{--notice-bg:#edf5ff;--notice-ink:#20496b;--notice-bar:#3286c4;position:relative;display:flex;align-items:flex-start;gap:10px;padding:14px 10px 16px 13px;border-radius:12px;background:var(--notice-bg);color:var(--notice-ink);box-shadow:0 5px 24px #00000029;overflow:hidden;pointer-events:auto;animation:notice-enter .28s cubic-bezier(.2,.75,.25,1) both}
+.notice-card[data-tone=success]{--notice-bg:#e9f7ee;--notice-ink:#205c3a;--notice-bar:#2a9960}
+.notice-card[data-tone=warning]{--notice-bg:#fff5d7;--notice-ink:#715116;--notice-bar:#d79b17}
+.notice-card[data-tone=error]{--notice-bg:#ffeded;--notice-ink:#8c3035;--notice-bar:#d34850}
+.notice-card[data-tone=neutral]{--notice-bg:var(--surface);--notice-ink:var(--ink);--notice-bar:var(--muted)}
+.notice-mark{display:grid;place-items:center;flex:none;width:19px;height:19px;border:1.5px solid currentColor;border-radius:50%;font-size:12px;font-weight:700;margin-top:1px}
+.notice-content{flex:1;min-width:0;overflow-wrap:anywhere}.notice-content strong{display:block;font-size:13px;line-height:1.6;font-weight:650}.notice-content p{font-size:11px;line-height:1.6;margin:4px 0 0;opacity:.85}
+.notice-close{display:grid;place-items:center;flex:none;width:30px;height:30px;margin:-5px -3px 0 0;padding:0;border:0;border-radius:7px;background:transparent;color:inherit;font:22px/1 sans-serif;cursor:pointer}.notice-close:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
+.notice-track{position:absolute;bottom:0;left:0;right:0;height:3px;background:transparent}.notice-countdown{height:100%;background:var(--notice-bar);transform-origin:left;animation:notice-countdown 4.2s linear both}
+.notice-card.is-leaving{animation:notice-leave .24s ease-in both;pointer-events:none}
+@keyframes notice-enter{from{transform:translateX(calc(-100% - 24px));opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes notice-leave{from{transform:translateX(0);opacity:1}to{transform:translateX(calc(-100% - 24px));opacity:0}}
+@keyframes notice-countdown{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+html[data-theme=dark] .notice-card[data-tone=info]{--notice-bg:#193448;--notice-ink:#d4ecff;--notice-bar:#69b9ef}
+html[data-theme=dark] .notice-card[data-tone=success]{--notice-bg:#1a3a29;--notice-ink:#c7f1d7;--notice-bar:#68c98f}
+html[data-theme=dark] .notice-card[data-tone=warning]{--notice-bg:#493919;--notice-ink:#ffe8af;--notice-bar:#edbf54}
+html[data-theme=dark] .notice-card[data-tone=error]{--notice-bg:#48252a;--notice-ink:#ffd1d5;--notice-bar:#ef858d}
+/* The compact status replaces the in-flow read banner. */
+#sync-status{display:inline-flex;min-width:0}.sync-status{max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:6px 8px;line-height:1.4;font-size:11px;border-radius:7px;display:block;background:var(--surface-soft);color:var(--muted)}
+.sync-status[data-state=checking],.sync-status[data-state=pending]{background:#fff2c9;color:#805b0b}.sync-status[data-state=success]{background:#e6f5ed;color:#28764f}.sync-status[data-state=error]{background:#ffe8eb;color:#aa3541}
+html[data-theme=dark] .sync-status[data-state=checking],html[data-theme=dark] .sync-status[data-state=pending]{background:#493919;color:#ffdd88}html[data-theme=dark] .sync-status[data-state=success]{background:#203e2e;color:#99e4b8}html[data-theme=dark] .sync-status[data-state=error]{background:#48252a;color:#ffacb4}
+@media(max-width:720px){.topbar>.actions{gap:7px;flex-wrap:nowrap;flex:none}.sync-status{max-width:118px;font-size:10px;padding:5px 7px}.topbar>div:first-child{min-width:0}}
+@media(max-width:380px){.sync-status{max-width:98px;font-size:9px}.topbar>.actions{gap:5px}}
+@media(prefers-reduced-motion:reduce){.notice-card,.notice-card.is-leaving{animation:none}.notice-countdown{animation-timing-function:steps(1,end)}}

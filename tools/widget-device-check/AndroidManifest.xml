@@ -1,0 +1,1 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="cn.local.tomorrow.widgettests"><application android:label="江水课表组件验证" /><instrumentation android:name="cn.local.tomorrow.WidgetDeviceCheck" android:targetPackage="cn.local.tomorrow" android:label="Local widget checks" /></manifest>

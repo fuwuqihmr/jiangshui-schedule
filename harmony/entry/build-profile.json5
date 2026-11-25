@@ -1,0 +1,20 @@
+// 职责：entry 模块构建配置，stage 模型并开启 ArkTS 严格检查。
+// 依赖方向：无业务代码依赖；构建参数由 DevEco/命令行工具解释。
+// 阶段：P0 骨架；未编译，仅静态骨架。
+// 待确认：arkOptions.strictMode 字段在 API 12 工具链中的准确名称。
+{
+  "apiType": "stageMode",
+  "buildOption": {
+    "arkOptions": {
+      "strictMode": {
+        "useNormalizedOHMUrl": true
+      },
+      "types": []
+    }
+  },
+  "targets": [
+    {
+      "name": "default"
+    }
+  ]
+}

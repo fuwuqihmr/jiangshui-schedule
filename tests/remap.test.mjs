@@ -1,0 +1,19 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {clone,createState,applySnapshot,sourceDay,effectiveDay,timetableDay,saveOverride} from '../web/core.mjs';
+import {withStudyPolicy} from '../web/study.mjs';
+const base=JSON.parse(await readFile(new URL('../web/data/baseline.json',import.meta.url),'utf8'));
+const calendar=JSON.parse(await readFile(new URL('../web/data/holidays.json',import.meta.url),'utf8'));
+const fixture=()=>({...clone(base),rules:[
+ {id:'monday',name:'周一原课',teacher:'甲',room:'A101',weekday:1,weeks:[7,8],periods:[5,6],startTime:'14:00',endTime:'15:25'},
+ {id:'friday',name:'周五原课',teacher:'乙',room:'B102',weekday:5,weeks:[7],periods:[1,2],startTime:'08:30',endTime:'09:55'}
+],remaps:[],closedDates:[]});
+const maps=[{id:'move',date:'2026-10-16',fromDate:'2026-10-12',mode:'replace'}];
+test('调休替换上课日原课，原日期不再重复安排',()=>{const s=fixture();const target=effectiveDay(s,maps[0].date,[],maps);assert.deepEqual(target.map(r=>r.ruleId),['monday']);assert.equal(target[0].originDate,maps[0].fromDate);assert.equal(target[0].source,'local');assert.equal(target[0].overlap,false);assert.equal(effectiveDay(s,maps[0].fromDate,[],maps).length,0);assert.equal(sourceDay(s,maps[0].date)[0].ruleId,'friday');});
+test('旧版保存的append调休也按替换展示，撤销恢复原课',()=>{const s=fixture(),old=maps.map(m=>({...m,mode:'append'}));assert.deepEqual(effectiveDay(s,maps[0].date,[],old).map(r=>r.ruleId),['monday']);assert.equal(effectiveDay(s,maps[0].fromDate,[],old).length,0);assert.equal(effectiveDay(s,maps[0].date)[0].ruleId,'friday');assert.equal(effectiveDay(s,maps[0].fromDate)[0].ruleId,'monday');assert.equal(old[0].mode,'append');});
+test('调走空位保留灰色显示记录，不成为活动课程',()=>{const s=fixture();const vacant=timetableDay(s,maps[0].fromDate,[],maps);assert.equal(vacant.length,1);assert.equal(vacant[0].vacant,true);assert.equal(vacant[0].cancelled,true);assert.equal(vacant[0].vacancyReason,'moved');assert.equal(vacant[0].movedTo,maps[0].date);assert.equal(vacant.filter(r=>!r.cancelled).length,0);assert.equal(timetableDay(s,maps[0].fromDate).some(r=>r.vacant),false);});
+test('上课日整天替换旧课，旧课即使不冲突也不留灰色卡片',()=>{const s=fixture();s.rules.push({...s.rules[1],id:'friday-night',startTime:'19:00',endTime:'20:25',periods:[9,10]});let rows=timetableDay(s,maps[0].date,[],maps);assert.equal(rows.length,1);assert.equal(rows[0].ruleId,'monday');s.rules[1].periods=[5,6];s.rules[1].startTime='14:00';s.rules[1].endTime='15:25';rows=timetableDay(s,maps[0].date,[],maps);assert.deepEqual(rows.map(r=>r.ruleId),['monday']);});
+test('原日期旧单日修改不会复活已搬走课程',()=>{const s=fixture(),row=sourceDay(s,maps[0].fromDate)[0];const state=saveOverride(createState(s),row,{room:'本人教室'});const rows=timetableDay(s,maps[0].fromDate,state.overrides,maps);assert.equal(rows.length,1);assert.equal(rows[0].vacant,true);assert.equal(rows[0].cancelled,true);assert.equal(rows[0].conflict,undefined);});
+test('学校同步后调休和空位保持，课程仍使用原日期周次',()=>{const s=fixture();s.rules[0].weeks=[8];const mapping=[{...maps[0],fromDate:'2026-10-19'}];let state=createState(s);state.localMaps=clone(mapping);state=applySnapshot(state,clone(s));assert.deepEqual(effectiveDay(state.snapshot,maps[0].date,state.overrides,state.localMaps)[0].weeks,[8]);assert.equal(timetableDay(state.snapshot,'2026-10-19',state.overrides,state.localMaps)[0].vacant,true);});
+test('调走日的晚自习默认保留，周五补课日也默认显示并允许单独取消',()=>{const s=withStudyPolicy(fixture(),{enrollmentYear:2026},calendar,{studyPolicy:{userEnabled:true}});const original=effectiveDay(s,maps[0].fromDate,[],maps).filter(r=>r.localActivity);assert.equal(original.length,1);const target=effectiveDay(s,maps[0].date,[],maps).filter(r=>r.localActivity);assert.equal(target.length,1);assert.equal(target[0].originDate,maps[0].fromDate);const edited=saveOverride(createState(s),original[0],{cancelled:true});assert.equal(effectiveDay(s,maps[0].fromDate,edited.overrides,maps).filter(r=>r.localActivity&&!r.cancelled).length,0);});
