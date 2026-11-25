@@ -2547,6 +2547,356 @@ export function runChecks(root) {
     return problems.length ? fail(truncateList(problems)) : pass('16.1 门槛、request/update/.after(T+10)、失败回退、60 条上限与 NSSupportsLiveActivities 均在位');
   });
 
+
+  add('F13', 'P0 页面服务自愈：LocalServer 健康检查/重启/端口回退 + WebHost 错误遮罩与手动重试', () => {
+    const source = localserverText();
+    const code = stripSwift(source);
+    const problems = [];
+    const need = (ok, message) => { if (!ok) problems.push(message); };
+    const bodyOf = (src, stripped, name) => {
+      const m = new RegExp('func\\s+' + name + '\\s*\\(').exec(stripped);
+      if (!m) return '';
+      const open = stripped.indexOf('{', m.index);
+      if (open < 0) return '';
+      const close = matchBalanced(stripped, open);
+      return close > open ? src.slice(open, close + 1) : '';
+    };
+
+    need(/static\s+let\s+waitingTimeout\s*:\s*TimeInterval\s*=\s*1\.5/.test(code), 'LocalServer 缺 waitingTimeout=1.5');
+    need(/private\s+var\s+generation\s*:\s*UInt64\s*=\s*0/.test(code), 'LocalServer 缺 generation 代际号');
+    need(/var\s+onInterrupted\s*:\s*\(\(\)\s*->\s*Void\)\?/.test(code), 'LocalServer 缺 onInterrupted 回调');
+    need(/var\s+isRunning\s*:\s*Bool\s*\{\s*return\s+shouldRun\s*\}/.test(code), 'LocalServer.isRunning 必须只反映 shouldRun');
+    need(/var\s+isHealthy\s*:\s*Bool\s*\{\s*return\s+shouldRun\s*&&\s*listener\s*!=\s*nil\s*&&\s*port\s*!=\s*nil\s*\}/.test(code), 'LocalServer.isHealthy 必须同时要求 shouldRun/listener/port');
+
+    const start = bodyOf(source, code, 'start');
+    if (!start) problems.push('无法定位 LocalServer.start');
+    else {
+      need(/guard\s+!shouldRun\s*,\s*!starting\s*,\s*listener\s*==\s*nil\s+else\s*\{\s*return\s*\}/.test(start), 'LocalServer.start 缺重复启动保护');
+      need(/generation\s*&\+=\s*1/.test(start), 'LocalServer.start 未推进 generation');
+      need(/startLocked\s*\(\s*from\s*:\s*LocalServer\.firstPort\s*\)/.test(start), 'LocalServer.start 未从 firstPort 起试');
+    }
+    const stop = bodyOf(source, code, 'stop');
+    if (!stop) problems.push('无法定位 LocalServer.stop');
+    else {
+      need(/shouldRun\s*=\s*false/.test(stop), 'LocalServer.stop 未清 shouldRun');
+      need(/generation\s*&\+=\s*1/.test(stop), 'LocalServer.stop 未推进 generation 使旧回调失效');
+      need(/self\.listener\s*=\s*nil/.test(stop) && /port\s*=\s*nil/.test(stop), 'LocalServer.stop 未清 listener/port');
+      need(!/guard\s+shouldRun/.test(stop), 'LocalServer.stop 不应有 guard（必须可重入）');
+    }
+
+    const startLocked = bodyOf(source, code, 'startLocked');
+    if (!startLocked) problems.push('无法定位 LocalServer.startLocked');
+    else {
+      need(/requiredLocalEndpoint\s*=\s*NWEndpoint\.hostPort\s*\(\s*host\s*:\s*"127\.0\.0\.1"/.test(startLocked), 'LocalServer 未只绑定 127.0.0.1');
+      need(/guard\s+candidate\s*<=\s*LocalServer\.lastPort\s+else\s*\{\s*failLocked\(\)/.test(startLocked), 'LocalServer 端口耗尽时未走 failLocked');
+      need(/startLocked\s*\(\s*from\s*:\s*candidate\s*\+\s*1\s*\)/.test(startLocked), 'LocalServer 单端口失败未顺序试下一个');
+      need(/generation\s*==\s*token/.test(startLocked) && /self\.listener\s*===\s*listener/.test(startLocked), 'LocalServer 状态回调未用 generation/listener 双重校验旧监听器');
+    }
+
+    const state = bodyOf(source, code, 'handleStateLocked');
+    if (!state) problems.push('无法定位 LocalServer.handleStateLocked');
+    else {
+      need(/case\s+\.ready\s*:[\s\S]{0,200}?guard\s+shouldRun\s+else\s*\{\s*dropListenerLocked/.test(state), '.ready 后缺 shouldRun 复核（stop 之后不能再报 ready）');
+      need(/case\s+\.waiting[\s\S]{0,160}?scheduleWaitingTimeoutLocked/.test(state), '.waiting 未挂 1.5s 超时换端口');
+      need(/case\s+\.failed[\s\S]{0,160}?recoverLocked/.test(state), '.failed 未走 recoverLocked');
+      need(/case\s+\.cancelled\s*:[\s\S]{0,260}?if\s+shouldRun\s*\{[\s\S]{0,160}?recoverLocked\([\s\S]{0,160}?\}\s*else\s*\{[\s\S]{0,120}?dropListenerLocked/.test(state), '.cancelled 未区分运行/停止后重启或清理');
+    }
+
+    const waiting = bodyOf(source, code, 'scheduleWaitingTimeoutLocked');
+    if (!waiting) problems.push('无法定位 LocalServer.scheduleWaitingTimeoutLocked');
+    else {
+      need(/LocalServer\.waitingTimeout/.test(waiting), 'waiting 超时未使用 1.5s 常量');
+      need(/let\s+hadPort\s*=\s*self\.port\s*!=\s*nil/.test(waiting), 'waiting 超时未记录是否曾 ready');
+      const dropAt = waiting.indexOf('dropListenerLocked');
+      const interruptedAt = waiting.indexOf('onInterrupted?()');
+      const restartAt = waiting.indexOf('startLocked(from:');
+      need(dropAt >= 0 && interruptedAt > dropAt && restartAt > interruptedAt, 'waiting 超时必须先清监听器、再通知、再换端口');
+      need(/startLocked\s*\(\s*from\s*:\s*hadPort\s*\?\s*LocalServer\.firstPort\s*:\s*candidate\s*\+\s*1\s*\)/.test(waiting), 'waiting 超时后的重试起点不对（曾 ready 回到 47851）');
+    }
+
+    const recover = bodyOf(source, code, 'recoverLocked');
+    if (!recover) problems.push('无法定位 LocalServer.recoverLocked');
+    else {
+      const dropAt = recover.indexOf('dropListenerLocked');
+      const interruptedAt = recover.indexOf('onInterrupted?()');
+      need(dropAt >= 0 && interruptedAt > dropAt, 'recoverLocked 必须先 dropListener 再 onInterrupted');
+      need(/guard\s+shouldRun\s+else\s*\{\s*return\s*\}/.test(recover), 'recoverLocked 在 stop 后不应再重启');
+      need(/startLocked\s*\(\s*from\s*:\s*hadPort\s*\?\s*LocalServer\.firstPort\s*:\s*candidate\s*\+\s*1\s*\)/.test(recover), 'recoverLocked 未从稳定端口/下一端口重启');
+    }
+
+    const drop = bodyOf(source, code, 'dropListenerLocked');
+    if (!drop) problems.push('无法定位 LocalServer.dropListenerLocked');
+    else {
+      need(/self\.listener\s*=\s*nil/.test(drop) && /port\s*=\s*nil/.test(drop), 'dropListenerLocked 未清 listener/port');
+      need(/generation\s*&\+=\s*1/.test(drop), 'dropListenerLocked 未推进 generation');
+      need(/stateUpdateHandler\s*=\s*nil/.test(drop), 'dropListenerLocked 未摘掉旧状态回调');
+    }
+
+    const failureCount = (code.match(/onFailure\?/g) || []).length;
+    need(failureCount === 1, 'onFailure 必须只有一个触发点（实际 ' + failureCount + ' 个）');
+    const failLocked = bodyOf(source, code, 'failLocked');
+    if (!failLocked) problems.push('无法定位 LocalServer.failLocked');
+    else {
+      need(/shouldRun\s*=\s*false/.test(failLocked), 'failLocked 未停止服务');
+      need(/本机端口 47851–47860 均被占用/.test(failLocked), 'failLocked 缺中文失败文案');
+    }
+
+    need(/static\s+let\s+firstPort\s*:\s*UInt16\s*=\s*47851/.test(code) && /static\s+let\s+lastPort\s*:\s*UInt16\s*=\s*47860/.test(code), 'loopback 端口必须仍为 47851..47860');
+    need(code.indexOf('0.0.0.0') < 0, 'LocalServer 不得监听 0.0.0.0');
+
+    const web = webhostText();
+    const webCode = stripSwift(web);
+    const webBody = (name) => bodyOf(web, webCode, name);
+    need(/@Published\s+private\(set\)\s+var\s+serverErrorTitle\s*:\s*String\s*=\s*"页面服务未启动"/.test(web), 'WebHost 缺 serverErrorTitle 默认值「页面服务未启动」');
+    need(/server\.onFailure\s*=\s*\{[\s\S]{0,700}?serverErrorTitle\s*=\s*"页面服务未启动"[\s\S]{0,400}?serverError\s*=\s*message/.test(web), 'onFailure 未设置标题和具体错误');
+    need(/server\.onInterrupted\s*=\s*\{[\s\S]{0,700}?loadedPort\s*=\s*nil[\s\S]{0,300}?currentLoadPort\s*=\s*nil[\s\S]{0,300}?currentNavigation\s*=\s*nil/.test(web), 'onInterrupted 未清掉旧端口/导航状态');
+
+    const retry = webBody('retryPage');
+    if (!retry) problems.push('无法定位 WebHost.retryPage()');
+    else need(/retryPage\s*\(\s*autoRetry\s*:\s*false\s*\)/.test(retry), '公开 retryPage() 未关闭自动重试标记');
+    const retryAuto = (webCode.match(/private\s+func\s+retryPage\s*\(\s*autoRetry\s*:\s*Bool\s*\)/) || []).length;
+    need(retryAuto === 1, 'WebHost 必须有且只有一个 retryPage(autoRetry:) 实现');
+    const retryAutoMatch = /private\s+func\s+retryPage\s*\(\s*autoRetry\s*:\s*Bool\s*\)/.exec(webCode);
+    let retryBody = '';
+    if (retryAutoMatch) {
+      const open = webCode.indexOf('{', retryAutoMatch.index);
+      const close = open < 0 ? -1 : matchBalanced(webCode, open);
+      if (close > open) retryBody = web.slice(open, close + 1);
+    }
+    if (!retryBody) problems.push('无法切出 retryPage(autoRetry:) 函数体');
+    else {
+      const stopAt = retryBody.indexOf('server.stop()');
+      const startAt = retryBody.indexOf('server.start()');
+      need(stopAt >= 0 && startAt > stopAt, 'retryPage(autoRetry:) 必须先 stop 再 start');
+      need(/autoRetryWorkItem\?\.cancel\(\)/.test(retryBody), '手动 retryPage 未取消待执行的自动重试');
+    }
+
+    const startIf = webBody('startIfNeeded');
+    if (!startIf) problems.push('无法定位 WebHost.startIfNeeded');
+    else {
+      need(/guard\s+server\.isHealthy\s+else\s*\{[\s\S]{0,120}?retryPage\(\)[\s\S]{0,120}?return/.test(startIf), 'startIfNeeded 未用 isHealthy 识别半死 listener');
+      need(/if\s+server\.isRunning\s*\{\s*return\s*\}/.test(startIf), 'startIfNeeded 在启动中应等待 onReady');
+      need(/server\.start\(\)/.test(startIf), 'startIfNeeded 未启动服务');
+    }
+
+    const load = webBody('loadIndex');
+    if (!load) problems.push('无法定位 WebHost.loadIndex');
+    else {
+      need((load.match(/serverError\s*=\s*nil/g) || []).length >= 2, 'loadIndex 未在开始/成功路径清 serverError');
+      need(/isLoading\s*&&\s*currentLoadPort\s*==\s*port/.test(load), 'loadIndex 缺同端口正在加载去重');
+      need(/pageLoaded\s*&&\s*loadedPort\s*==\s*port/.test(load), 'loadIndex 缺同端口已加载去重');
+      need(/installUserScripts\s*\(\s*on\s*:/.test(load) && /bridge\.reset\(\)/.test(load), 'loadIndex 未重装脚本/重置桥');
+    }
+
+    const loadFail = webBody('handleLoadFailure');
+    if (!loadFail) problems.push('无法定位 WebHost.handleLoadFailure');
+    else {
+      need(/NSURLErrorCancelled/.test(loadFail), 'handleLoadFailure 未忽略主动取消的导航');
+      need(/autoRetryUsed/.test(loadFail) && /\.now\(\)\s*\+\s*0\.4/.test(loadFail), 'handleLoadFailure 未限制每轮 0.4s 自动重试一次');
+      need(/retryPage\s*\(\s*autoRetry\s*:\s*true\s*\)/.test(loadFail), '自动重试未调用 retryPage(autoRetry:true)');
+      need(/serverErrorTitle\s*=\s*"页面加载失败"/.test(loadFail) && /无法连接服务器。/.test(loadFail), '二次失败未给中文遮罩');
+    }
+
+    const dfMatch = /func\s+webView\s*\([^)]*didFinish\s+navigation\s*:\s*WKNavigation\?[^)]*\)/.exec(webCode);
+    let didFinish = '';
+    if (dfMatch) {
+      const open = webCode.indexOf('{', dfMatch.index);
+      const close = open < 0 ? -1 : matchBalanced(webCode, open);
+      if (close > open) didFinish = web.slice(open, close + 1);
+    }
+    if (!didFinish) problems.push('无法定位 WebHost.didFinish');
+    else {
+      need(/serverError\s*=\s*nil/.test(didFinish), 'didFinish 未清 serverError');
+      need(/autoRetryUsed\s*=\s*false/.test(didFinish), 'didFinish 未重置自动重试计数');
+      need(/pageLoaded\s*=\s*true/.test(didFinish), 'didFinish 未标记页面已加载');
+    }
+
+    const currentNav = bodyOf(web, webCode, 'isCurrentNavigation');
+    if (!currentNav) problems.push('无法定位 WebHost.isCurrentNavigation');
+    else {
+      need(/guard\s+let\s+current\s*=\s*currentNavigation\s+else\s*\{\s*return\s+false\s*\}/.test(currentNav), 'isCurrentNavigation 在 currentNavigation 为空时必须拒绝旧导航');
+      need(/guard\s+let\s+navigation\s*=\s*navigation\s+else\s*\{\s*return\s+true\s*\}/.test(currentNav), 'isCurrentNavigation 对合法 nil 导航应保留 true');
+      need(/return\s+current\s*===\s*navigation/.test(currentNav), 'isCurrentNavigation 必须按对象身份比较');
+    }
+    const navGuards = (webCode.match(/isCurrentNavigation\s*\(\s*navigation\s*\)/g) || []).length;
+    need(navGuards >= 3, 'didFinish/didFail/didFailProvisional 都要经过 isCurrentNavigation（实际 ' + navGuards + ' 处）');
+
+    const root = rootViewText();
+    need(/Text\s*\(\s*host\.serverErrorTitle\s*\)/.test(root), 'RootView 未显示 host.serverErrorTitle');
+    need(/Button\s*\(\s*"重试"\s*\)\s*\{\s*host\.retryPage\(\)\s*\}/.test(root), 'RootView 重试按钮未调用 host.retryPage()');
+
+    return problems.length ? fail(truncateList(problems)) : pass('LocalServer 健康判定/代际失效/waiting 1.5s 换端口/failed·cancelled 先清理再重启/单一 onFailure，WebHost 错误遮罩与 stop→start 重试、0.4s 自动重试一次、旧导航按 currentNavigation 身份拒绝、RootView 重试按钮均在位');
+  });
+
+  add('F14', 'P0 登录时钟：6s 呈现窗口 + 180s 活跃倒计时，后台暂停，xskb 落点先 leaveLogin', () => {
+    const source = swiftFiles()['Jiangshui/School/SchoolReadController.swift'] || '';
+    const code = stripSwift(source);
+    const problems = [];
+    const need = (ok, message) => { if (!ok) problems.push(message); };
+    const bodyOf = (src, stripped, name) => {
+      const m = new RegExp('func\\s+' + name + '\\s*\\(').exec(stripped);
+      if (!m) return '';
+      const open = stripped.indexOf('{', m.index);
+      if (open < 0) return '';
+      const close = matchBalanced(stripped, open);
+      return close > open ? src.slice(open, close + 1) : '';
+    };
+    if (!source) {
+      problems.push('缺少 Jiangshui/School/SchoolReadController.swift');
+      return fail(truncateList(problems));
+    }
+
+    need(/private\s+static\s+let\s+loginDeadline\s*:\s*TimeInterval\s*=\s*180/.test(code), '登录上限必须为 180s（不是 90s 总时限）');
+    need(/private\s+static\s+let\s+loginPresentationWait\s*:\s*TimeInterval\s*=\s*6/.test(code), '登录页呈现窗口必须为 6s');
+    need(/private\s+static\s+let\s+loginPresentationPollInterval\s*:\s*TimeInterval\s*=\s*0\.5/.test(code), '登录页呈现轮询必须为 0.5s');
+    need(/private\s+enum\s+LoginPhase\s*\{[\s\S]{0,160}?case\s+idle[\s\S]{0,80}?case\s+presenting[\s\S]{0,80}?case\s+waiting/.test(code), 'LoginPhase 必须区分 idle/presenting/waiting');
+    need(/private\s+var\s+reading\s*=\s*false/.test(code), '缺 reading 单次读取标志');
+    need(/private\s+var\s+readingPageURL\s*:\s*String\?/.test(code), '缺 readingPageURL（页面换代判定）');
+    need(/private\s+var\s+readingToken\s*=\s*0/.test(code), '缺 readingToken（旧轮询作废）');
+
+    const start = bodyOf(source, code, 'start');
+    if (!start) problems.push('无法定位 SchoolReadController.start');
+    else {
+      need(/stopLoginClock\(\)/.test(start), 'start 未清理上一轮登录时钟');
+      need(/reading\s*=\s*false/.test(start), 'start 未复位 reading');
+      need(/readingPageURL\s*=\s*nil/.test(start), 'start 未清空 readingPageURL');
+      need(/readingToken\s*\+=\s*1/.test(start), 'start 未推进 readingToken');
+    }
+    const read = bodyOf(source, code, 'read');
+    if (!read) problems.push('无法定位 SchoolReadController.read()');
+    else {
+      need(/guard\s+reading\s*==\s*false\s+else\s*\{\s*return\s*\}/.test(read) && /reading\s*=\s*true/.test(read), 'read() 缺 reading 守卫/置位');
+      need(/readingPageURL\s*=\s*host\?\.currentURLString/.test(read), 'read() 未记录本轮页面地址');
+      need(/readingToken\s*\+=\s*1/.test(read) && /let\s+token\s*=\s*readingToken/.test(read), 'read() 未生成本轮代次');
+      need(/read\s*\(\s*attempt\s*:\s*1\s*,\s*token\s*:\s*token\s*\)/.test(read), 'read() 未把代次传入注入链');
+    }
+    const attemptMatch = /private\s+func\s+read\s*\(\s*attempt\s*:\s*Int\s*,\s*token\s*:\s*Int\s*\)/.exec(code);
+    if (!attemptMatch) problems.push('无法定位 read(attempt:token:)');
+    else {
+      const open = code.indexOf('{', attemptMatch.index);
+      const close = open < 0 ? -1 : matchBalanced(code, open);
+      const attempt = close > open ? code.slice(open, close + 1) : '';
+      need(/token\s*==\s*readingToken/.test(attempt), 'read(attempt:token:) 缺代次守卫，旧注入回调会污染新一轮');
+    }
+    const tokenGuards = (code.match(/token\s*==\s*(?:self\.)?readingToken/g) || []).length;
+    need(tokenGuards >= 4, '旧注入/轮询回调必须统一校验 readingToken（实际 ' + tokenGuards + ' 处）');
+
+    const handle = bodyOf(source, code, 'handleReadResult');
+    if (!handle) problems.push('无法定位 SchoolReadController.handleReadResult');
+    else need(/if\s+result\.optBool\("login",\s*false\)\s*\{[\s\S]{0,260}?reading\s*=\s*false/.test(handle), 'login 分支未复位 reading（后续 sso/登录无法再次 read）');
+
+    const finish = bodyOf(source, code, 'finish');
+    if (!finish) problems.push('无法定位 SchoolReadController.finish');
+    else {
+      need(/reading\s*=\s*false/.test(finish), 'finish 未复位 reading');
+      need(/stopLoginClock\(\)/.test(finish), 'finish 未停止登录时钟/移除观察者');
+      need(/awaitingLogin\s*=\s*false/.test(finish), 'finish 未清 awaitingLogin');
+    }
+
+    // xskb 可能直接是登录后的落点：必须先 leaveLogin 再进读取守卫，否则干等 180s。
+    const branchAt = source.indexOf('if path.hasPrefix("/jsxsd/xskb/")');
+    if (branchAt < 0) {
+      problems.push('无法定位 xskb 落点分支');
+    } else {
+      const open = source.indexOf('{', branchAt);
+      const close = open < 0 ? -1 : matchBalanced(source, open);
+      const branch = close > open ? source.slice(open, close + 1) : '';
+      const branchCode = close > open ? code.slice(open, close + 1) : '';
+      if (!branch || !branchCode) {
+        problems.push('无法切出 xskb 分支');
+      } else {
+        const leaveAt = branchCode.indexOf('leaveLogin()');
+        const guardAt = branchCode.indexOf('guard reading == false');
+        const readAt = branchCode.indexOf('read()');
+        need(/if\s+awaitingLogin\s*\{\s*leaveLogin\(\)\s*\}/.test(branchCode), 'xskb 分支缺 if awaitingLogin { leaveLogin() }');
+        need(leaveAt >= 0 && guardAt > leaveAt && readAt > guardAt, 'xskb 分支顺序必须是 leaveLogin → reading 守卫 → read()');
+        need(/if\s+reading\s*\{/.test(branchCode), 'xskb 分支未处理读取中页面换代');
+        need(/if\s+let\s+current\s*=\s*readingPageURL\s*,\s*current\s*==\s*rawURL\s*\{\s*return\s*\}/.test(branchCode), '同一 URL 的重复 didFinish 未被挡住');
+        need(/reading\s*=\s*false[\s\S]{0,120}?readingPageURL\s*=\s*nil[\s\S]{0,120}?readingToken\s*\+=\s*1/.test(branchCode), '页面换代未复位 reading/URL/代次');
+      }
+    }
+
+    const needLogin = bodyOf(source, code, 'needLogin');
+    if (!needLogin) problems.push('无法定位 SchoolReadController.needLogin');
+    else {
+      need(/cancelDeadline\(\)/.test(needLogin), 'needLogin 未取消旧总截止计时');
+      need(/startLoginClock\(\)/.test(needLogin), 'needLogin 未启动登录时钟');
+      need(/pollLoginPresentation\s*\(\s*generation\s*:\s*generation\s*\)/.test(needLogin), 'needLogin 未启动 6s 呈现轮询');
+      need(/loginRequestPresentation\s*=\s*requestPresentation/.test(needLogin), 'needLogin 未保存可重试的呈现闭包');
+      need(/onNeedsVisiblePresentation\s*\?\s*\(\s*\)/.test(needLogin), 'needLogin 未请求把登录页变为可见');
+    }
+
+    need(/private\s+var\s+isApplicationActive\s*:\s*Bool\s*\{[\s\S]{0,200}?UIApplication\.shared\.applicationState\s*==\s*\.active/.test(code), 'isApplicationActive 未检查 applicationState == .active');
+
+    const clock = bodyOf(source, code, 'startLoginClock');
+    if (!clock) problems.push('无法定位 startLoginClock');
+    else {
+      need(/loginPhase\s*=\s*\.presenting/.test(clock) && /loginPhaseElapsed\s*=\s*0/.test(clock), 'startLoginClock 未从 presenting/0 开始');
+      need(/willResignActiveNotification/.test(clock) && /didBecomeActiveNotification/.test(clock), 'startLoginClock 未监听前后台切换');
+      need(/\[weak self\]/.test(clock), '登录通知闭包必须弱引用 self');
+    }
+
+    const stopClock = bodyOf(source, code, 'stopLoginClock');
+    if (!stopClock) problems.push('无法定位 stopLoginClock');
+    else {
+      need(/pauseLoginClock\(\)/.test(stopClock) && /loginPhase\s*=\s*\.idle/.test(stopClock), 'stopLoginClock 未暂停并回到 idle');
+      need(/removeObserver/.test(stopClock), 'stopLoginClock 未移除前后台观察者');
+      need(/loginObserverTokens\.removeAll\(\)/.test(stopClock), 'stopLoginClock 未清空观察者 token');
+    }
+
+    const pause = bodyOf(source, code, 'pauseLoginClock');
+    if (!pause) problems.push('无法定位 pauseLoginClock');
+    else need(/loginSegmentStartedAt/.test(pause) && /loginPollWork\?\.cancel\(\)/.test(pause) && /loginDeadlineWork\?\.cancel\(\)/.test(pause), 'pauseLoginClock 未累计前台时间并取消两个计时任务');
+
+    const resume = bodyOf(source, code, 'resumeLoginClock');
+    if (!resume) problems.push('无法定位 resumeLoginClock');
+    else need(/case\s+\.presenting[\s\S]{0,180}?pollLoginPresentation/.test(resume) && /case\s+\.waiting[\s\S]{0,120}?scheduleLoginDeadline/.test(resume), 'resumeLoginClock 未按 presenting/waiting 恢复');
+
+    const resign = bodyOf(source, code, 'handleApplicationResignActive');
+    if (!resign) problems.push('无法定位 handleApplicationResignActive');
+    else {
+      need(/pauseLoginClock\(\)/.test(resign), '退后台未暂停登录时钟');
+      need(/请回到江水课表完成登录/.test(resign), '退后台未切换到「请回到江水课表」文案');
+    }
+    const become = bodyOf(source, code, 'handleApplicationDidBecomeActive');
+    if (!become) problems.push('无法定位 handleApplicationDidBecomeActive');
+    else {
+      need(/resumeLoginClock\(\)/.test(become), '回前台未恢复登录时钟');
+      need(/isRunning[\s\S]{0,160}?awaitingLogin[\s\S]{0,160}?isUserVisible\s*==\s*true/.test(become), '回前台恢复后未防覆盖失败文案');
+    }
+
+    const begin = bodyOf(source, code, 'beginLoginDeadline');
+    if (!begin) problems.push('无法定位 beginLoginDeadline');
+    else need(/loginPhase\s*=\s*\.waiting/.test(begin) && /loginPhaseElapsed\s*=\s*0/.test(begin) && /scheduleLoginDeadline\(\)/.test(begin), 'beginLoginDeadline 未切到 waiting 并重挂 180s');
+
+    const poll = bodyOf(source, code, 'pollLoginPresentation');
+    if (!poll) problems.push('无法定位 pollLoginPresentation');
+    else {
+      const activeGuard = poll.indexOf('guard isApplicationActive else { return }');
+      const failAt = poll.indexOf('fail(');
+      need(activeGuard >= 0 && activeGuard < failAt, 'pollLoginPresentation 后台必须直接返回，不能判超时');
+      need(/currentLoginPhaseElapsed\(\)\s*>=\s*Self\.loginPresentationWait/.test(poll), 'pollLoginPresentation 未按 6s 呈现窗口判定');
+      need(/beginLoginDeadline\(\)/.test(poll), '页面可见后未转 180s 倒计时');
+      need(/login-present-ignored reason=/.test(poll), '呈现失败缺 login-present-ignored 诊断');
+      need(/学校登录页暂时无法打开，请回到江水课表后重试/.test(poll), '呈现失败缺明确中文文案');
+    }
+
+    const deadline = bodyOf(source, code, 'scheduleLoginDeadline');
+    if (!deadline) problems.push('无法定位 scheduleLoginDeadline');
+    else {
+      need(/guard\s+isRunning\s*,\s*awaitingLogin\s*,\s*loginPhase\s*==\s*\.waiting\s*,\s*isApplicationActive\s+else\s*\{\s*return\s*\}/.test(deadline), '180s 倒计时未在后台/非等待阶段挂起');
+      need(/Self\.loginDeadline\s*-\s*currentLoginPhaseElapsed\(\)/.test(deadline), '180s 倒计时未扣减已消耗活跃时间');
+      need(/等待学校登录超时，保留上次课表。请重新读取/.test(deadline), '180s 超时缺明确中文文案');
+      need(/asyncAfter\s*\(\s*deadline\s*:\s*\.now\(\)\s*\+\s*remaining/.test(deadline), '180s 倒计时未按剩余时间安排');
+    }
+
+    const leave = bodyOf(source, code, 'leaveLogin');
+    if (!leave) problems.push('无法定位 leaveLogin');
+    else need(/stopLoginClock\(\)/.test(leave) && /scheduleDeadline\s*\(\s*Self\.leaveLoginDeadline\s*\)/.test(leave), 'leaveLogin 未停表并改挂 60s 离开登录页上限');
+
+    return problems.length ? fail(truncateList(problems)) : pass('loginDeadline=180、presenting 6s/0.5s 轮询、后台暂停回前台续时、xskb 先 leaveLogin、reading 三处复位，页面换代由 readingPageURL/readingToken 作废旧轮询均在位');
+  });
+
   return results;
 }
 

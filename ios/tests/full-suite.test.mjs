@@ -8,16 +8,18 @@ const expectedIds = [];
 for (const [prefix, count] of [['A', 11], ['B', 7], ['C', 8], ['D', 7], ['E', 2], ['F', 12], ['G', 1]]) {
   for (let index = 1; index <= count; index++) expectedIds.push(prefix + index);
 }
+// F13/F14 是 P0 页面服务自愈与登录时钟，编号排在 G1 之后（编号按添加顺序稳定，不重排历史项）。
+expectedIds.push('F13', 'F14');
 
 const results = runChecks(ROOT);
 
-test('check-ios 共 48 项检查，编号与顺序稳定', () => {
-  assert.equal(results.length, 48);
+test('check-ios 共 50 项检查，编号与顺序稳定', () => {
+  assert.equal(results.length, 50);
   assert.deepEqual(results.map((item) => item.id), expectedIds);
-  assert.equal(new Set(results.map((item) => item.id)).size, 48);
+  assert.equal(new Set(results.map((item) => item.id)).size, 50);
 });
 
-test('全部 48 项检查通过，且每项都有说明', () => {
+test('全部 50 项检查通过，且每项都有说明', () => {
   const failures = results.filter((item) => !item.ok);
   assert.deepEqual(failures.map((item) => item.id), [], '失败项：' + failures.map((item) => item.id + ' ' + item.detail).join(' | '));
   for (const item of results) {
@@ -29,7 +31,7 @@ test('全部 48 项检查通过，且每项都有说明', () => {
 
 test('formatResults 输出 fail 0 与全绿汇总', () => {
   const text = formatResults(results);
-  assert.match(text, /汇总：48 项，ok 48，fail 0/);
+  assert.match(text, /汇总：50 项，ok 50，fail 0/);
   assert.match(text, /全绿，退出码：0/);
 });
 
@@ -38,6 +40,6 @@ test('命令行入口退出码为 0（可重复运行）', () => {
   const run = spawnSync(process.execPath, [script], { cwd: ROOT, encoding: 'utf8', timeout: 120000 });
   assert.equal(run.error, undefined);
   assert.equal(run.status, 0, 'stdout：' + run.stdout + '\nstderr：' + run.stderr);
-  assert.match(run.stdout, /汇总：48 项，ok 48，fail 0/);
+  assert.match(run.stdout, /汇总：50 项，ok 50，fail 0/);
   assert.match(run.stdout, /全绿，退出码：0/);
 });

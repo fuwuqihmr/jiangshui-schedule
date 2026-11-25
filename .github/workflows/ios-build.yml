@@ -1,8 +1,5 @@
 name: iOS 编译（模拟器）
 
-# retrigger 6847573：有父提交，保证 push 触发 workflow
-
-
 # 目的：在没有 Mac 的情况下，用 GitHub 的 macOS runner 拿到真实编译结果。
 # 设计：每一步都记录自己的退出码到 ios/build-out/rc-*，最后由「判定」步骤统一决定成败。
 # 这样即使中间某步崩了，job summary 也会写清楚是哪一步、什么错误，不会只剩一句 exit code 1。
@@ -23,7 +20,7 @@ concurrency:
 jobs:
   build:
     name: xcodebuild 模拟器编译
-    runs-on: macos-15-intel
+    runs-on: macos-14
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +54,7 @@ jobs:
           node tools/gen-pbxproj.mjs 2>&1 | tee "$OUT/gen.log"
           echo $? > "$OUT/rc-gen"
 
-      - name: 静态门禁 48 项
+      - name: 静态门禁 50 项
         working-directory: ios
         run: |
           OUT=build-out
@@ -66,7 +63,7 @@ jobs:
           node tools/check-ios.mjs 2>&1 | tee "$OUT/check.log"
           echo $? > "$OUT/rc-check"
 
-      - name: 校验器自测 72 项
+      - name: 校验器自测 82 项
         working-directory: ios
         run: |
           OUT=build-out
@@ -153,7 +150,6 @@ jobs:
           echo "$rc" > "$OUT/rc-ipa"
       - name: 在模拟器里启动并截图（运行验证）
         working-directory: ios
-        timeout-minutes: 6
         continue-on-error: true
         run: |
           OUT=build-out
@@ -289,3 +285,5 @@ jobs:
             exit 1
           fi
           echo '全部通过。'
+
+# sync 7027587 P0

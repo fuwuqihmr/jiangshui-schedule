@@ -79,19 +79,19 @@ struct RootView: View {
         .transition(.opacity)
     }
 
-    /// 本地网页服务起不来时显示的遮罩；message 是给用户看的中文原因。
+    /// 服务起不来或页面加载失败时的遮罩；标题/正文由 WebHost 区分。
     private func serverErrorOverlay(_ message: String) -> some View {
         ZStack {
             Color.black.opacity(0.45).ignoresSafeArea()
             VStack(spacing: 14) {
-                Text("页面服务未启动")
+                Text(host.serverErrorTitle)
                     .font(.headline)
                 Text(message)
                     .font(.subheadline)
                     .multilineTextAlignment(.center)
                     .foregroundColor(.secondary)
                 Button("重试") {
-                    host.startIfNeeded()
+                    host.retryPage()
                 }
                 .buttonStyle(.borderedProminent)
             }

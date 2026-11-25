@@ -18,6 +18,8 @@ import WebKit
 /// - 返回：调用 web 的 `window.__dsjOnBack()`（与 Android onBackPressed 同一逻辑）
 /// - 注销：回包后清 WKWebsiteDataStore 并重新加载出同意页
 final class WebHost: NSObject, ObservableObject {
+    /// 错误遮罩标题：服务起不来 vs 页面导航失败，文案不同。
+    @Published private(set) var serverErrorTitle: String = "页面服务未启动"
     /// 主线程持有；nil 表示还没创建（首次 UI 渲染时创建）。
     @Published private(set) var serverError: String?
     /// JS 拒绝协议后显示覆盖页（Android 是 finish 掉 Activity，这里只遮罩）。
@@ -39,6 +41,18 @@ final class WebHost: NSObject, ObservableObject {
     private let dispatcher: BridgeDispatcher
     // 只创建一次的 WKWebView；RootView 每次刷新都复用它。
     private var webViewStorage: WKWebView?
+    // 页面加载中标志；onReady 与 scenePhase .active 可能连续触发，避免自己取消自己。
+    private var isLoading = false
+    // 最近一次请求加载的端口。
+    private var currentLoadPort: UInt16?
+    // 已经加载完成的端口；端口变化必须重新加载。
+    private var loadedPort: UInt16?
+    // 最近一次 webView.load 返回的导航，用来忽略旧导航迟到的回调。
+    private var currentNavigation: WKNavigation?
+    // 本次加载是否已经自动重试过；最多一次，成功/手动重试才复位。
+    private var autoRetryUsed = false
+    // 0.4 秒后执行的自动重试任务；手动重试/加载成功时取消。
+    private var autoRetryWorkItem: DispatchWorkItem?
 
     /// 注销后延迟清数据，保证 logout 的回包先到 JS（web/app.mjs:595 随后 location.reload()）。
     private static let logoutCleanupDelay: TimeInterval = 0.8
@@ -61,7 +75,23 @@ final class WebHost: NSObject, ObservableObject {
             self.loadIndex(port: port)
         }
         server.onFailure = { [weak self] message in
-            self?.serverError = message
+            guard let self = self else { return }
+            self.isLoading = false
+            self.pageLoaded = false
+            self.loadedPort = nil
+            self.currentLoadPort = nil
+            self.currentNavigation = nil
+            self.serverErrorTitle = "页面服务未启动"
+            self.serverError = message
+        }
+        server.onInterrupted = { [weak self] in
+            guard let self = self else { return }
+            // 端口已不可用：丢掉旧地址，等自动重启的 onReady 重新加载。
+            self.isLoading = false
+            self.pageLoaded = false
+            self.loadedPort = nil
+            self.currentLoadPort = nil
+            self.currentNavigation = nil
         }
     }
 
@@ -212,9 +242,18 @@ final class WebHost: NSObject, ObservableObject {
     /// App 前台/启动时调用：服务没起就起，起了就直接加载页面。
     func startIfNeeded() {
         if let port = server.port {
-            if !pageLoaded { loadIndex(port: port) }
+            // 端口还在但 listener 已死：不能继续用旧地址，必须 stop→start。
+            guard server.isHealthy else {
+                retryPage()
+                return
+            }
+            if pageLoaded && loadedPort == port { return }
+            if isLoading && currentLoadPort == port { return }
+            loadIndex(port: port)
             return
         }
+        // 正在启动/重启：等 onReady 统一触发加载。
+        if server.isRunning { return }
         server.start()
     }
 
@@ -260,21 +299,55 @@ final class WebHost: NSObject, ObservableObject {
 
     // MARK: - 页面加载
 
+    /// 重试整条链路：先停掉可能已死的监听器，再从 47851 重新启动。
+    /// 手动重试会取消尚未执行的自动重试；自动重试不重置计数，保证每轮最多一次。
+    func retryPage() {
+        retryPage(autoRetry: false)
+    }
+
+    private func retryPage(autoRetry: Bool) {
+        if !autoRetry {
+            autoRetryUsed = false
+            autoRetryWorkItem?.cancel()
+            autoRetryWorkItem = nil
+        }
+        serverError = nil
+        isLoading = false
+        pageLoaded = false
+        loadedPort = nil
+        currentLoadPort = nil
+        currentNavigation = nil
+        server.stop()
+        server.start()
+    }
+
     /// 让 WKWebView 打开本地服务地址；同时重置桥和页面状态。
-    private func loadIndex(port: UInt16) {
+    private func loadIndex(port: UInt16, force: Bool = false) {
         guard let webView = webViewStorage else { return }
+        // 开始一次（或确认一次）页面加载时先收起旧错误，避免成功重载后遮罩不退。
+        serverError = nil
+        // 同一端口已经在加载，或已经加载完成：不要重复 load，否则第一次导航会被取消。
+        if !force {
+            if isLoading && currentLoadPort == port { return }
+            if pageLoaded && loadedPort == port { return }
+        }
         guard let url = URL(string: "http://127.0.0.1:\(port)/index.html") else {
+            serverErrorTitle = "页面加载失败"
             serverError = "页面地址无效"
             return
         }
         // 重新生成 shim，让页面模块求值时读到当前系统外观。
         installUserScripts(on: webView.configuration.userContentController)
         bridge.reset()
+        isLoading = true
+        currentLoadPort = port
         pageLoaded = false
+        loadedPort = nil
+        serverError = nil
         consentDeclined = false
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-        webView.load(request)
+        currentNavigation = webView.load(request)
     }
 
     /// 页面已加载时执行 window.onNativeResume()；没加载就什么都不做。
@@ -286,8 +359,44 @@ final class WebHost: NSObject, ObservableObject {
 
     /// 重新加载当前本地页面（注销清缓存、WebKit 崩溃后都用它）。
     private func reloadFromServer() {
-        guard let port = server.port else { return }
-        loadIndex(port: port)
+        if let port = server.port, server.isHealthy {
+            loadIndex(port: port, force: true)
+        } else {
+            retryPage()
+        }
+    }
+
+    /// 页面导航失败：每轮加载最多自动重试一次，第二次才显示错误遮罩。
+    private func handleLoadFailure(_ error: Error) {
+        guard isLoading, webViewStorage != nil else { return }
+        let nsError = error as NSError
+        guard nsError.code != NSURLErrorCancelled else { return }
+        isLoading = false
+        pageLoaded = false
+        loadedPort = nil
+        if !autoRetryUsed {
+            autoRetryUsed = true
+            serverError = nil
+            let work = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
+                self.autoRetryWorkItem = nil
+                self.retryPage(autoRetry: true)
+            }
+            autoRetryWorkItem = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+        } else {
+            serverErrorTitle = "页面加载失败"
+            let message = nsError.localizedDescription
+            serverError = message.isEmpty ? "无法连接服务器。" : message
+        }
+    }
+
+    /// 只接受最近一次 load 的导航回调，忽略旧导航迟到的回调。
+    /// currentNavigation 为空（如 retryPage 刚清空）时一律拒绝旧回调；非空而 navigation 为空时仍视为当前导航。
+    private func isCurrentNavigation(_ navigation: WKNavigation?) -> Bool {
+        guard let current = currentNavigation else { return false }
+        guard let navigation = navigation else { return true }
+        return current === navigation
     }
 
     /// 问主题服务当前系统是不是深色；注入桥脚本时要靠它给初值。
@@ -369,23 +478,26 @@ extension WebHost: WKNavigationDelegate {
 
     /// 页面加载完成：标记 pageLoaded，回前台时才会叫 onNativeResume。
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
-        if webViewStorage === webView {
-            pageLoaded = true
-        }
+        guard webViewStorage === webView, isCurrentNavigation(navigation) else { return }
+        isLoading = false
+        pageLoaded = true
+        loadedPort = currentLoadPort
+        serverError = nil
+        autoRetryUsed = false
+        autoRetryWorkItem?.cancel()
+        autoRetryWorkItem = nil
     }
 
-    /// 加载失败：把系统错误翻成中文提示显示在遮罩上；取消不算失败。
+    /// 加载失败：每轮自动重试一次；第二次失败才显示错误遮罩。
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation?, withError error: Error) {
-        if webViewStorage === webView, (error as NSError).code != NSURLErrorCancelled {
-            serverError = "页面加载失败：\(error.localizedDescription)"
-        }
+        guard webViewStorage === webView, isCurrentNavigation(navigation) else { return }
+        handleLoadFailure(error)
     }
 
-    /// 还没真正开始加载就失败（比如服务没起来）：同样显示中文错误。
+    /// 还没真正开始加载就失败（比如服务没起来）：同样先自动重试一次。
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation?, withError error: Error) {
-        if webViewStorage === webView, (error as NSError).code != NSURLErrorCancelled {
-            serverError = "页面加载失败：\(error.localizedDescription)"
-        }
+        guard webViewStorage === webView, isCurrentNavigation(navigation) else { return }
+        handleLoadFailure(error)
     }
 
     /// WebKit 的网页进程被系统杀掉：重新加载本地页面，数据不会丢。

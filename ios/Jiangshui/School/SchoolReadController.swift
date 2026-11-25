@@ -6,6 +6,7 @@
 // 超时或失败都保留旧课表，只把一句中文原因交给界面；成功结果只会回调一次。
 // 本机 Windows 没有 Xcode，无法编译；真实登录链必须用测试账号在真机验证。
 import Foundation
+import UIKit
 import WebKit
 
 // 教务课表读取状态机（P2）。
@@ -36,6 +37,11 @@ final class SchoolReadController {
     private static let totalDeadline: TimeInterval = 90        // SchoolClient.java 的 timeout(90000)
     // 用户登录完成后，进入教务最多再等 60 秒；和上面的总时限分开，不要混用。
     private static let leaveLoginDeadline: TimeInterval = 60   // SchoolClient.java:49 的 timeout(60000)
+    // 等待用户手动输入账号密码的上限：180 秒内必须登录完成，否则释放网页 busy，避免永久卡死。
+    private static let loginDeadline: TimeInterval = 180
+    // 登录页必须让用户看见。启动/转场瞬间 present 可能被系统暂时忽略，6 秒内每 0.5 秒重试一次。
+    private static let loginPresentationWait: TimeInterval = 6
+    private static let loginPresentationPollInterval: TimeInterval = 0.5
     // 每 200 毫秒看一次结果；间隔太短会卡界面，太长会显得慢。
     private static let pollInterval: TimeInterval = 0.2        // pollRead / pollProfile 的 200ms
     // 最多看 450 次，200ms × 450 正好约 90 秒，和总时限对齐。
@@ -66,12 +72,42 @@ final class SchoolReadController {
     private var profile: JSONObject?
     // 总倒计时闹钟；每次重新挂时限前先按掉旧的。
     private var deadlineTimer: DispatchWorkItem?
-    // restoreCookies 完成前，show() 的初始页面可能先 didFinish；此时不参与状态机，避免和恢复流程抢跑。
     // 登录票据是否准备好；没好之前，页面加载完成也不参与流程。
     private var sessionReady = false
-    // 正在载入 SSO 入口 / CAS 登录页；用于把「统一身份认证入口不可达」和普通学校页面失败区分开。
     // 是否正在打开统一身份认证入口；用来区分「入口打不开」和普通页面失败。
     private var ssoEntryLoading = false
+
+    // 是否已经启动过一次课表脚本注入；对齐 Android SchoolClient.read() 里的 script 标志，
+    // 防止同一页面重复 didFinish 时启动第二个读取（旧轮询会一直跑到超时才结束）。
+    private var reading = false
+
+    // 这一轮读取是在哪个页面地址上发起的；用来区分「同一页重复 didFinish」和「页面已经换代」。
+    private var readingPageURL: String?
+
+    // 读取代次：每次新读取或允许页面换代时自增。旧的注入/轮询回调看到代次不一致就立刻退出，
+    // 避免旧 poll 已经作废却还在新页面上数到 90 秒超时。
+    private var readingToken = 0
+
+    // 登录阶段只在 App 前台活跃时计时：切后台/锁屏暂停，回前台接着走剩余时间。
+    private enum LoginPhase {
+        case idle
+        case presenting
+        case waiting
+    }
+    // 当前登录阶段：等待登录页可见（presenting）或登录页已可见、等待用户输入（waiting）。
+    private var loginPhase: LoginPhase = .idle
+    // 当前阶段已经累计消耗的活跃秒数；后台期间不增长。
+    private var loginPhaseElapsed: TimeInterval = 0
+    // 本段前台计时的起点；切后台时清空，回前台重新取当前时间。
+    private var loginSegmentStartedAt: Date?
+    // 等待登录页可见时的 0.5 秒轮询任务；切后台要按掉，避免后台继续跑。
+    private var loginPollWork: DispatchWorkItem?
+    // 登录页可见后的 180 秒活跃倒计时任务；后台暂停、回前台重挂。
+    private var loginDeadlineWork: DispatchWorkItem?
+    // 前后台切换通知的观察者；登录结束/失败后必须移除，避免持有控制器。
+    private var loginObserverTokens: [NSObjectProtocol] = []
+    // 每次轮询复用的「把学校页面变成可见」闭包；闭包内部只弱引用 self。
+    private var loginRequestPresentation: (() -> Void)?
 
     /// 创建流程指挥；vault 是保存登录票据的保险箱，默认用真实 Keychain。
     init(vault: SchoolSession = SchoolSession()) {
@@ -104,6 +140,12 @@ final class SchoolReadController {
             completion(.failure(.message("正在读取课表，请稍候")))
             return
         }
+        // 上一轮如果异常留下登录观察者或计时器，先彻底清掉，避免旧回调干扰新流程。
+        stopLoginClock()
+        reading = false
+        readingPageURL = nil
+        // 上一轮可能还有延迟回调；代次+1 让它们在新流程里立即失效。
+        readingToken += 1
         self.host = host
         self.completion = completion
         finished = false
@@ -357,9 +399,21 @@ final class SchoolReadController {
             return
         }
         if path.hasPrefix("/jsxsd/xskb/") {
-            // 用户正在学校页面手动登录时，登录表单拥有导航权，不在登录页上强行注入读取。
-            if awaitingLogin { return }
-            leaveLogin()
+            // 对齐 SchoolClient.java:53：登录成功后的落点可能直接就是课表页，必须先 leaveLogin 再读；
+            // 否则 awaitingLogin 永远为 true，只能干等 180 秒登录上限后失败。
+            if awaitingLogin { leaveLogin() }
+            // 同一 URL 的重复 didFinish 仍要挡住；如果 URL 已经换了，说明页面换代，旧轮询已经没有意义，
+            // 先把 reading 和代次清掉，再允许新页面重新注入（否则新页会一直等旧轮询到 90 秒超时）。
+            if reading {
+                if let current = readingPageURL, current == rawURL {
+                    return
+                }
+                reading = false
+                readingPageURL = nil
+                readingToken += 1
+            }
+            // 同一页面的重复 didFinish 不再启动第二个读取；read() 内部还有 reading 守卫兜底。
+            guard reading == false else { return }
             inspectAcademicLogin { [weak self] in self?.read() }
             return
         }
@@ -425,12 +479,20 @@ final class SchoolReadController {
     // MARK: - 读取（对应 SchoolClient.read + pollRead）
 
     /// 开始读课表；内部真正干活的是 read(attempt:)。
+    /// reading 对应 Android SchoolClient.read() 的 script 标志：一次读取只注入一次，重复页面回调直接忽略。
     private func read() {
-        read(attempt: 1)
+        guard reading == false else { return }
+        reading = true
+        // 记下本轮注入时页面实际所在的地址；之后 didFinish 用这个值判断是同一页还是页面换代。
+        readingPageURL = host?.currentURLString
+        readingToken += 1
+        let token = readingToken
+        read(attempt: 1, token: token)
     }
 
     /// 注入课表读取脚本；失败最多重试一次，仍失败再走「结果可能已经写入」的兜底检查。
-    private func read(attempt: Int) {
+    private func read(attempt: Int, token: Int) {
+        guard isRunning, reading, token == readingToken else { return }
         guard let source = SchoolReadScripts.timetableReader() else {
             fail("课表读取脚本缺失，请重新安装应用后再试")
             return
@@ -445,34 +507,34 @@ final class SchoolReadController {
         // 追加 ;0;：school-reader.js 是 async IIFE，返回的 Promise 会让 evaluateJavaScript 的
         // completion 收到 WKErrorDomain unsupported type，而 JS 本身其实已经执行。
         host.evaluate(script: prefix + source + "\n;0;") { [weak self] _, error in
-            guard let self = self, self.isRunning else { return }
+            guard let self = self, self.isRunning, self.reading, token == self.readingToken else { return }
             if let error = error {
                 let nsError = error as NSError
                 SchoolDiagnosticLog.readerInjectionFailed(stage: "courses", attempt: attempt, error: nsError)
                 if attempt < 2 {
                     self.note("学校页面尚未就绪，正在重试…")
-                    self.after(0.25) { [weak self] in self?.read(attempt: attempt + 1) }
+                    self.after(0.25) { [weak self] in self?.read(attempt: attempt + 1, token: token) }
                     return
                 }
-                self.recoverRead(requestId: requestId)
+                self.recoverRead(requestId: requestId, token: token)
                 return
             }
-            self.pollRead(requestId: requestId, remaining: Self.pollLimit)
+            self.pollRead(requestId: requestId, remaining: Self.pollLimit, token: token)
         }
     }
 
     // 第二次注入仍报 completion error 时，JS 可能已经写入了本轮结果（Promise 序列化失败并不等于脚本没跑）。
     // 用一个可序列化的轻量脚本探查，有本轮结果就继续轮询，没有才保留原文案失败。
     /// 兜底检查：注入报错并不代表脚本没跑，先看看网页里有没有本轮结果。
-    private func recoverRead(requestId: String) {
+    private func recoverRead(requestId: String, token: Int) {
         after(0.4) { [weak self] in
-            guard let self = self, self.isRunning else { return }
+            guard let self = self, self.isRunning, self.reading, token == self.readingToken else { return }
             let script = "(function(){try{var r=window.__tomorrowRead;"
                 + "return r?JSON.stringify({id:r.id,done:!!r.done}):null}catch(e){return null}})()"
             self.host?.evaluate(script: script) { [weak self] value, error in
-                guard let self = self, self.isRunning else { return }
+                guard let self = self, self.isRunning, self.reading, token == self.readingToken else { return }
                 if error == nil, let info = self.jsonObject(from: value), info.optString("id") == requestId {
-                    self.pollRead(requestId: requestId, remaining: Self.pollLimit)
+                    self.pollRead(requestId: requestId, remaining: Self.pollLimit, token: token)
                     return
                 }
                 self.fail("学校页面脚本执行失败，请稍后重试")
@@ -481,22 +543,22 @@ final class SchoolReadController {
     }
 
     /// 每隔 200 毫秒取一次读取结果；拿到本轮完成的结果才继续，旧结果直接忽略。
-    private func pollRead(requestId: String, remaining: Int) {
-        guard isRunning else { return }
+    private func pollRead(requestId: String, remaining: Int, token: Int) {
+        guard isRunning, reading, token == readingToken else { return }
         guard remaining > 0 else {
             fail("学校响应超时，保留上次课表")
             return
         }
         let script = "(function(){try{var r=window.__tomorrowRead;return JSON.stringify(r||null)}catch(e){return null}})()"
         host?.evaluate(script: script) { [weak self] value, _ in
-            guard let self = self, self.isRunning else { return }
+            guard let self = self, self.isRunning, self.reading, token == self.readingToken else { return }
             guard let result = self.jsonObject(from: value) else {
-                self.retryPollRead(requestId: requestId, remaining: remaining)
+                self.retryPollRead(requestId: requestId, remaining: remaining, token: token)
                 return
             }
             // 脚本上一轮的产物（id 不同）直接忽略，继续等本轮。
             if result.optString("id") != requestId || result.optBool("done", false) == false {
-                self.retryPollRead(requestId: requestId, remaining: remaining)
+                self.retryPollRead(requestId: requestId, remaining: remaining, token: token)
                 return
             }
             self.handleReadResult(result)
@@ -504,9 +566,10 @@ final class SchoolReadController {
     }
 
     /// 等 200 毫秒后再问一次，并把剩余次数减一。
-    private func retryPollRead(requestId: String, remaining: Int) {
+    private func retryPollRead(requestId: String, remaining: Int, token: Int) {
         after(Self.pollInterval) { [weak self] in
-            self?.pollRead(requestId: requestId, remaining: remaining - 1)
+            guard let self = self, self.isRunning, self.reading, token == self.readingToken else { return }
+            self.pollRead(requestId: requestId, remaining: remaining - 1, token: token)
         }
     }
 
@@ -514,6 +577,8 @@ final class SchoolReadController {
     /// 解读读取结果：要登录就续期/等登录，报错就失败，课表不完整也失败，正常就打包回传。
     private func handleReadResult(_ result: JSONObject) {
         if result.optBool("login", false) {
+            // 对齐 Android poll 里的 script=false：本轮已拿到 done 结果，后续 sso/登录流程要允许再次 read。
+            reading = false
             if awaitingLogin {
                 // 用户正在手动登录，表单自己拥有导航权；不抢走页面，等下一次 didFinish 再继续。
                 needLogin()
@@ -647,12 +712,195 @@ final class SchoolReadController {
         guard finished == false else { return }
         guard awaitingLogin == false else { return }
         awaitingLogin = true
-        note("请在学校页面完成登录")
+        // 前台提示去学校页面输入；已经在后台时用与容器一致的后台文案，避免「请回到…」和「请在学校…」来回跳。
+        note(isApplicationActive ? "请在学校页面完成登录" : "请回到江水课表完成登录")
         // 用户必须在这个页面输入账号密码；无头容器用户看不见，交给 provider detach 后 present。
-        onNeedsVisiblePresentation?()
-        // 对齐 SchoolClient.java:47-48：登录表单自己拥有错误，只取消旧计时器（Android 的 deadlineVersion++），
-        // 不再另设截止时间；用户完成登录（leaveLogin）或主动取消才结束等待。
+        // 用局部闭包包住唯一调用点：轮询重试时复用，静态门禁仍只看到 needLogin 内一次调用。
+        let requestPresentation: () -> Void = { [weak self] in
+            self?.onNeedsVisiblePresentation?()
+        }
+        // 对齐 SchoolClient.java:47-48：登录表单自己拥有错误，只取消旧计时器（Android 的 deadlineVersion++）。
+        // 区别是 iOS 的 present 可能被后台/转场静默忽略，所以用活跃时间 6 秒轮询确认页面真的可见，再挂 180 秒上限。
         cancelDeadline()
+        startLoginClock()
+        loginRequestPresentation = requestPresentation
+        requestPresentation()
+        pollLoginPresentation(generation: generation)
+    }
+
+    /// 当前 App 是否在前台活跃；登录计时只在活跃时推进。
+    private var isApplicationActive: Bool {
+        return UIApplication.shared.applicationState == .active
+    }
+
+    /// 当前登录阶段已消耗的活跃秒数：已累计部分 + 本段前台时间。
+    private func currentLoginPhaseElapsed() -> TimeInterval {
+        var elapsed = loginPhaseElapsed
+        if let startedAt = loginSegmentStartedAt {
+            elapsed += Date().timeIntervalSince(startedAt)
+        }
+        return elapsed
+    }
+
+    /// 进入登录阶段：从 0 开始计活跃时间，并监听前后台切换。
+    private func startLoginClock() {
+        stopLoginClock()
+        loginPhase = .presenting
+        loginPhaseElapsed = 0
+        loginSegmentStartedAt = isApplicationActive ? Date() : nil
+        let center = NotificationCenter.default
+        let resign = center.addObserver(forName: UIApplication.willResignActiveNotification,
+                                        object: nil,
+                                        queue: .main) { [weak self] _ in
+            self?.handleApplicationResignActive()
+        }
+        let becomeActive = center.addObserver(forName: UIApplication.didBecomeActiveNotification,
+                                              object: nil,
+                                              queue: .main) { [weak self] _ in
+            self?.handleApplicationDidBecomeActive()
+        }
+        loginObserverTokens = [resign, becomeActive]
+    }
+
+    /// 切后台/锁屏：把本段前台时间累计进总数，按掉所有登录计时；绝不在后台判失败。
+    private func pauseLoginClock() {
+        if let startedAt = loginSegmentStartedAt {
+            loginPhaseElapsed += Date().timeIntervalSince(startedAt)
+            loginSegmentStartedAt = nil
+        }
+        loginPollWork?.cancel()
+        loginPollWork = nil
+        loginDeadlineWork?.cancel()
+        loginDeadlineWork = nil
+    }
+
+    /// 回前台：从暂停点继续；等页面可见就继续轮询，页面已可见就重挂剩余的 180 秒。
+    private func resumeLoginClock() {
+        guard loginPhase != .idle else { return }
+        if loginSegmentStartedAt == nil {
+            loginSegmentStartedAt = Date()
+        }
+        switch loginPhase {
+        case .presenting:
+            loginRequestPresentation?()
+            pollLoginPresentation(generation: generation)
+        case .waiting:
+            // 页面是否可见由调用方确认；这里只重挂剩余时间，避免页面还没回来就先写前台文案。
+            scheduleLoginDeadline()
+        case .idle:
+            break
+        }
+    }
+
+    /// 登录结束（成功/失败/取消）时彻底停表并移除观察者，防止后续前后台回调打到旧流程。
+    private func stopLoginClock() {
+        pauseLoginClock()
+        loginPhase = .idle
+        loginPhaseElapsed = 0
+        loginRequestPresentation = nil
+        for token in loginObserverTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
+        loginObserverTokens.removeAll()
+    }
+
+    /// App 退到后台/锁屏：暂停计时，并使用与容器一致的后台提示，避免两句话来回跳。
+    private func handleApplicationResignActive() {
+        guard isRunning, awaitingLogin, loginPhase != .idle else { return }
+        pauseLoginClock()
+        note("请回到江水课表完成登录")
+    }
+
+    /// App 回到前台：继续剩余计时；登录页已经可见时把提示切回前台文案。
+    private func handleApplicationDidBecomeActive() {
+        guard isRunning, awaitingLogin, loginPhase != .idle else { return }
+        resumeLoginClock()
+        // resume 可能已经判定 6 秒/180 秒超时并结束流程；结束之后绝不能再覆盖失败提示。
+        if isRunning, awaitingLogin, host?.isUserVisible == true {
+            note("请在学校页面完成登录")
+        }
+    }
+
+    /// 登录页已确认可见：结束 6 秒呈现窗口，开始 180 秒活跃倒计时。
+    private func beginLoginDeadline() {
+        guard isRunning, awaitingLogin else { return }
+        loginPhase = .waiting
+        loginPhaseElapsed = 0
+        loginSegmentStartedAt = isApplicationActive ? Date() : nil
+        loginPollWork?.cancel()
+        loginPollWork = nil
+        note("请在学校页面完成登录")
+        scheduleLoginDeadline()
+    }
+
+    /// 重挂 180 秒活跃倒计时；后台不挂，回前台由 didBecomeActive 接着走剩余时间。
+    private func scheduleLoginDeadline() {
+        loginDeadlineWork?.cancel()
+        loginDeadlineWork = nil
+        guard isRunning, awaitingLogin, loginPhase == .waiting, isApplicationActive else { return }
+        let remaining = Self.loginDeadline - currentLoginPhaseElapsed()
+        guard remaining > 0 else {
+            fail("等待学校登录超时，保留上次课表。请重新读取")
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self,
+                  self.isRunning,
+                  self.awaitingLogin,
+                  self.loginPhase == .waiting else { return }
+            guard self.isApplicationActive else { return }
+            if self.currentLoginPhaseElapsed() >= Self.loginDeadline {
+                self.fail("等待学校登录超时，保留上次课表。请重新读取")
+            } else {
+                self.scheduleLoginDeadline()
+            }
+        }
+        loginDeadlineWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + remaining, execute: work)
+    }
+
+    /// 登录页可见性确认：活跃时间 6 秒内每 0.5 秒重试一次 present。
+    /// 后台暂停而不是判超时；回前台由 didBecomeActive 继续剩余时间，用户去查密码再回来不会被误杀。
+    private func pollLoginPresentation(generation expectedGeneration: Int) {
+        guard isRunning, awaitingLogin,
+              generation == expectedGeneration,
+              loginPhase == .presenting else { return }
+        // 后台绝不判超时；didBecomeActive 会继续。
+        guard isApplicationActive else { return }
+        if host?.isUserVisible == true {
+            // 页面已经真的可见：用户可以从容输入密码，但最多再等 180 秒活跃时间。
+            beginLoginDeadline()
+            return
+        }
+        if currentLoginPhaseElapsed() >= Self.loginPresentationWait {
+            // 这里只记录「为什么没能呈现」的分类，不写任何 cookie / 账号 / URL。
+            let appState = UIApplication.shared.applicationState.rawValue
+            let reason: String
+            if host == nil {
+                reason = "no-host"
+            } else if UIApplication.shared.applicationState != .active {
+                reason = "not-active"
+            } else if host?.presentingViewController != nil {
+                reason = "already-presenting"
+            } else {
+                reason = "present-ignored"
+            }
+            SchoolDiagnosticLog.write("login-present-ignored reason=\(reason) app-state=\(appState)")
+            fail("学校登录页暂时无法打开，请回到江水课表后重试（原课表已保留）")
+            return
+        }
+        loginRequestPresentation?()
+        scheduleLoginPoll(generation: expectedGeneration)
+    }
+
+    /// 0.5 秒后再确认一次；用可取消的任务，切后台/登录结束不会再留下旧轮询。
+    private func scheduleLoginPoll(generation expectedGeneration: Int) {
+        loginPollWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.pollLoginPresentation(generation: expectedGeneration)
+        }
+        loginPollWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.loginPresentationPollInterval, execute: work)
     }
 
     /// 用户登录完成、离开登录页时调用；只有确实在等登录才重新挂 60 秒倒计时。
@@ -661,6 +909,8 @@ final class SchoolReadController {
         // 已保存 cookie 直接进教务时保留 start() 的 90s 总时限。
         guard awaitingLogin else { return }
         awaitingLogin = false
+        // 登录成功/离开登录页：停掉活跃时钟并移除前后台观察者，后面不会再回到登录计时。
+        stopLoginClock()
         // 对齐 SchoolClient.java:49：登录后到进入教务的等待上限是 60s，不与 needLogin 的取消语义混用。
         scheduleDeadline(Self.leaveLoginDeadline)
     }
@@ -701,6 +951,11 @@ final class SchoolReadController {
         awaitingLogin = false
         sessionReady = false
         ssoEntryLoading = false
+        reading = false
+        readingPageURL = nil
+        // 让已经排队的旧注入/旧 poll 回调看到代次变化后直接退出。
+        readingToken += 1
+        stopLoginClock()
         deadlineTimer?.cancel()
         deadlineTimer = nil
         host?.evaluate(script: "window.__tomorrowAbort&&window.__tomorrowAbort.abort&&window.__tomorrowAbort.abort();", completion: { _, _ in })
@@ -716,8 +971,10 @@ final class SchoolReadController {
         deadlineTimer = nil
     }
 
-    /// 重新挂一个倒计时；时间一到，若还在等 SSO 入口就报入口错误，否则报超时。
-    private func scheduleDeadline(_ seconds: TimeInterval) {
+    /// 重新挂一个倒计时；时间一到，若还在等 SSO 入口就报入口错误，否则用调用方给的超时文案。
+    /// timeoutMessage 默认保持 P2 原文案；登录等待传入专用文案，避免用户误以为是学校响应慢。
+    private func scheduleDeadline(_ seconds: TimeInterval,
+                                  timeoutMessage: String = "学校响应超时，保留上次课表") {
         deadlineTimer?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self = self, self.isRunning else { return }
@@ -726,7 +983,7 @@ final class SchoolReadController {
                 self.fail("统一身份认证入口暂时无法打开，请检查网络后重试（原课表已保留）")
                 return
             }
-            self.fail("学校响应超时，保留上次课表")
+            self.fail(timeoutMessage)
         }
         deadlineTimer = work
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)

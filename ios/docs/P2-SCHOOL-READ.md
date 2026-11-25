@@ -2,17 +2,17 @@
 
 > 交付日期：2026-10-29　实现：Lead（本会话直接开发，未分工）
 > 目标：把「一行不存在的 P2」变成能真正登录学校 → 读课表 → 读假条的 iOS 实现，与 Android 行为对齐。
-> 状态：**已编译通过**（commit `9685ab5`：Debug / Release / iphoneos 三条链路 BUILD SUCCEEDED、0 error，未签名 IPA 3,243,844 B 已产出；静态门禁 48/48、iOS 72 测试、web 391 测试全绿）。**尚未用真实学校账号跑通** —— 真机验证是唯一的验收口径。
+> 状态：**已编译通过**（commit `9685ab5`：Debug / Release / iphoneos 三条链路 BUILD SUCCEEDED、0 error，未签名 IPA 3,243,844 B 已产出；静态门禁 50/50、iOS 82 测试、web 391 测试全绿）。**尚未用真实学校账号跑通** —— 真机验证是唯一的验收口径。
 > 真机验证清单见 §7，必须用真实学校账号跑一遍本文件才算「P2 完成」。
 
 ## 1. 新增/改动的文件
 
 | 文件 | 行数（约） | 角色 |
 | --- | --- | --- |
-| `Jiangshui/School/SchoolReadController.swift` | 715 | 主线程状态机：restore → ssoRecover → portal/profile → read，含无头容器转可见回调 |
+| `Jiangshui/School/SchoolReadController.swift` | 1080 | 主线程状态机：restore → ssoRecover → portal/profile → read，含无头容器转可见回调 |
 | `Jiangshui/School/LeaveRecordsService.swift` | 280 | 假条列表直连同步（URLSession + 手工 Cookie 头 + 表单解析） |
-| `Jiangshui/School/SchoolProvider.swift` | 261 | 从 P1 桩改为真实实现；持有 host / controller / leaveRecords，负责无头/可见容器切换 |
-| `Jiangshui/School/SchoolWebViewHost.swift` | 619 | 新增 `onNavigate`/`onNavigationFailure`/`onProcessTerminated`、`evaluate(script:completion:)`、`stopLoading()`、无头挂载与定位桥接线 |
+| `Jiangshui/School/SchoolProvider.swift` | 399 | 从 P1 桩改为真实实现；持有 host / controller / leaveRecords，负责无头/可见容器切换 |
+| `Jiangshui/School/SchoolWebViewHost.swift` | 712 | 新增 `onNavigate`/`onNavigationFailure`/`onProcessTerminated`、`evaluate(script:completion:)`、`stopLoading()`、无头挂载与定位桥接线 |
 | `Jiangshui/Web/BridgeDispatcher.swift` | 331 | `openSchool(mobile:false)` 改为走 `capture()`（对齐 `MainActivity.java:737`） |
 | `Jiangshui/Services/ServiceProtocols.swift` | 191 | `SchoolProviding` 新增 `clearLeaveSession()` |
 | `Jiangshui/Services/LogoutController.swift` | 52 | 注销时清请假会话参数（对应 Android 清 `leave-session`） |
@@ -20,7 +20,10 @@
 | `Jiangshui/School/SchoolGeolocationBridge.swift` | 253 | P3 定位：注入 navigator.geolocation shim，校验 xgxt https origin |
 | `Jiangshui/School/SchoolLocationPermission.swift` | 165 | P3 定位权限：CLLocationManager 主线程请求与状态映射 |
 | `Jiangshui/School/SchoolFilePicker.swift` | 197 | P3 上传预留：PHPicker/UIDocumentPicker，当前**未接线** |
-| `tools/check-ios.mjs` | — | F8 P2/P3 门禁 + F10-F12 + G1（当前 48 项） |
+| `Jiangshui/Web/LocalServer.swift` | 399 | P0 页面服务自愈：健康判定/代际/1.5s waiting/端口回退 |
+| `Jiangshui/Web/WebHost.swift` | 559 | P0 错误遮罩、`retryPage()` stop→start、0.4s 自动重试一次 |
+| `Jiangshui/App/RootView.swift` | 138 | P0 错误卡片标题与「重试」按钮 |
+| `tools/check-ios.mjs` | — | F8 P2/P3 门禁 + F10-F14 + G1（当前 50 项） |
 
 未改动：`android/`、`harmony/`。`web/` 基线 **182 文件 / `1ea23688…18cbdd`**；相对接手时新增 `web/state-sync.mjs`（保存三层兜底，见 §10），`web/app.mjs` 有启动/保存自愈改动，其余 ES Module 未动。
 
@@ -121,8 +124,8 @@ start(host:completion:)
 ```bash
 cd ios
 node tools/gen-pbxproj.mjs     # 幂等；自动收录新 .swift（当前 Swift 41 个）
-node tools/check-ios.mjs       # 48 项静态门禁
-node --test tests/             # 72 项桥接/工程一致性测试
+node tools/check-ios.mjs       # 50 项静态门禁
+node --test tests/             # 82 项桥接/工程一致性测试
 cd .. && node --test tests/*.test.mjs   # web 共享层 391 项
 ```
 
@@ -150,7 +153,7 @@ Sideloadly 重签的 IPA 在真机首次登录成功后，课表已能显示，�
 
 | # | 位置 | 问题 | 修复 |
 | --- | --- | --- | --- |
-| 1 | `SchoolReadController.swift` | `enterLogin()` 仍挂 60s 截止，用户在学校页慢慢输入时会被误杀；`navigationFailed` 在登录等待期直接终止读取 | `enterLogin()` 改 `cancelDeadline()`；`navigationFailed` 开头 `if awaitingLogin { return }`；登录成功进入教务后由 `leaveLogin()` 挂 `leaveLoginDeadline = 60` 兜底 |
+| 1 | `SchoolReadController.swift` | `enterLogin()` 仍挂 60s 截止，用户在学校页慢慢输入时会被误杀；`navigationFailed` 在登录等待期直接终止读取 | `enterLogin()` 改 `cancelDeadline()`；`navigationFailed` 开头 `if awaitingLogin { return }`；登录成功进入教务后由 `leaveLogin()` 挂 `leaveLoginDeadline = 60` 兜底（task-55 进一步把登录等待改为 6s 呈现窗口 + 180s 前台倒计时、后台暂停，见 §13；`leaveLogin` 60s 不变） |
 | 2 | `SchoolReadController.swift` | SSO 恢复阶段没有重挂总时限，Android 在 `sso()` 重挂 90s | `sso()` 内 `scheduleDeadline(Self.totalDeadline)` |
 | 3 | `SchoolProvider.swift` | 用户点学校页「返回课表」后，读取协程仍空等到 90s | 新增 `dismissed = { controller.cancel() }` 并赋给 `created.onDismissed` |
 | 4 | `SchoolProvider.swift` | 只在 `onNavigate` 抓 `uid/pageEnc`，重定向/前进后退会漏，假条同步恒 `NEED_SESSION` | `onPageFinished` 再调 `leaveRecords.rememberSession(url: url)`（与 `onNavigate` 共两处） |
@@ -160,12 +163,12 @@ Sideloadly 重签的 IPA 在真机首次登录成功后，课表已能显示，�
 ### 10.5 状态与验收
 
 - 已落盘：`web/state-sync.mjs`、`web/app.mjs` 三层兜底；`StateStore` 冲突日志；上表四条运行期修复；`BridgeDispatcher` 显式回包防御。
-- 静态门禁 **48/48**、iOS **72 pass**、web **391 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
-- **尚未重新编译、重签、真机复跑**：本机无 Xcode，结论只到静态与 Node 层。下一次真机重点验：首次登录不弹保存冲突、点「返回课表」立即取消、假条同步不再恒 `NEED_SESSION`、正常登录不被 60s 误杀。
+- 静态门禁 **50/50**、iOS **82 pass**、web **391 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
+- **尚未重新编译、重签、真机复跑**：本机无 Xcode，结论只到静态与 Node 层。下一次真机重点验：首次登录不弹保存冲突、点「返回课表」立即取消、假条同步不再恒 `NEED_SESSION`、登录等待不再被 60s 误杀（现已改为 6s 呈现 + 180s 前台倒计时，见 §13）。
 
 ## 11. P3 进展：顶部白条、无头核对、请假深链、上传与定位（2026-10-30）
 
-静态门禁已扩到 **48 项**：F10 增补白条 A 方案断言，新增 F11（无头核对）与 F12（请假深链 + 上传/定位资产）。以下四项仍需真机/真账号验证，本机只到静态层。
+静态门禁已扩到 **50 项**：F10 增补白条 A 方案断言，新增 F11（无头核对）与 F12（请假深链 + 上传/定位资产）；task-55 又新增 F13（页面服务自愈）与 F14（登录时钟，见 §13）。以下四项仍需真机/真账号验证，本机只到静态层。
 
 ### 11.1 顶部白条：WebView 只落底部安全区
 
@@ -211,8 +214,8 @@ Sideloadly 重签的 IPA 在真机首次登录成功后，课表已能显示，�
 
 ### 11.6 状态
 
-- 静态门禁 **48/48**、iOS **72 pass**、web **391 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
-- **考试透传本轮未编译**；白条视觉、无头容器是否被 WebKit 降频、请假深链回跳、上传/定位两条 P3 偏离都已随 v1.5.0 编译，但仍需 Mac + 真机复核。
+- 静态门禁 **50/50**、iOS **82 pass**、web **391 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
+- **考试透传与 P0 修复本轮未编译**；白条视觉、无头容器是否被 WebKit 降频、请假深链回跳、上传/定位两条 P3 偏离都已随 v1.5.0 编译，但仍需 Mac + 真机复核。
 
 ## 12. 考试字段透传（S 档，2026-11-24，未编译验证）
 
@@ -221,3 +224,30 @@ Sideloadly 重签的 IPA 在真机首次登录成功后，课表已能显示，�
 - **失败语义**：考试失败时 `school-reader.js` 带 `examError` 而不带 `exams` / `examFetchedAt`，网页据此保留旧快照（`web/jiaowu-exam.mjs`）；原生不做考试业务解析。
 - **回归**：F8 新增第 8 节（payload 键集合、三字段守卫、白名单、未知字段、写入顺序），`ios/tests/exam-passthrough.test.mjs` 新增 6 条；变异「把 `optArray` 改成直接下标」会让 F8 与该测试同时红。
 - **未验证**：本轮改动尚未重新编译、未真机、未用学校账号验证考试接口；`examHttpStatus` 是否需要透传由后续产品/前端决定。
+
+## 13. P0 页面服务自愈与登录等待（2026-11-25，未编译验证）
+
+这轮修的是两个会把用户卡死的运行期问题，产品代码由实现方修改，本文件只补说明、门禁与回归口径。
+
+### 13.1 页面服务自愈（LocalServer + WebHost + RootView）
+
+- **问题**：本机 loopback 服务只在启动时试一次端口；`NWListener` 进入 `.waiting`（端口被占用/系统回收）或 `.failed` 后，页面可能永远停在白屏，用户只能杀 App。
+- **LocalServer**：新增 `isHealthy = shouldRun && listener != nil && port != nil`；`generation` 每次 start/stop/drop 递增，旧 listener 的迟到回调先比对代际与对象身份再处理；`.waiting` 挂 1.5s 定时器，超时后先 `dropListenerLocked`、回调 `onInterrupted`、再从 47851 或下一个候选端口重启；`.failed/.cancelled` 走同一恢复路径；`stop()` 可重入；端口耗尽时 `failLocked()` 只回调一次 `onFailure`（文案「本机端口 47851–47860 均被占用…」）。
+- **WebHost**：新增 `serverErrorTitle`（默认「页面服务未启动」）；`onFailure` 设置标题与 `serverError`，`onInterrupted` 只清加载/导航状态等自动重启；`retryPage()` 先 `server.stop()` 再 `server.start()`；`startIfNeeded()` 在端口存在但 `isHealthy == false` 时直接重试；`loadIndex` 同端口去重并清错误；`handleLoadFailure` 忽略 `NSURLErrorCancelled`，每轮只做一次 0.4s 自动重试，第二次失败显示「页面加载失败 / 无法连接服务器。」；`didFinish` 清 `serverError` 与自动重试标记。task-59 起 `didFinish/didFail/didFailProvisional` 都先用 `isCurrentNavigation` 校验 `currentNavigation` 对象身份，导航被替换或 `currentNavigation` 已被清空时直接丢弃旧回调，避免旧页面回调污染新一轮。
+- **RootView**：错误卡片显示 `host.serverErrorTitle`，并提供「重试」按钮调用 `host.retryPage()`。
+- **门禁与回归**：F13 + `ios/tests/p0-fixes.test.mjs` 前 5 条；变异「isHealthy 去掉 port 判定 / recover 先通知后清理 / 重试不 stop / 0.4s 改 0.5 / didFinish 不清错误」均红；task-59 的旧导航身份校验由 F13 一并锁住（3 处导航回调）。
+
+### 13.2 登录等待时钟（SchoolReadController + SchoolProvider）
+
+- **旧口径的问题**：`enterLogin()` 只取消 60s 截止，登录页迟迟不出现时读取会一直挂着；后台时间也被算进超时；落到 `xskb` 时若仍在 `awaitingLogin`，会先撞上 `reading` 守卫白等。
+- **新口径**：`loginDeadline = 180` 只累计前台时间；`loginPresentationWait = 6` 是「请求把学校页转成可见」的呈现窗口，0.5s 轮询宿主是否真的可见；可见后从 presenting 切到 waiting，并挂 180s 活跃倒计时。退后台 `pauseLoginClock()` 累计已用时长并取消两个 work，回前台 `resumeLoginClock()` 续跑；`willResignActive/didBecomeActive` 观察者弱引用，`stopLoginClock()` 统一移除。
+- **失败语义**：6s 内未转可见，写 `login-present-ignored reason=no-host/not-active/already-presenting/present-ignored app-state=…` 诊断，并回「学校登录页暂时无法打开，请回到江水课表后重试（原课表已保留）」；180s 前台时间耗尽回「等待学校登录超时，保留上次课表。请重新读取」。
+- **xskb 落点**：`if path.hasPrefix("/jsxsd/xskb/")` 分支先 `if awaitingLogin { leaveLogin() }` 停表，再进 `reading` 守卫并 `read()`；`leaveLogin()` 负责 `stopLoginClock()` 并挂 60s 教务读取兜底。
+- **页面换代（task-58）**：`read()` 记录 `readingPageURL = host?.currentURLString` 并推进 `readingToken`；注入 completion、`recoverRead`、`pollRead`、`retryPollRead` 都带 token 且校验 `token == readingToken`；`xskb` 分支遇到 `reading` 时，同一 URL 的重复 `didFinish` 直接返回，URL 变了则复位 `reading/readingPageURL` 并推进代次后重新 `read()`，旧轮询看到代次不一致立刻退出。
+- **SchoolProvider**：`onNeedsVisiblePresentation` 在无 host/presenter 时写 `login-present-skipped reason=…` 诊断，不再静默失败。
+- **门禁与回归**：F14 + `p0-fixes.test.mjs` 后 5 条；变异「180 改 90 / needLogin 不启动时钟 / xskb 先 guard 后 leaveLogin / isApplicationActive 判 background」均红；task-58 的页面换代由 F14 一并锁住（旧轮询/旧注入作废）。
+
+### 13.3 状态
+
+- 本机静态门禁 **50/50**，iOS 回归 **82/82**，web **391/391**，gen 幂等 sha `b1cfa9e2…41b3d8b`。task-58/59 的 reading 换代与旧导航身份校验已并入 F14/F13，仍 50 项、不新增编号。
+- **未编译、未真机**：端口占用/系统回收时的 1.5s 换端口、`stop→start` 后 WKWebView 重载、真机锁屏/切后台时 180s 的累计与恢复、错误卡片布局与按钮交互，都必须由 CI 编译 + 真机（含学校账号）验证。

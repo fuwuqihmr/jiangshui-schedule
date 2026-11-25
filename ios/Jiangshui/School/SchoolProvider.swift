@@ -7,6 +7,7 @@
 // 同一个时间只允许一个读取；自动读取时浏览器默认藏起来，只有需要用户输入账号密码才显示。
 // 本机 Windows 没有 Xcode，无法编译；真机验证项见 ios/docs/P2-SCHOOL-READ.md。
 import Foundation
+import UIKit
 
 // 学校（教务 / 请假）能力。
 //
@@ -323,10 +324,14 @@ public final class SchoolProvider: SchoolProviding {
         }
         // 自动核对默认无头；只有状态机发现需要登录表单时才把容器转成可见，自动 SSO 恢复不打扰用户。
         self.controller.onNeedsVisiblePresentation = { [weak self] in
-            guard let self = self, let sessionHost = self.host else { return }
-            // 优先用无头容器自己的 parent（就是它的挂载页），避免旧容器还在 dismiss 时
-            // topPresenter() 返回旧容器，导致 present(from:) 打到一个正在关闭的控制器上。
-            guard let presenter = sessionHost.parent ?? SchoolWebViewHost.topPresenter() else { return }
+            guard let self = self else { return }
+            // 优先用无头容器自己的 parent，避免旧容器还在 dismiss 时 present 到正在关闭的控制器。
+            let sessionHost = self.host
+            let presenter = sessionHost?.parent ?? SchoolWebViewHost.topPresenter()
+            guard let sessionHost = sessionHost, let presenter = presenter else {
+                SchoolDiagnosticLog.write("login-present-skipped reason=\(sessionHost == nil ? "no-host" : "no-presenter") app-state=\(UIApplication.shared.applicationState.rawValue)")
+                return
+            }
             sessionHost.presentForUser(from: presenter)
         }
         // 页面回调按容器用途分流：学校页交给 SchoolReadController，请假页交给 SchoolLeaveSessionController。
@@ -382,8 +387,6 @@ public final class SchoolProvider: SchoolProviding {
         host = created
         return created
     }
-
-
     // UI 操作必须在主线程；桥接层大概率已在主线程，这里只做防御，不制造额外线程语义。
     /// UIKit/WebKit 必须在主线程操作；调用方已在主线程就直接执行，否则同步切过去。
     private func performOnMain(_ work: () throws -> Void) throws {

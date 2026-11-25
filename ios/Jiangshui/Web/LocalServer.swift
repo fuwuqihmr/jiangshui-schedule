@@ -11,85 +11,92 @@ import Network
 /// - 只监听 127.0.0.1，端口从 47851 顺序试到 47860（固定端口是为了 localStorage 的 origin 稳定）
 /// - 只支持 GET / HEAD；`Cache-Control: no-store`；`Connection: close`；单连接处理完即关
 /// - 请求头累计超过 32KB → 431；每个连接 15 秒 watchdog
+///
+/// 生命周期状态在主线程处理；监听器 ready 后仍可能 failed/cancelled/waiting，
+/// 这些情况都会先清 listener 和 port，再自动重启。
 final class LocalServer {
-    // 端口从 47851 开始试；固定区间是为了每次启动的网页地址（origin）不变，localStorage 才不会丢。
+    // 固定端口区间让网页 origin 不变，localStorage 才不会丢；10 个都占用就报错。
     static let firstPort: UInt16 = 47851
-    // 最多试到 47860；10 个都占用就报错，不再乱试。
     static let lastPort: UInt16 = 47860
     // 请求头最大 32KB；超过就回 431，防止超大请求把内存撑爆。
     static let maxRequestBytes = 32 * 1024
     // 单个连接最多等 15 秒；超时主动关掉，避免连接越积越多。
     static let connectionTimeout: TimeInterval = 15
+    static let waitingTimeout: TimeInterval = 1.5 // waiting 超时后换端口
 
     /// 主线程回调：服务就绪，参数是实际绑定端口。
     var onReady: ((UInt16) -> Void)?
     /// 主线程回调：10 个端口都失败时的中文提示。
     var onFailure: ((String) -> Void)?
+    /// 主线程回调：ready 后监听器失效（port 已清空）；本类会自动重启。
+    var onInterrupted: (() -> Void)?
 
-    // 资源读取器：把浏览器请求的路径变成 App 包里的真实文件。
-    private let assets: WebAssets
+    private let assets: WebAssets // 把请求路径变成 App 包里的真实文件
     // 所有网络事件都在这个串行队列里排队，避免多线程同时改连接表。
     private let queue = DispatchQueue(label: "cn.local.tomorrow.loopback-server")
-    // NWListener（监听端口、等浏览器来连的“门卫”）；nil 表示还没开张。
+    // NWListener（监听端口、等浏览器来连的“门卫”）；仅主线程读写。
     private var listener: NWListener?
-    // 当前还活着的连接；用 ObjectIdentifier 当钥匙，连接对象本身不能直接做字典 key。
+    // 活连接表；连接对象不能直接做 key，用 ObjectIdentifier；仅 queue 读写。
     private var connections: [ObjectIdentifier: NWConnection] = [:]
-    // 防止用户连点“重试”时重复启动。
-    private var starting = false
+    private var starting = false // 防止连点“重试”重复启动
+    private var shouldRun = false // stop()/全部端口失败时置 false
+    // 旧回调拿着旧 token 一律丢弃。
+    private var generation: UInt64 = 0
+    // waiting 超时的待执行任务；换端口/ready/failed 时取消。
+    private var waitingTimer: DispatchWorkItem?
 
-    /// 仅主线程读写；nil 表示当前没有监听。
-    private(set) var port: UInt16?
-
-    /// 传入资源读取器；真正的端口监听要等 start() 才会发生。
+    private(set) var port: UInt16? // 仅主线程读写；nil 表示没有可用监听
     init(assets: WebAssets) {
         self.assets = assets
     }
 
-    /// 是否已经绑定端口（给外部判断服务在不在）。
-    var isRunning: Bool { port != nil }
+    var isRunning: Bool { return shouldRun }
+
+    var isHealthy: Bool { return shouldRun && listener != nil && port != nil }
 
     // MARK: - 生命周期（主线程调用）
 
-    /// 主线程调用：把“开始监听”丢到后台队列，按 47851→47860 顺序试。
+    /// 主线程调用：按 47851→47860 顺序试；重复调用是安全的。
     func start() {
-        guard port == nil, !starting else { return }
+        guard !shouldRun, !starting, listener == nil else { return }
+        shouldRun = true
         starting = true
-        queue.async { [weak self] in
-            guard let self = self else { return }
-            self.startLocked(from: LocalServer.firstPort)
-        }
+        generation &+= 1
+        startLocked(from: LocalServer.firstPort)
     }
 
-    /// 主线程调用：关掉监听和所有连接，并把 port 清空。
+    /// 主线程：关监听/连接并清 port；可重入、可重复调用。
     func stop() {
+        shouldRun = false
+        starting = false
+        generation &+= 1
+        cancelWaitingLocked()
+        if let listener = listener {
+            listener.stateUpdateHandler = nil
+            listener.cancel()
+            self.listener = nil
+        }
+        port = nil
         queue.async { [weak self] in
             guard let self = self else { return }
-            self.starting = false
-            if let listener = self.listener {
-                listener.stateUpdateHandler = nil
-                listener.cancel()
-                self.listener = nil
-            }
             let alive = Array(self.connections.values)
             self.connections.removeAll()
-            for connection in alive { connection.cancel() }
-            DispatchQueue.main.async { self.port = nil }
+            for connection in alive {
+                connection.stateUpdateHandler = nil
+                connection.cancel()
+            }
         }
     }
 
-    // MARK: - 端口尝试（串行队列）
+    // MARK: - 端口尝试（主线程）
 
-    /// 串行队列内部：从 candidate 开始逐个端口尝试，直到成功或试完。
+    /// 主线程：从 candidate 开始逐个端口尝试，直到成功或试完。
     private func startLocked(from candidate: UInt16) {
-        guard listener == nil else {
-            starting = false
-            return
-        }
+        guard shouldRun else { return }
+        cancelWaitingLocked()
+        guard listener == nil else { return }
         guard candidate <= LocalServer.lastPort else {
-            starting = false
-            DispatchQueue.main.async { [weak self] in
-                self?.onFailure?("本机端口 47851–47860 均被占用，页面服务无法启动。请关闭占用端口的程序后重试。")
-            }
+            failLocked()
             return
         }
         guard let nwPort = NWEndpoint.Port(rawValue: candidate) else {
@@ -107,40 +114,130 @@ final class LocalServer {
         parameters.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: nwPort)
         do {
             let listener = try NWListener(using: parameters)
-            // 监听器状态变化：ready=端口拿到了；failed=这个端口不行，换下一个。
-            listener.stateUpdateHandler = { [weak self] state in
-                guard let self = self else { return }
-                switch state {
-                // 端口真的空出来了：记下实际端口，并通知主线程加载网页。
-                case .ready:
-                    let actual = listener.port?.rawValue ?? candidate
-                    self.listener = listener
-                    self.starting = false
-                    NSLog("江水课表 loopback 服务已启动：http://127.0.0.1:\(actual)/index.html")
-                    DispatchQueue.main.async { [weak self] in
-                        self?.port = actual
-                        self?.onReady?(actual)
+            self.listener = listener
+            generation &+= 1
+            let token = generation
+            // 监听器状态变化：ready=端口拿到了；failed/cancelled/waiting 都要收拾干净再决定下一步。
+            listener.stateUpdateHandler = { [weak self, weak listener] state in
+                DispatchQueue.main.async {
+                    guard let self = self, let listener = listener else { return }
+                    guard self.generation == token, self.listener === listener else {
+                        listener.cancel()
+                        return
                     }
-                // 这个端口不能用：清掉监听器，继续试下一个端口。
-                case .failed(let error):
-                    listener.stateUpdateHandler = nil
-                    listener.cancel()
-                    NSLog("江水课表 loopback 端口 \(candidate) 不可用：\(error)")
-                    self.startLocked(from: candidate + 1)
-                case .cancelled:
-                    break
-                default:
-                    break
+                    self.handleStateLocked(state, listener: listener, candidate: candidate, token: token)
                 }
             }
-            listener.newConnectionHandler = { [weak self] connection in
-                self?.acceptLocked(connection)
+            listener.newConnectionHandler = { [weak self, weak listener] connection in
+                // 先回主线程确认这个 listener 仍是当前监听器，避免 stop 之后还接受旧连接。
+                DispatchQueue.main.async {
+                    guard let self = self, let listener = listener, self.listener === listener else {
+                        connection.cancel()
+                        return
+                    }
+                    self.queue.async { [weak self] in
+                        self?.acceptLocked(connection)
+                    }
+                }
             }
             listener.start(queue: queue)
         } catch {
             NSLog("江水课表 loopback 端口 \(candidate) 创建失败：\(error)")
+            // 创建失败没有 listener，继续下一个端口；starting 保持 true 直到成功/全部失败。
             startLocked(from: candidate + 1)
         }
+    }
+
+    /// 主线程：处理当前监听器的一次状态变化。
+    private func handleStateLocked(_ state: NWListener.State, listener: NWListener, candidate: UInt16, token: UInt64) {
+        switch state {
+        case .ready:
+            cancelWaitingLocked()
+            guard shouldRun else {
+                dropListenerLocked(listener: listener)
+                return
+            }
+            let actual = listener.port?.rawValue ?? candidate
+            starting = false
+            port = actual
+            NSLog("江水课表 loopback 服务已启动：http://127.0.0.1:\(actual)/index.html")
+            onReady?(actual)
+        case .waiting(let error):
+            NSLog("江水课表 loopback 端口 \(candidate) 等待中：\(error)")
+            scheduleWaitingTimeoutLocked(listener: listener, candidate: candidate, token: token)
+        case .failed(let error):
+            NSLog("江水课表 loopback 端口 \(candidate) 不可用：\(error)")
+            recoverLocked(listener: listener, candidate: candidate)
+        case .cancelled:
+            if shouldRun {
+                NSLog("江水课表 loopback 端口 \(candidate) 被取消，准备重启")
+                recoverLocked(listener: listener, candidate: candidate)
+            } else {
+                dropListenerLocked(listener: listener)
+            }
+        default:
+            break
+        }
+    }
+
+    /// waiting 超过 1.5 秒还没 ready：清掉这个监听器，换下一个端口。
+    private func scheduleWaitingTimeoutLocked(listener: NWListener, candidate: UInt16, token: UInt64) {
+        cancelWaitingLocked()
+        let work = DispatchWorkItem { [weak self, weak listener] in
+            guard let self = self, let listener = listener else { return }
+            guard self.generation == token, self.listener === listener else { return }
+            self.waitingTimer = nil
+            NSLog("江水课表 loopback 端口 \(candidate) waiting 超时，换端口")
+            let hadPort = self.port != nil
+            self.dropListenerLocked(listener: listener)
+            if hadPort { self.onInterrupted?() }
+            guard self.shouldRun else { return }
+            self.startLocked(from: hadPort ? LocalServer.firstPort : candidate + 1)
+        }
+        waitingTimer = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + LocalServer.waitingTimeout, execute: work)
+    }
+
+    /// 监听器失效：先清 listener/port，再尝试重启。
+    /// ready 之后的失效从 47851 重新试（保持 origin 稳定）；启动阶段的失效从下一个端口继续。
+    private func recoverLocked(listener: NWListener, candidate: UInt16) {
+        let hadPort = port != nil
+        dropListenerLocked(listener: listener)
+        if hadPort { onInterrupted?() }
+        guard shouldRun else { return }
+        startLocked(from: hadPort ? LocalServer.firstPort : candidate + 1)
+    }
+
+    /// 清掉一个监听器及其 port，并让所有旧回调失效；不负责重启，也不负责回调 onInterrupted。
+    private func dropListenerLocked(listener: NWListener) {
+        cancelWaitingLocked()
+        guard self.listener === listener else {
+            listener.stateUpdateHandler = nil
+            listener.cancel()
+            return
+        }
+        listener.stateUpdateHandler = nil
+        listener.cancel()
+        self.listener = nil
+        port = nil
+        generation &+= 1
+    }
+
+    /// 10 个端口都失败：停止并只回调一次失败。
+    private func failLocked() {
+        guard shouldRun else { return }
+        shouldRun = false
+        starting = false
+        cancelWaitingLocked()
+        listener = nil
+        port = nil
+        onFailure?("本机端口 47851–47860 均被占用，页面服务无法启动。请关闭占用端口的程序后重试。")
+    }
+
+    /// 取消 waiting 超时任务；可重复调用。
+    private func cancelWaitingLocked() {
+        waitingTimer?.cancel()
+        waitingTimer = nil
     }
 
     // MARK: - 连接处理（串行队列）

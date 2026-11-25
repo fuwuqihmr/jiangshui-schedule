@@ -568,6 +568,75 @@ iOS 转换口径：用 Pillow `Image.open(...).convert("RGB")` 保存，**不缩
 - `Resources/AppIcon-1024.png` 仍是散装副本，会随 bundle 重复打包约 0.57 MB；不影响运行。
 - 未 commit / push。
 
+## 第 22 轮：P0 页面服务自愈与登录等待修复的门禁/回归（2026-11-25，未编译验证）
+
+本轮不改产品代码，只为两处 P0 修复补静态门禁、Node 回归与文档口径。产品侧 5 个文件已由实现方改好，工作树 diff 合计 +588/−119（相对 HEAD `6847573`）：
+
+| 文件 | 行数 | 本轮门禁锁住的行为 |
+| --- | --- | --- |
+| `ios/Jiangshui/Web/LocalServer.swift` | 399 | `isHealthy` 健康判定、`generation` 代际守卫、`waitingTimeout=1.5`、`onInterrupted`、`stop()` 可重入、`.waiting` 超时换端口、`.failed/.cancelled` 先清理再恢复、`onFailure` 全文件唯一 |
+| `ios/Jiangshui/Web/WebHost.swift` | 559 | `serverErrorTitle`、`retryPage()`（stop→start）、`startIfNeeded` 用 `isHealthy` 识别半死 listener、`loadIndex` 清错误 + 同端口去重、0.4s 自动重试一次、`didFinish` 清错误 |
+| `ios/Jiangshui/App/RootView.swift` | 138 | 错误卡片显示 `serverErrorTitle`，重试按钮调用 `retryPage()` |
+| `ios/Jiangshui/School/SchoolReadController.swift` | 1080 | `loginDeadline=180`、`loginPresentationWait=6`、0.5s 轮询、后台暂停/回前台续时、`xskb` 落点先 `leaveLogin()`、`reading` 在 start / 登录结果 / xskb 换代 / finish 四处复位 |
+| `ios/Jiangshui/School/SchoolProvider.swift` | 399 | `onNeedsVisiblePresentation` 在无 host/presenter 时写 `login-present-skipped` 诊断，不再静默 |
+
+### 22.1 新增门禁 F13/F14（48→50 项）
+
+- **F13 页面服务自愈**：LocalServer 的健康判定/代际失效/1.5s waiting 换端口/failed·cancelled 先 `dropListenerLocked` 再 `recoverLocked`/单一 `onFailure`；WebHost 的错误遮罩、公开与私有 `retryPage`、`startIfNeeded` 的 `isHealthy` 分支、`loadIndex` 去重、`handleLoadFailure` 的 0.4s 单次自动重试、`didFinish` 清状态；RootView 标题与按钮；task-59 起三处导航回调（`didFinish/didFail/didFailProvisional`）都用 `isCurrentNavigation` 做对象身份校验，`currentNavigation` 为空或导航被替换时丢弃旧回调。
+- **F14 登录时钟**：180s 活跃倒计时 + 6s 呈现窗口、0.5s 轮询、`LoginPhase` 三态、`reading` 在 start / 登录结果 / xskb 换代 / finish 四处复位、`needLogin` 不再只 `cancelDeadline`、退后台暂停并累计、回前台续跑、6s 失败诊断与文案、`xskb` 先 `leaveLogin`、`leaveLogin` 停表并挂 60s；task-58 起 `read()` 记录 `readingPageURL` 并推进 `readingToken`，注入/轮询/重试共用 `token == readingToken` 校验，`xskb` 分支按 URL 判断同一页直达或页面换代复位。
+- 编号追加在 G1 之后，不重排历史项；full-suite 断言 50 项齐全。
+- task-58/59 的页面换代（`readingPageURL`/`readingToken`）与旧导航身份校验（`isCurrentNavigation`）分别并入 F14/F13，不新增编号（仍 50 项）。
+
+### 22.2 回归测试
+
+新增 `ios/tests/p0-fixes.test.mjs` **10 条**（`ios/tests/index.mjs` 已接入）：
+
+1. LocalServer 健康判定严格、`stop` 可重入并清干净；
+2. LocalServer 失效先清理再恢复，`onFailure` 只回调一次；
+3. WebHost 有错误标题，手动重试 stop→start，半死 listener 用 `isHealthy` 识别；
+4. WebHost 加载失败每轮只自动重试一次，成功后清错误；
+5. RootView 错误遮罩显示标题并调用 `retryPage`；
+6. 登录时限常量正确，`reading` 在 start/read/登录结果/finish 复位；
+7. `needLogin` 先取消旧截止，再启动 6 秒呈现轮询，可见后转 180 秒活跃倒计时；
+8. 登录时钟只统计前台时间：切后台暂停，回前台续跑；
+9. `xskb` 落点先 `leaveLogin` 再进 `reading` 守卫；
+10. `leaveLogin` 停表并挂 60 秒，`finish` 只回一次且停掉登录观察者。
+
+### 22.3 变异证据（临时 ios 副本，逐条改产品文件后还原）
+
+| 变异 | 结果 |
+| --- | --- |
+| `isHealthy` 去掉 `&& port != nil` | F13 fail |
+| `recoverLocked` 把 `onInterrupted?()` 移到清理之前 | F13 fail |
+| `retryPage(autoRetry:)` 删掉 `server.stop()` | F13 fail |
+| 自动重试 0.4s → 0.5s | F13 fail |
+| `didFinish` 不清 `serverError` | F13 fail |
+| `loginDeadline` 180 → 90 | F14 fail |
+| `needLogin` 删掉 `startLoginClock()` | F14 fail |
+| `xskb` 把 `guard reading == false` 挪到 `leaveLogin()` 前 | F14 fail |
+| `isApplicationActive` 改判 `.background` | F14 fail |
+| `isCurrentNavigation` 的 `currentNavigation` 为空改 `return true` | F13 fail |
+| `read(attempt:token:)` 删掉 `token == readingToken` 守卫 | F14 fail |
+| `xskb` 分支删掉 `readingPageURL = nil` / `readingToken += 1` 复位 | F14 fail |
+
+十二条变异均使对应门禁红，且 `p0-fixes.test.mjs` 同步 fail；还原后 control 全绿。临时目录已删除。
+
+### 22.4 本机结果
+
+- `gen-pbxproj` 连跑两次，pbxproj sha256 前/中/后均为 `b1cfa9e26a82765e555f434a8ad02e7668f3404aaad3f3503d306f98741b3d8b`（幂等）；主 App Swift 41 个（共享 1 个）/ 资源 3 个 / 文件引用 51 条，Widget 3 个 / iOS 16.1。
+- `check-ios`：**50 项，ok 50，fail 0**（退出码 0）。
+- `node --test ios/tests/`：**82 tests / 82 pass / 0 fail**。
+- `node --test tests/*.test.mjs`（web v1.5.0）：**391 tests / 391 pass / 0 fail**。
+- 共享层 manifest 仍 186 个文件；本轮未改 `web/`、`android/`、产品 Swift 或 pbxproj。
+- 未 commit / push。
+
+### 22.5 未证明 / 风险
+
+- **未编译**：本机无 Xcode，F13/F14 与 10 条测试只证明源码形状；`LocalServer` 的 `NWListener` 状态迁移、`WebHost` 的 WKWebView 重载需 CI 首次编译 + 模拟器/真机。
+- **端口自愈必须真机/模拟器实测**：1.5s waiting 超时、端口被占用时 47851→47860 的回退、`stop→start` 后页面能否重新加载、错误卡片与重试按钮的实际交互，静态门禁不能替代。
+- **登录时钟必须真机锁屏验证**：`willResignActive/didBecomeActive` 是否成对、180s 是否只累计前台时间、6s 未 present 的文案与诊断、`xskb` 落点是否不再白等，`simctl` 无法注入锁屏。
+- 未 commit / push。
+
 ## 尚未取得的证据（不要当成已通过）
 
 | 项 | 需要什么 |
