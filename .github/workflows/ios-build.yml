@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     name: xcodebuild 模拟器编译
-    runs-on: macos-14
+    runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -289,3 +289,5 @@ jobs:
 # sync 7027587 P0
 
 # retrigger 7027587 1795612866
+
+# retrigger after runner fix 1795612928
