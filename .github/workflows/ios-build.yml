@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     name: xcodebuild 模拟器编译
-    runs-on: macos-14
+    runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
