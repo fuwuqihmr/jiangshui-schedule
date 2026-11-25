@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import {readFile} from 'node:fs/promises';
 const script=await readFile(new URL('../web/school-reader.js',import.meta.url),'utf8');
+const LAB_HTML='<html><head><title>合成实验课表</title></head><body><table><tr><th>周次</th><th>节次</th><th>星期一</th></tr><tr><td rowspan="6">1</td><td>01</td><td class="qz-hasCourse">合成实验课</td></tr></table></body></html>';
 function setup({fetch,login=false,origin='http://jiaowu.juwp.edu.cn:8080',calendar=null,body='',controls=true,fakeTimers=false}={}){
-  const calls=[],timers=[],context={location:{origin,pathname:'/jsxsd/xskb/xskb_list.do'},document:{body:{innerText:body},querySelector:()=>login?{}:null,getElementById:id=>controls?{value:id==='xnxq01id'?'2026-2027-1':'mode-test'}:null},window:{__tomorrowRequestId:'request-1',__tomorrowCalendar:calendar},fetch:async(url,opts)=>{calls.push(url);return fetch?fetch(url,opts):{ok:true,text:async()=>url.includes('jxzlzc')?'[{"jszc":25}]':url.includes('xsksap_list')?'{"code":0,"count":1,"data":[{"kssj":"2027-01-04 08:30~09:55","kskcmc":"课程A","kch":"K001","jsxm":"教师甲","js_mc":"考场A","zwh":"1","ksccmc":"场次A"}]}':'{"code":0,"data":[{"kc_mc":"合成测试课","jg0101mc":"测试教师","sktime":"周一第1、2节{第1-16周}(全部)","skddmc":"测试楼","jx0404id":"plan-test","kch":"test"}]}'};},setTimeout:fakeTimers?(fn,ms)=>{const id=timers.length+1;timers.push({id,fn,ms,cleared:false});return id;}:setTimeout,clearTimeout:fakeTimers?id=>{const timer=timers.find(item=>item.id===id);if(timer)timer.cleared=true;}:clearTimeout,AbortController,URLSearchParams,Date,JSON,Error,Object,Number};
+  const calls=[],timers=[],context={location:{origin,pathname:'/jsxsd/xskb/xskb_list.do'},document:{body:{innerText:body},querySelector:()=>login?{}:null,getElementById:id=>controls?{value:id==='xnxq01id'?'2026-2027-1':'mode-test'}:null},window:{__tomorrowRequestId:'request-1',__tomorrowCalendar:calendar},fetch:async(url,opts)=>{calls.push(url);return fetch?fetch(url,opts):{ok:true,text:async()=>url.includes('jxzlzc')?'[{"jszc":25}]':url.includes('xsksap_list')?'{"code":0,"count":1,"data":[{"kssj":"2027-01-04 08:30~09:55","kskcmc":"课程A","kch":"K001","jsxm":"教师甲","js_mc":"考场A","zwh":"1","ksccmc":"场次A"}]}':url.includes('toXskb')?LAB_HTML:'{"code":0,"data":[{"kc_mc":"合成测试课","jg0101mc":"测试教师","sktime":"周一第1、2节{第1-16周}(全部)","skddmc":"测试楼","jx0404id":"plan-test","kch":"test"}]}'};},setTimeout:fakeTimers?(fn,ms)=>{const id=timers.length+1;timers.push({id,fn,ms,cleared:false});return id;}:setTimeout,clearTimeout:fakeTimers?id=>{const timer=timers.find(item=>item.id===id);if(timer)timer.cleared=true;}:clearTimeout,AbortController,URLSearchParams,Date,JSON,Error,Object,Number};
   const fire=ms=>{const timer=timers.find(item=>!item.cleared&&item.ms===ms);if(!timer)throw Error('no pending timer '+ms);timer.cleared=true;timer.fn();};
   return {context:vm.createContext(context),calls,timers,fire};
 }
-test('读取复用DOM并串行请求周数、完整课程，不重复下载HTML',async()=>{const x=setup();await vm.runInContext(script,x.context);assert.equal(x.calls.length,3);assert.match(x.calls[0],/jxzlzc/);assert.match(x.calls[1],/pageSize=500/);assert.match(x.calls[2],/xsksap_list/);assert.equal(x.context.window.__tomorrowRead.rows.length,1);assert.equal(x.context.window.__tomorrowRead.weeks,25);assert.equal(x.context.window.__tomorrowRead.done,true);assert.equal(x.context.window.__tomorrowRead.modeKnown,true);assert.equal(x.context.window.__tomorrowRead.calendarCached,false);});
-test('同一会话短期复用日历元数据，但每次重新读取全部课程',async()=>{const x=setup();await vm.runInContext(script,x.context);x.context.window.__tomorrowRequestId='request-2';await vm.runInContext(script,x.context);assert.equal(x.calls.length,5);assert.equal(x.context.window.__tomorrowRead.id,'request-2');assert.match(x.calls[3],/needData=1/);assert.match(x.calls[2],/xsksap_list/);assert.match(x.calls[4],/xsksap_list/,'第二次读取仍重新取考试');assert.equal(x.context.window.__tomorrowRead.calendarCached,true);});
+test('读取复用DOM并串行请求周数、完整课程，不重复下载HTML',async()=>{const x=setup();await vm.runInContext(script,x.context);assert.equal(x.calls.length,4);assert.match(x.calls[0],/jxzlzc/);assert.match(x.calls[1],/pageSize=500/);assert.match(x.calls[2],/xsksap_list/);assert.match(x.calls[3],/^\/jsxsd\/syjx\/toXskb\.do$/,'实验课请求排在考试之后且为同源固定路径');assert.equal(x.context.window.__tomorrowRead.rows.length,1);assert.equal(x.context.window.__tomorrowRead.weeks,25);assert.equal(x.context.window.__tomorrowRead.done,true);assert.equal(x.context.window.__tomorrowRead.modeKnown,true);assert.equal(x.context.window.__tomorrowRead.calendarCached,false);});
+test('同一会话短期复用日历元数据，但每次重新读取全部课程',async()=>{const x=setup();await vm.runInContext(script,x.context);x.context.window.__tomorrowRequestId='request-2';await vm.runInContext(script,x.context);assert.equal(x.calls.length,7);assert.equal(x.context.window.__tomorrowRead.id,'request-2');assert.match(x.calls[4],/needData=1/);assert.match(x.calls[2],/xsksap_list/);assert.match(x.calls[3],/toXskb/);assert.match(x.calls[5],/xsksap_list/,'第二次读取仍重新取考试');assert.match(x.calls[6],/toXskb/);assert.equal(x.context.window.__tomorrowRead.calendarCached,true);});
 test('不在准确教务来源时拒绝发出任何请求',async()=>{const x=setup({origin:'https://example.invalid'});await vm.runInContext(script,x.context);assert.equal(x.calls.length,0);assert.match(x.context.window.__tomorrowRead.error,/来源不符/);});
 test('过期会话的登录页被识别，不把HTML当课表',async()=>{const x=setup({fetch:async()=>({ok:true,text:async()=>'<input type="password">'})});await vm.runInContext(script,x.context);assert.equal(x.calls.length,1);assert.equal(x.context.window.__tomorrowRead.login,true);assert.equal(x.context.window.__tomorrowRead.rows,undefined);});
 test('学校会话过期 JSON 页面触发登录恢复，乱码提示也能识别',async()=>{for(const msgContent of ['请先登录系统','璇峰厛鐧诲綍绯荤粺']){const x=setup({body:JSON.stringify({flag1:2,msgContent}),controls:false});await vm.runInContext(script,x.context);assert.equal(x.calls.length,0);assert.equal(x.context.window.__tomorrowRead.login,true);assert.equal(x.context.window.__tomorrowRead.done,true);assert.equal(x.context.window.__tomorrowRead.error,undefined);}});
@@ -52,7 +53,7 @@ test('考试段 HTTP 失败只写 examError，不影响课表结果与登录态'
  const x=setup({fetch:sequenced((n)=>n===1?{ok:true,text:async()=>CALENDAR_JSON}:n===2?{ok:true,text:async()=>COURSE_JSON}:{ok:false,status:503,text:async()=>'private-server-body'})});
  await vm.runInContext(script,x.context);
  const r=x.context.window.__tomorrowRead;
- assert.equal(x.calls.length,3);
+ assert.equal(x.calls.length,4);
  assert.equal(r.done,true);
  assert.equal(r.rows.length,1);
  assert.equal(r.weeks,25);
@@ -62,6 +63,7 @@ test('考试段 HTTP 失败只写 examError，不影响课表结果与登录态'
  assert.equal(r.examHttpStatus,503);
  assert.equal(r.error,undefined,'整次读取不应报错');
  assert.doesNotMatch(JSON.stringify({e:r.error}),/private-server-body/);
+ assert.equal(r.labError,'http','实验课请求同样失败但只写 labError');
 });
 
 test('考试段返回 HTML 外壳时按格式变化隔离，课表仍成功',async()=>{
@@ -95,9 +97,10 @@ test('考试分页：count>首页条数时按同参数取第 2 页并拼接，�
  const x=setup({fetch:sequenced((n)=>n===1?{ok:true,text:async()=>CALENDAR_JSON}:n===2?{ok:true,text:async()=>COURSE_JSON}:n===3?{ok:true,text:async()=>JSON.stringify({code:0,count:25,data:examRows(20)})}:{ok:true,text:async()=>JSON.stringify({code:0,count:25,data:examRows(5,21)})})});
  await vm.runInContext(script,x.context);
  const r=x.context.window.__tomorrowRead;
- assert.equal(x.calls.length,4,'第二页只请求一次');
+ assert.equal(x.calls.length,5,'第二页只请求一次，实验课为最后一次请求');
  assert.match(x.calls[3],/pageNum=2/);
  assert.match(x.calls[3],/pageSize=20/);
+ assert.match(x.calls[4],/toXskb/);
  assert.equal(r.exams.length,25);
  assert.equal(r.exams[0].kskcmc,'课程01');
  assert.equal(r.exams[24].kskcmc,'课程25');
@@ -106,11 +109,11 @@ test('考试分页：count>首页条数时按同参数取第 2 页并拼接，�
 test('考试分页终止条件：count 已读全或首屏不足 pageSize 时不再盲目翻页',async()=>{
  const complete=setup({fetch:sequenced((n)=>n===1?{ok:true,text:async()=>CALENDAR_JSON}:n===2?{ok:true,text:async()=>COURSE_JSON}:{ok:true,text:async()=>JSON.stringify({code:0,count:2,data:examRows(2)})})});
  await vm.runInContext(script,complete.context);
- assert.equal(complete.calls.length,3);
+ assert.equal(complete.calls.length,4);
  assert.equal(complete.context.window.__tomorrowRead.exams.length,2);
  const short=setup({fetch:sequenced((n)=>n===1?{ok:true,text:async()=>CALENDAR_JSON}:n===2?{ok:true,text:async()=>COURSE_JSON}:{ok:true,text:async()=>JSON.stringify({code:0,count:100,data:examRows(2)})})});
  await vm.runInContext(script,short.context);
- assert.equal(short.calls.length,3,'首页不足 pageSize 视为数据不足，不盲目翻页');
+ assert.equal(short.calls.length,4,'首页不足 pageSize 视为数据不足，不盲目翻页');
  assert.equal(short.context.window.__tomorrowRead.exams.length,2);
 });
 
@@ -133,6 +136,9 @@ test('考试请求 8s 超时只标记 examError=timeout，课表照常 finish（
  for(let i=0;i<200&&x.calls.length<3;i++) await new Promise(resolve=>setImmediate(resolve));
  assert.equal(x.calls.length,3,'课程读取完成后发出考试请求');
  x.fire(8000);
+ for(let i=0;i<200&&x.calls.length<4;i++) await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(x.calls.length,4,'考试超时后仍发起实验课读取');
+ x.fire(12000);
  await pending;
  const r=x.context.window.__tomorrowRead;
  assert.equal(r.done,true,'超时后整次读取仍必须结束');
@@ -143,6 +149,9 @@ test('考试请求 8s 超时只标记 examError=timeout，课表照常 finish（
  assert.equal(r.examHttpStatus,0);
  assert.equal(r.login,undefined);
  assert.equal(r.error,undefined);
+ assert.equal(r.labError,'timeout');
+ assert.equal(r.labHtml,undefined);
+ assert.equal(r.labHttpStatus,0);
 });
 
 test('普通课表请求超时仍是整次失败 kind=timeout（既有语义回归）',async()=>{
@@ -171,4 +180,70 @@ test('考试请求被整体取消时不写 examError、不 finish（保持取消
  assert.equal(r.examError,undefined);
  assert.equal(r.exams,undefined);
  assert.equal(r.error,undefined);
+});
+
+const LAB_EXAM_JSON='{"code":0,"count":1,"data":'+JSON.stringify(examRows(1))+'}';
+test('实验课段：成功时透传原始 HTML 与抓取时间，不在 reader 内解析',async()=>{
+ const x=setup();await vm.runInContext(script,x.context);
+ const r=x.context.window.__tomorrowRead;
+ assert.equal(r.done,true);
+ assert.equal(x.calls.length,4,'日历/课程/考试/实验课各一次请求');
+ assert.match(x.calls[3],/^\/jsxsd\/syjx\/toXskb\.do$/,'实验课请求必须使用同源固定路径');
+ assert.equal(r.labHtml,LAB_HTML,'原始 HTML 原样透传');
+ assert.equal(typeof r.labFetchedAt,'string');
+ assert(r.labFetchedAt.length>10);
+ assert.equal(r.labError,undefined);
+ assert.equal(r.labHttpStatus,undefined);
+ assert.equal(r.rows.length,1);assert.equal(r.weeks,25);assert.equal(r.exams.length,1);
+});
+test('实验课段失败只写 labError，课程与考试字段不受影响',async()=>{
+ const cases=[[async()=>({ok:false,status:503,text:async()=>'private-server-body'}),'http'],[async()=>({ok:true,text:async()=>'<input type="password">'}),'session']];
+ for(const [labResponse,expected] of cases){
+  const x=setup({fetch:sequenced((n)=>n===1?{ok:true,text:async()=>CALENDAR_JSON}:n===2?{ok:true,text:async()=>COURSE_JSON}:n===3?{ok:true,text:async()=>LAB_EXAM_JSON}:labResponse())});
+  await vm.runInContext(script,x.context);
+  const r=x.context.window.__tomorrowRead;
+  assert.equal(r.done,true);
+  assert.equal(r.rows.length,1,'课程课表不丢');
+  assert.equal(r.weeks,25);
+  assert.equal(r.exams.length,1,'考试数据不受实验课失败影响');
+  assert.equal(r.error,undefined,'整次读取不报错');
+  assert.equal(r.login,undefined,'实验课失败不触发登录恢复');
+  assert.equal(r.labError,expected);
+  assert.equal(r.labHtml,undefined);
+  assert.equal(x.calls.length,4);
+  assert.doesNotMatch(JSON.stringify({l:r.labError}),/private-server-body/);
+ }
+});
+test('实验课段超时只写 labError=timeout，课表与考试照常 finish',async()=>{
+ const abortable=opts=>new Promise((_resolve,reject)=>{opts.signal.addEventListener('abort',()=>reject(Object.assign(Error('aborted'),{name:'AbortError'})),{once:true});});
+ const x=setup({fakeTimers:true,fetch:sequenced((n,url,opts)=>n===1?{ok:true,text:async()=>CALENDAR_JSON}:n===2?{ok:true,text:async()=>COURSE_JSON}:n===3?{ok:true,text:async()=>LAB_EXAM_JSON}:abortable(opts))});
+ const pending=vm.runInContext(script,x.context);
+ for(let i=0;i<200&&x.calls.length<4;i++) await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(x.calls.length,4,'考试成功后发起实验课读取');
+ x.fire(12000);
+ await pending;
+ const r=x.context.window.__tomorrowRead;
+ assert.equal(r.done,true);
+ assert.equal(r.rows.length,1);
+ assert.equal(r.exams.length,1);
+ assert.equal(r.labError,'timeout');
+ assert.equal(r.labHttpStatus,0);
+ assert.equal(r.labHtml,undefined);
+ assert.equal(r.login,undefined);
+ assert.equal(r.error,undefined);
+});
+test('实验课段之前的失败或登录恢复路径不产生 lab 字段也不报错',async()=>{
+ const httpFail=setup({fetch:async()=>({ok:false,status:503,text:async()=>'private-server-body'})});
+ await vm.runInContext(script,httpFail.context);
+ const a=httpFail.context.window.__tomorrowRead;
+ assert.equal(httpFail.calls.length,1,'日历失败后不再读取实验课');
+ assert.equal(a.labHtml,undefined);assert.equal(a.labError,undefined);assert.equal(a.labFetchedAt,undefined);
+ assert.match(a.error,/HTTP 503/);
+ const login=setup({body:JSON.stringify({flag1:2,msgContent:'请先登录系统'}),controls:false});
+ await vm.runInContext(script,login.context);
+ const b=login.context.window.__tomorrowRead;
+ assert.equal(login.calls.length,0,'登录恢复路径不发出实验课请求');
+ assert.equal(b.login,true);
+ assert.equal(b.labHtml,undefined);assert.equal(b.labError,undefined);assert.equal(b.labFetchedAt,undefined);
+ assert.equal(b.error,undefined);
 });

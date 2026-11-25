@@ -40,6 +40,8 @@
   };
   // Hard-coded same-origin path and parameters: the reader never accepts a caller-provided URL.
   const EXAM_PAGE_SIZE = 20, EXAM_MAX_PAGES = 5;
+  // Lab timetable raw HTML: fixed same-origin page, fetched after exams; parsed later by the app web layer.
+  const LAB_TIMETABLE_URL = '/jsxsd/syjx/toXskb.do', LAB_FETCH_TIMEOUT_MS = 12000;
   const examPageUrl = (sem,page) => '/jsxsd/xsks/xsksap_list?'+new URLSearchParams({pageNum:String(page),pageSize:String(EXAM_PAGE_SIZE),xnxqid:sem,xqlb:''});
   const readExams = async sem => {
     const rows=[];
@@ -83,7 +85,17 @@
       examError=examFailure.login?'session':examFailure.kind==='http'?'http':examFailure.kind==='format'?'format':examFailure.name==='AbortError'?'timeout':examFailure.name==='SyntaxError'?'format':'other';
       examHttpStatus=Number(examFailure.httpStatus)||0;
     }
-    if (current()) {window.__tomorrowCalendar={sem,mode,weeks,at:Date.now()};finish({sem,weeks,rows,calendarCached,modeKnown:!!mode,...(examError?{examError,examHttpStatus}:{exams,examFetchedAt})});}
+    // Lab timetable: optional third source. Only the raw HTML is fetched; parsing lives in the
+    // app web layer, so a broken/expired lab page must never discard the timetable or exam rows.
+    result.stage='labs';
+    let labHtml=null, labFetchedAt=null, labError=null, labHttpStatus=0;
+    try { labHtml=await read(LAB_TIMETABLE_URL,LAB_FETCH_TIMEOUT_MS); labFetchedAt=new Date().toISOString(); }
+    catch (labFailure) {
+      if (!current()) return;
+      labError=labFailure.login?'session':labFailure.kind==='http'?'http':labFailure.kind==='format'?'format':labFailure.name==='AbortError'?'timeout':labFailure.name==='SyntaxError'?'format':'other';
+      labHttpStatus=Number(labFailure.httpStatus)||0;
+    }
+    if (current()) {window.__tomorrowCalendar={sem,mode,weeks,at:Date.now()};finish({sem,weeks,rows,calendarCached,modeKnown:!!mode,...(examError?{examError,examHttpStatus}:{exams,examFetchedAt}),...(labError?{labError,labHttpStatus}:{labHtml,labFetchedAt})});}
   } catch (error) {
     if (window.__tomorrowRead !== result) return;
     Object.assign(result,{done:true,login:!!error.login,httpStatus:Number(error.httpStatus)||0,kind:error.kind|| (error.login?'session':error.name==='AbortError'?'timeout':error.name==='SyntaxError'?'format':'other'),error:error.name==='AbortError'?'学校响应超时或读取已取消，保留上次课表':error.name==='SyntaxError'?'学校响应格式变化，已保留上次课表':error.message});

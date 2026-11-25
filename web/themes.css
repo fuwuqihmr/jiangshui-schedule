@@ -121,6 +121,28 @@ html[data-theme=dark]{--danger-soft:#3a2226;--danger-line:#6b3b42}
 .sample-diagnostics{max-height:46dvh;margin:14px 0;padding:12px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--line);border-radius:10px;background:var(--surface-soft);color:var(--ink);font-size:11px;line-height:1.7}
 @media(max-width:720px){.sample-example-menu{margin-top:18px}.sample-example-links{grid-template-columns:1fr}.sample-example-menu-body{padding:14px;gap:16px}}
 
+/* ===== 实验课卡片：深蓝底白字 + 亮蓝强调（T4，不跟随课程自动配色）=====
+   浅色：白字 / 卡底 #1976d2 ≈4.60:1；白字 / 角标 #0d47a1 ≈8.63:1（均 ≥ AA 正文 4.5:1）；
+   深色：#e3f2fd / 卡底 #0d47a1 ≈7.56:1；角标 #001b33 / #64b5f6 ≈7.87:1；边框 #64b5f6 / 卡底 ≈3.90:1（非文本 ≥3）。
+   #42a5f5 只作左强调条/亮色边框，不作白字卡底（白字对比度 2.65，不达标）。
+   系统深色由 theme.mjs 解析 prefers-color-scheme / 原生设置后写 html[data-theme]。 */
+:root{--lab-accent:#42a5f5;--lab-card-bg:#1976d2;--lab-card-border:#42a5f5;--lab-card-ink:#ffffff;--lab-badge-bg:#0d47a1;--lab-badge-ink:#ffffff;--lab-badge-border:#0d47a1;--lab-hero-bg:#1976d2;--lab-hero-ink:#ffffff}
+html[data-theme=dark]{--lab-accent:#64b5f6;--lab-card-bg:#0d47a1;--lab-card-border:#64b5f6;--lab-card-ink:#e3f2fd;--lab-badge-bg:#64b5f6;--lab-badge-ink:#001b33;--lab-badge-border:#64b5f6;--lab-hero-bg:#0d47a1;--lab-hero-ink:#e3f2fd}
+.course-card.lab-card{--card-ink:var(--lab-card-ink);background:var(--lab-card-bg);border-color:var(--lab-card-border);color:var(--lab-card-ink);box-shadow:inset 4px 0 0 var(--lab-accent)}
+.course-card.lab-card h3,.course-card.lab-card .course-meta,.course-card.lab-card .custom-time,.course-card.lab-card .change-inline{color:var(--lab-card-ink)}
+.badge.lab{background:var(--lab-badge-bg);color:var(--lab-badge-ink);border:1px solid var(--lab-badge-border)}
+.detail-hero.lab-hero{background:var(--lab-hero-bg);color:var(--lab-hero-ink)}
+html[data-theme=dark] .course-card.lab-card:not(.vacant){--card-ink:var(--lab-card-ink)!important;background:var(--lab-card-bg);border-color:var(--lab-card-border);color:var(--lab-card-ink)}
+html[data-theme=dark] .badge.lab{background:var(--lab-badge-bg);color:var(--lab-badge-ink);border-color:var(--lab-badge-border)}
+html[data-theme=dark] .detail-hero.lab-hero{background:var(--lab-hero-bg);color:var(--lab-hero-ink)}
+/* 实验卡内联变更文字跟随卡片文字色，保证深蓝底上可读；del/ins 保留语义。 */
+.course-card.lab-card .change-inline,
+.course-card.lab-card .change-inline del,
+.course-card.lab-card .change-inline ins,
+.course-card.lab-card .unread{color:var(--lab-card-ink)!important}
+.course-card.lab-card .change-inline del{text-decoration:line-through}
+.course-card.lab-card .change-inline ins{text-decoration:underline}
+
 /* ===== 考试卡片：统一红色（T14，不跟随课程自动配色）=====
    exam-card 不使用内联 --card-bg/--card-ink，由以下主题变量决定；普通课程仍走 courseColor()。
    对比度（WCAG 2.1 相对亮度公式复算）：
