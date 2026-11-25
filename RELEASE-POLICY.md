@@ -21,7 +21,7 @@
 
 ## 当前状态
 
-- 当前版本 **1.5.2-rc1**（versionCode **68**，发布 tag `v1.5.2-rc1`）：预发布测试版（实验课上课表：读取与解析、今日/完整课表亮蓝卡片展示、冲突双卡实验优先，仅应用内；小组件/导出/日历暂未接入），由 CI 构建并用固定证书签名；GitHub Release 发布为预发布（pre-release，不占用 latest）。
-- 版本号唯一真源为仓库根 `package.json`：`version=1.5.2-rc1`、`android.versionCode=68`；Gradle、构建脚本、CI、README 与测试均从该文件读取或断言一致，不再各写一份需要手工同步的字面量。
+- 当前版本 **1.5.2**（versionCode **69**，发布 tag `v1.5.2`）：正式版（实验课上课表：读取与解析、今日/完整课表亮蓝卡片展示、冲突双卡实验优先，仅应用内；小组件/导出/日历暂未接入），由 CI 构建并用固定证书签名；GitHub Release 发布为正式版（占用 latest）。
+- 版本号唯一真源为仓库根 `package.json`：`version=1.5.2`、`android.versionCode=69`；Gradle、构建脚本、CI、README 与测试均从该文件读取或断言一致，不再各写一份需要手工同步的字面量。
 - 历史版本状态（1.3.0 / 1.3.1 系列与 1.4.0 预发布序列）见 `DECISIONS.md` 与 `ANDROID-CHANGELOG.md`；本文件只保留版本规则与当前状态。
 - 下一版本号由维护者按修订单点递增，交付时只改 `package.json`（`android.versionCode` 同步 +1）。
