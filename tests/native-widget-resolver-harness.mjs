@@ -6,7 +6,7 @@
 //
 // 输出协议：行内用 ASCII 31（单元分隔符）分隔字段，避免课程名中的标点参与转义：
 //   SCENARIO<SEP>id
-//   ITEM<SEP>key name teacher room start end cancelled localActivity customCourse exam
+//   ITEM<SEP>key name teacher room start end cancelled localActivity customCourse exam lab source label
 //   READ<SEP>id hasState status courseCount
 import {mkdtempSync,writeFileSync,readFileSync,readdirSync,rmSync,cpSync,statSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
@@ -81,7 +81,7 @@ export function runNativeWidgetResolver(fixtures){
       '  static JSONObject obj(Object... kv)throws Exception{JSONObject out=new JSONObject();for(int i=0;i+1<kv.length;i+=2)out.put((String)kv[i],kv[i+1]);return out;}',
       '  static JSONArray arr(Object... values)throws Exception{JSONArray out=new JSONArray();for(Object value:values)out.put(value);return out;}',
       '  static String nz(String value){return value==null?"":value;}',
-      '  static String itemLine(ScheduleWidgetData.Item item){return "ITEM"+SEP+item.key+SEP+nz(item.name)+SEP+nz(item.teacher)+SEP+nz(item.room)+SEP+item.start+SEP+item.end+SEP+item.cancelled+SEP+item.localActivity+SEP+item.customCourse+SEP+item.exam;}',
+      '  static String itemLine(ScheduleWidgetData.Item item){return "ITEM"+SEP+item.key+SEP+nz(item.name)+SEP+nz(item.teacher)+SEP+nz(item.room)+SEP+item.start+SEP+item.end+SEP+item.cancelled+SEP+item.localActivity+SEP+item.customCourse+SEP+item.exam+SEP+item.lab+SEP+nz(item.source)+SEP+nz(item.label);}',
       '  public static void main(String[] args)throws Exception{',
       '  java.io.PrintWriter out=new java.io.PrintWriter(new java.io.OutputStreamWriter(new java.io.FileOutputStream(args[0]),"UTF-8"),true);',
       scenarios,
@@ -111,7 +111,12 @@ function parseOutput(stdout){
     const parts=line.split(SEP);
     if(parts[0]==='SCENARIO'){current={id:parts[1],items:[],read:null};scenarios.push(current);}
     else if(parts[0]==='ITEM'&&current){
-      current.items.push({key:parts[1],name:parts[2],teacher:parts[3],room:parts[4],start:parts[5],end:parts[6],cancelled:parts[7]==='true',localActivity:parts[8]==='true',customCourse:parts[9]==='true',exam:parts[10]==='true'});
+      const item={key:parts[1],name:parts[2],teacher:parts[3],room:parts[4],start:parts[5],end:parts[6],cancelled:parts[7]==='true',localActivity:parts[8]==='true',customCourse:parts[9]==='true',exam:parts[10]==='true'};
+      // 末尾 3 个字段仅在实验课/有值时附加，保持旧 fixture 与既有断言的对象形状完全不变。
+      if(parts[11]==='true')item.lab=true;
+      if(parts[12])item.source=parts[12];
+      if(parts[13])item.label=parts[13];
+      current.items.push(item);
     }
     else if(parts[0]==='READ'&&current)current.read={hasState:parts[2]==='true',status:parts[3],courseCount:Number(parts[4])};
     else throw new Error('无法解析 harness 输出行：'+line);

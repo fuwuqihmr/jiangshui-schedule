@@ -31,14 +31,16 @@ final class NotificationCards {
  static Notification.Builder lesson(Context c,ClassReminderPlan.Event e,long now,PendingIntent open,boolean updating){
   ScheduleWidgetData.Item r=e.course;
   String room=ClassReminders.field(r.room,"地点待确认"),teacher=ClassReminders.field(r.teacher,r.localActivity?"无任课老师":"老师待确认");
-  String headline=r.start+"–"+r.end+"  "+room,course=r.name+" · "+teacher;
+  // 实验课在标题与正文前置【实验】；非实验课 prefix 为空串，输出与改动前逐字节一致。
+  String prefix=ClassReminderPlan.labLabel(e);
+  String headline=prefix+r.start+"–"+r.end+"  "+room,name=prefix+r.name,course=name+" · "+teacher;
   String status=now<e.startAt?"即将上课":ClassReminderPlan.phase(e,now);
   Notification.Builder b=base(c,ClassReminders.CHANNEL,headline,course,open).setSubText("上课提醒")
    .setCustomContentView(view(c,R.layout.notification_compact,headline,course,"",status,"",open,e.startAt,now))
-   .setCustomBigContentView(view(c,R.layout.notification_expanded,headline,r.name,"老师："+teacher,status,"管理提醒",open,e.startAt,now))
+   .setCustomBigContentView(view(c,R.layout.notification_expanded,headline,name,"老师："+teacher,status,"管理提醒",open,e.startAt,now))
    .setCustomHeadsUpContentView(view(c,R.layout.notification_heads_up,headline,course,"",status,"查看课表",open,e.startAt,now))
    .setCategory(Notification.CATEGORY_EVENT);
-  Notification publicView=new Notification.Builder(c,ClassReminders.CHANNEL).setSmallIcon(R.drawable.ic_calendar).setContentTitle(headline).setContentText(course).setContentIntent(open).setVisibility(Notification.VISIBILITY_PUBLIC).setShowWhen(false).setStyle(new Notification.BigTextStyle().bigText(r.name+"\n时间："+r.start+"–"+r.end+"\n地点："+room+"\n老师："+teacher)).build();
+  Notification publicView=new Notification.Builder(c,ClassReminders.CHANNEL).setSmallIcon(R.drawable.ic_calendar).setContentTitle(headline).setContentText(course).setContentIntent(open).setVisibility(Notification.VISIBILITY_PUBLIC).setShowWhen(false).setStyle(new Notification.BigTextStyle().bigText(name+"\n时间："+r.start+"–"+r.end+"\n地点："+room+"\n老师："+teacher)).build();
   b.setPublicVersion(publicView);XiaomiFocus.attach(c,b,e,now,open,updating);return b;
  }
  /** Standard-style Live Update card shown only while the class is in session.
@@ -48,9 +50,10 @@ final class NotificationCards {
  static Notification.Builder live(Context c,ClassReminderPlan.Event e,long now,PendingIntent open){
   ScheduleWidgetData.Item r=e.course;
   String room=ClassReminders.field(r.room,"地点待确认"),teacher=ClassReminders.field(r.teacher,r.localActivity?"无任课老师":"老师待确认");
+  String prefix=ClassReminderPlan.labLabel(e);
   String name=r.name==null||r.name.trim().isEmpty()?"上课中":r.name;
-  String title=name+" · 剩 "+ClassReminderPlan.liveRemaining(e,now)+" 分";
-  String body=r.start+"–"+r.end+"  "+room+"  "+teacher;
+  String title=prefix+name+" · 剩 "+ClassReminderPlan.liveRemaining(e,now)+" 分";
+  String body=prefix+r.start+"–"+r.end+"  "+room+"  "+teacher;
   Notification.Builder b=new Notification.Builder(c,LiveUpdate.CHANNEL)
    .setSmallIcon(R.drawable.ic_calendar).setContentTitle(title).setContentText(body).setContentIntent(open)
    .setSubText("上课中").setStyle(new Notification.BigTextStyle().bigText(body))

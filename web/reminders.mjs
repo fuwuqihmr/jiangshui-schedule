@@ -26,7 +26,10 @@ export function reminderWindows(state,now=Date.now()){
    if(r.cancelled||(state.snapshot.source?.kind==='sample'&&!r.customCourse))continue;
    const startAt=Date.parse(`${day}T${r.startTime}:00+08:00`),endAt=startAt+settings.afterStartMinutes*60000,showAt=startAt-settings.leadMinutes*60000;
    if(!Number.isFinite(startAt)||endAt<=showAt)continue;
-   rows.push({id:`${day}|${r.key}`,date:day,key:r.key,name:r.name,room:r.room,teacher:r.teacher,startTime:r.startTime,endTime:r.endTime,startAt,showAt,expiresAt:endAt});
+   // 实验课独立标识：id/key 已由 jiaowu-lab 生成（date/lab-<id>），行数据带 lab/label/source 供 UI 与测试区分；
+   // 课程名保持原始值，标识由原生通知/卡片在渲染层负责，避免重复前缀。
+   const lab=r.lab===true;
+   rows.push({id:`${day}|${r.key}`,date:day,key:r.key,name:r.name,room:r.room,teacher:r.teacher,startTime:r.startTime,endTime:r.endTime,startAt,showAt,expiresAt:endAt,lab,label:lab?'【实验】':'',source:lab?'lab':(r.source??'')});
   }
  }
  return rows.sort((a,b)=>a.startAt-b.startAt||cmp(a.id,b.id));

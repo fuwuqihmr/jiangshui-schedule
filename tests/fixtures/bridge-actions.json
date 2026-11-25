@@ -607,7 +607,10 @@
               "studentProfile",
               "exams",
               "examFetchedAt",
-              "examError"
+              "examError",
+              "labHtml",
+              "labFetchedAt",
+              "labError"
             ]
           },
           {
@@ -617,7 +620,7 @@
             ]
           }
         ],
-        "notes": "考试三字段 exams/examFetchedAt/examError 为 1.4.0 新增，必须向后兼容（D4）；无考试字段时 web 保留旧快照（web/jiaowu-exam.mjs）"
+        "notes": "考试三字段 exams/examFetchedAt/examError 为 1.4.0 新增，必须向后兼容（D4）；无考试字段时 web 保留旧快照（web/jiaowu-exam.mjs）；实验课三字段 labHtml/labFetchedAt/labError 为 1.6.0 新增：原始实验课 HTML 与抓取时间 / 失败类别，可选转发、不新增 action，无字段时 web 保留旧 labs 快照（web/jiaowu-lab.mjs）"
       }
     },
     "sync": {
@@ -637,7 +640,10 @@
               "studentProfile",
               "exams",
               "examFetchedAt",
-              "examError"
+              "examError",
+              "labHtml",
+              "labFetchedAt",
+              "labError"
             ]
           },
           {
@@ -647,7 +653,7 @@
             ]
           }
         ],
-        "notes": "同 capture（三别名同一实现）"
+        "notes": "同 capture（三别名同一实现）；实验课三字段 labHtml/labFetchedAt/labError 为 1.6.0 新增：原始实验课 HTML 与抓取时间 / 失败类别，可选转发、不新增 action"
       }
     },
     "requestNotifications": {

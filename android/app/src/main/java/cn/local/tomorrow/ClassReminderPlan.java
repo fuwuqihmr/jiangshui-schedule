@@ -22,9 +22,9 @@ final class ClassReminderPlan {
  }
  static int minutes(JSONObject o,String key,int fallback,int max){Object v=o.opt(key);if(!(v instanceof Number))return fallback;double n=((Number)v).doubleValue();return n==Math.rint(n)&&n>=0&&n<=max?(int)n:fallback;}
  static final class Event {
-  ScheduleWidgetData.Item course;String id;long showAt,startAt,endAt,expiresAt;
+  ScheduleWidgetData.Item course;String id;long showAt,startAt,endAt,expiresAt;boolean lab;
   boolean active(long now){return showAt<=now&&now<expiresAt;}
-  JSONObject json()throws Exception{return new JSONObject().put("id",id).put("date",course.date).put("name",course.name).put("room",course.room).put("teacher",course.teacher).put("startTime",course.start).put("endTime",course.end).put("startAt",startAt).put("showAt",showAt).put("expiresAt",expiresAt);}
+  JSONObject json()throws Exception{return new JSONObject().put("id",id).put("date",course.date).put("name",course.name).put("room",course.room).put("teacher",course.teacher).put("startTime",course.start).put("endTime",course.end).put("startAt",startAt).put("showAt",showAt).put("expiresAt",expiresAt).put("lab",lab).put("label",lab?"【实验】":"").put("source",course.source==null?"":course.source);}
  }
  static List<Event> events(JSONObject state,long now)throws Exception{
   List<Event> result=new ArrayList<>();Settings s=settings(state);JSONObject snapshot=state==null?null:state.optJSONObject("snapshot");if(!s.enabled||snapshot==null)return result;
@@ -32,7 +32,7 @@ final class ClassReminderPlan {
   for(int d=-1;d<=7;d++)for(ScheduleWidgetData.Item item:ScheduleWidgetData.effectiveDay(state,snapshot,today.plusDays(d).toString())){
    // Demonstration courses are not a real schedule; user-added courses still qualify.
    if(item.cancelled||"sample".equals(snapshot.optJSONObject("source")==null?"":snapshot.optJSONObject("source").optString("kind"))&&!item.customCourse)continue;
-   Event e=new Event();e.course=item;e.id=item.date+"|"+item.key;
+   Event e=new Event();e.course=item;e.id=item.date+"|"+item.key;e.lab=item.lab;
    try{e.startAt=LocalDate.parse(item.date).atTime(LocalTime.parse(item.start)).atZone(ZONE).toInstant().toEpochMilli();}catch(RuntimeException invalid){continue;}
    try{e.endAt=LocalDate.parse(item.date).atTime(LocalTime.parse(item.end)).atZone(ZONE).toInstant().toEpochMilli();}catch(RuntimeException invalid){e.endAt=e.startAt;}
    e.showAt=e.startAt-s.leadMinutes*60000L;e.expiresAt=e.startAt+s.afterStartMinutes*60000L;if(e.expiresAt>e.showAt)result.add(e);
@@ -55,6 +55,8 @@ final class ClassReminderPlan {
   return digest(e.id+"|"+e.course.name+"|"+e.course.room+"|"+e.course.teacher+"|"+e.course.start+"|"+e.course.end+"|"+e.startAt+"|"+e.endAt+"|"+liveElapsed(e,now)+"|"+liveRemaining(e,now)+"|live");
  }
  static String phase(Event event,long now){return now<event.startAt?"即将上课":now<event.endAt?"课程进行中":"课程已结束";}
+ // 仅实验课带来源标识；非实验课返回空串，调用方拼出的字符串与改动前逐字节一致。
+ static String labLabel(Event event){return event!=null&&event.lab?"【实验】":"";}
  static long next(List<Event> events,long now){return next(events,now,false);}
  // live=true adds the class boundaries and the 5-minute refresh chain that the promoted card needs;
  // with live=false the schedule is byte-for-byte the previous one.

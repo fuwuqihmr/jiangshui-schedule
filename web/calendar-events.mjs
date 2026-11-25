@@ -3,9 +3,10 @@ import {addDays,timetableDay,weekday,weekOf} from './core.mjs';
 export const CALENDAR_EVENT_LIMIT = 5000;
 export const DEFAULT_CALENDAR_OPTIONS = Object.freeze({school:true,custom:true,study:true});
 
-const SOURCE_LABEL={school:'学校课程',custom:'自定义课程',study:'晚自习',exam:'学校考试'};
-// 系统日历里考试与同名课程必须可区分：标题加前缀、描述以「考试」开头并写清考场（座位号仍不写入）。
+const SOURCE_LABEL={school:'学校课程',custom:'自定义课程',study:'晚自习',exam:'学校考试',lab:'学校实验课'};
+// 系统日历里考试/实验课与同名课程必须可区分：标题加前缀、描述写清来源和考场/地点（座位号仍不写入）。
 export const EXAM_TITLE_PREFIX='【考试】';
+export const LAB_TITLE_PREFIX='【实验】';
 const WEEKDAY_LABEL=['一','二','三','四','五','六','日'];
 
 export function normalizeCalendarOptions(value){
@@ -49,7 +50,7 @@ export function buildCalendarEvents(state, options = DEFAULT_CALENDAR_OPTIONS){
       const startMillis=Date.parse(`${date}T${row.startTime}:00+08:00`);
       const endMillis=Date.parse(`${date}T${row.endTime}:00+08:00`);
       if(!Number.isFinite(startMillis)||!Number.isFinite(endMillis)||endMillis<=startMillis){skipped++;continue;}
-      const source=row.localActivity?'study':row.customCourse?'custom':row.exam===true?'exam':'school';
+      const source=row.localActivity?'study':row.customCourse?'custom':row.exam===true?'exam':row.lab===true?'lab':'school';
       const category=row.localActivity?'study':(row.customCourse||row.remapId||row.overrideId||row.source==='local')?'custom':'school';
       if(!opts[category]){skipped++;continue;}
       const week=weekOf(state.snapshot,date);
@@ -63,13 +64,16 @@ export function buildCalendarEvents(state, options = DEFAULT_CALENDAR_OPTIONS){
       }
       seenKeys.add(eventKey);
       const isExam=row.exam===true;
+      const isLab=row.lab===true&&!isExam;
       const location=clipped(row.room||'未填写教室',200);
       const description=isExam
         ? `考试 · 考场：${location} · 教师：${row.teacher||'未填写'} · 第${week}周（周${day}） · 来源：${SOURCE_LABEL.exam} · 由江水课表写入`
-        : `教师：${row.teacher||'未填写'} · 第${week}周（周${day}） · 来源：${SOURCE_LABEL[source]} · 由江水课表写入`;
+        : isLab
+          ? `实验课 · 课程编号：${row.courseCode||'未填写'} · 节次：${row.sectionCode||'未填写'} · 地点：${location} · 教师：${row.teacher||'未填写'} · 第${week}周（周${day}） · 来源：${SOURCE_LABEL.lab} · 由江水课表写入`
+          : `教师：${row.teacher||'未填写'} · 第${week}周（周${day}） · 来源：${SOURCE_LABEL[source]} · 由江水课表写入`;
       events.push({
         key:eventKey,
-        title:clipped((isExam?EXAM_TITLE_PREFIX:'')+row.name,200),
+        title:clipped((isExam?EXAM_TITLE_PREFIX:isLab?LAB_TITLE_PREFIX:'')+row.name,200),
         location,
         description:clipped(description,1000),
         startMillis,
@@ -79,6 +83,7 @@ export function buildCalendarEvents(state, options = DEFAULT_CALENDAR_OPTIONS){
         endTime:row.endTime,
         source,
         exam:isExam,
+        lab:isLab,
       });
     }
   }

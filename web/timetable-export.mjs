@@ -9,7 +9,8 @@ export function exportWeekModel(state,week){
   const start=addDays(state.snapshot.semester.startDate,(week-1)*7);
   return {week,semester:state.snapshot.semester,days:Array.from({length:7},(_,i)=>{
     const date=addDays(start,i);
-    return {date,courses:timetableDay(state.snapshot,date,state.overrides,state.localMaps,state.courseSettings,state.customCourses,state.holidaySettings)};
+    const courses=timetableDay(state.snapshot,date,state.overrides,state.localMaps,state.courseSettings,state.customCourses,state.holidaySettings);
+    return {date,courses:courses.map(course=>course.lab===true?{...course,source:'lab'}:course)};
   }),unscheduled:state.snapshot.unscheduled||[]};
 }
 
@@ -29,10 +30,10 @@ export function semesterOccurrences(state){
           date,week,weekday:weekday(date),ruleWeekday:row.weekday,ruleId:row.ruleId,
           name:row.name,teacher:row.teacher,room:row.room,startTime:row.startTime,endTime:row.endTime,
           periods:Array.isArray(row.periods)?[...row.periods]:[],
-          exam:row.exam===true,
+          exam:row.exam===true,lab:row.lab===true,labId:row.lab===true?row.labId:null,
           localActivity:!!row.localActivity,customCourse:!!row.customCourse,
           remap:!!(row.remapId||(row.originDate&&row.originDate!==row.date)),
-          override:!!row.overrideId,overlap:row.overlap===true,conflict:!!row.conflict,source:row.source
+          override:!!row.overrideId,overlap:row.overlap===true,conflict:!!row.conflict,source:row.lab===true?'lab':row.source
         });
       }
     }
@@ -113,9 +114,9 @@ export function buildRulesModel(state){
     // Single-date exams are not weekly rules: they stay in the visual exports only.
     if(row.exam===true)continue;
     if(row.conflict)conflictCount++;
-    const courseKey=`${row.name??''}\u0000${row.teacher??''}`;
+    const courseKey=[row.lab===true?'lab':'school',row.lab===true?(row.labId??''):'',row.name??'',row.teacher??''].join('\u0000');
     let course=courses.get(courseKey);
-    if(!course){course={name:row.name,teacher:row.teacher,segments:new Map()};courses.set(courseKey,course);}
+    if(!course){course={name:row.name,teacher:row.teacher,lab:row.lab===true,segments:new Map()};courses.set(courseKey,course);}
     const periods=occurrencePeriods(row),periodKey=periods.length?`p:${periods.join(',')}`:`t:${row.startTime}-${row.endTime}`;
     const segmentKey=[row.weekday,periodKey,row.startTime,row.endTime,row.room].join('\u0000');
     let segment=course.segments.get(segmentKey);
@@ -127,7 +128,7 @@ export function buildRulesModel(state){
       weekday:segment.weekday,periods:[...segment.periods],startTime:segment.startTime,endTime:segment.endTime,room:segment.room,
       weeks:[...segment.weeks].sort((a,b)=>a-b)
     })).sort((a,b)=>a.weekday-b.weekday||cmp(a.startTime,b.startTime)||(a.periods[0]??99)-(b.periods[0]??99)||cmpText(a.room,b.room));
-    return {name:course.name,teacher:course.teacher,rooms:segments.map(segment=>segment.room),segments};
+    return {name:course.name,teacher:course.teacher,lab:course.lab===true,rooms:segments.map(segment=>segment.room),segments};
   }).sort((a,b)=>{
     const minDay=course=>Math.min(...course.segments.map(segment=>segment.weekday));
     const minTime=course=>course.segments.reduce((value,segment)=>segment.startTime<value?segment.startTime:value,'99:99');
@@ -162,8 +163,9 @@ export function buildRulesText(state){
     `# 教学周：${totalWeeks===1?'第1周':`第1-${totalWeeks}周`}（${model.semester.startDate} 至 ${endDate}）`,
     `# 导出时间：${model.generatedAt}（Asia/Shanghai）`,
     `# 来源：${cleanField(model.sourceLabel,model.sourceKind==='school'?'学校教务系统':'交接样例')}${model.sourceKind==='school'?'':'（非学校教务来源）'}`,
-    '# 说明：按当前最终生效课表导出，包含调休、自定义课程和晚自习；不包含账号、密码或登录凭据。',
+    '# 说明：按当前最终生效课表导出，包含调休、自定义课程、晚自习和实验课；实验课按周次保留并以【实验】标注；不包含账号、密码或登录凭据。',
     '# 考试：考试为单次安排，不属于每周规律课程，未写入本文件；可在单周图片或整学期总览中查看。',
+    '# 实验课：按周次保留，课程名前缀【实验】；与同名普通课分别成行，不合并。',
     '# 格式：课程名<Tab>教师<Tab>教室<Tab>上课时间；多段以 ; 分隔；周次写作 {第7-15周}(全部|单周|双周)',
     '课程名\t教师\t教室\t上课时间'
   ];
@@ -174,7 +176,7 @@ export function buildRulesText(state){
       const periods=segment.periods.length?`第${segment.periods.join('、')}节`:`${segment.startTime}–${segment.endTime}`;
       return `周${WEEKDAY_NAMES[segment.weekday-1]}${periods}{${week.text}}(${week.pattern})`;
     }).join(';');
-    lines.push([cleanField(course.name,'未命名课程'),cleanField(course.teacher),cleanField(course.rooms.join(';')),segments].join('\t'));
+    lines.push([displayCourseName(course),cleanField(course.teacher),cleanField(course.rooms.join(';')),segments].join('\t'));
   }
   if(model.unscheduled.length){
     lines.push('');
@@ -189,9 +191,9 @@ export function buildSemesterOverviewModel(state){
   const occurrences=semesterOccurrences(state),semester=state.snapshot.semester,totalWeeks=semester.weeks;
   const cards=new Map();
   for(const row of occurrences){
-    const key=[row.weekday,row.startTime,row.endTime,row.name,row.teacher,row.room,row.localActivity?'study':'',row.customCourse?'custom':''].join('\u0000');
+    const key=[row.weekday,row.startTime,row.endTime,row.name,row.teacher,row.room,row.localActivity?'study':'',row.customCourse?'custom':'',row.lab===true?`lab:${row.labId??''}`:'school'].join('\u0000');
     let card=cards.get(key);
-    if(!card){card={key,name:row.name,teacher:row.teacher,room:row.room,weekday:row.weekday,startTime:row.startTime,endTime:row.endTime,periods:[...row.periods],weeks:new Set(),localActivity:false,customCourse:false,remap:false,override:false,overlap:false,conflict:false,sources:new Set()};cards.set(key,card);}
+    if(!card){card={key,name:row.name,teacher:row.teacher,room:row.room,weekday:row.weekday,startTime:row.startTime,endTime:row.endTime,periods:[...row.periods],weeks:new Set(),localActivity:false,customCourse:false,lab:false,labId:null,remap:false,override:false,overlap:false,conflict:false,sources:new Set()};cards.set(key,card);}
     card.weeks.add(row.week);
     if(!card.periods.length&&row.periods.length)card.periods=[...row.periods];
     card.localActivity=card.localActivity||row.localActivity;
@@ -200,6 +202,8 @@ export function buildSemesterOverviewModel(state){
     card.override=card.override||row.override;
     card.overlap=card.overlap||row.overlap;
     card.conflict=card.conflict||row.conflict;
+    card.lab=card.lab||row.lab===true;
+    if(row.labId)card.labId=row.labId;
     if(typeof row.source==='string')card.sources.add(row.source);
   }
   const days=Array.from({length:7},(_,index)=>({weekday:index+1,courses:[]}));
@@ -211,7 +215,7 @@ export function buildSemesterOverviewModel(state){
       startTime:card.startTime,endTime:card.endTime,periods:card.periods,
       weeks:[...card.weeks].sort((a,b)=>a-b),
       localActivity:card.localActivity,customCourse:card.customCourse,remap:card.remap,override:card.override,
-      overlap:card.overlap,conflict:card.conflict,sources:[...card.sources]
+      overlap:card.overlap,conflict:card.conflict,lab:card.lab,labId:card.labId,sources:[...card.sources]
     });
   }
   for(const day of days)day.courses.sort((a,b)=>cmp(a.startTime,b.startTime)||cmp(a.endTime,b.endTime)||cmpText(a.name,b.name)||cmpText(a.teacher,b.teacher));
@@ -230,6 +234,7 @@ const MARGIN=68,TIME_WIDTH=180,HEADER_BOTTOM=316,GRID_BOTTOM=1610;
 const COL_WIDTH=(PAGE_WIDTH-MARGIN*2-TIME_WIDTH)/7;
 const FONT='"Microsoft YaHei","Noto Sans CJK SC","Noto Sans SC",sans-serif';
 const PALETTE=[['#edf3ff','#305b9d'],['#eff7f1','#356f4b'],['#f4f0fc','#6e5796'],['#fff5eb','#946129'],['#edf7fa','#2d6f83']];
+const LAB_FILL='#e3f2fd',LAB_ACCENT='#1976d2';
 const BAND_DEFS=[
   {start:'00:00',end:'08:30',title:'早间',time:'08:30 前',optional:true},
   {start:'08:30',end:'10:15',title:'上午',time:'08:30 起'},
@@ -246,12 +251,16 @@ function wrap(ctx,value,width){
   return result.length?result:[''];
 }
 function missing(value,fallback){return value&&value!=='—'?String(value):fallback;}
+function displayCourseName(course,fallback='未命名课程'){
+  const name=cleanField(course?.name,fallback);
+  return course?.lab===true&&!name.startsWith('【实验】')?`【实验】${name}`:name;
+}
 function courseLines(ctx,course,density=1){
   const width=COL_WIDTH-42,lines=[];
   const add=(value,size=26,weight=400,color='#384b61')=>{
     size=Math.round(size*density);font(ctx,size,weight);for(const text of wrap(ctx,value,width))lines.push({text,size,weight,color,height:size+Math.round(10*density)});
   };
-  add(course.name,30,700,course.cancelled?'#737d89':'#22364d');
+  add(displayCourseName(course),30,700,course.cancelled?'#737d89':'#22364d');
   add(`${course.startTime}–${course.endTime}`,26,600);
   if(course.vacant){add(course.movedTo?`已调至 ${course.movedTo}`:'原课程已被替换',24);add('此时段不上课',24);}
   else if(course.cancelled)add('停课 · 此时段不上课',24);
@@ -262,6 +271,7 @@ function courseLines(ctx,course,density=1){
     if(course.remapId)labels.push(`调休自 ${course.originDate}`);
     if(course.overrideId)labels.push('本人修改');
     if(course.customCourse)labels.push('自定义');
+    if(course.lab)labels.push('实验课');
     if(course.overlap)labels.push('时间重叠');
     if(course.conflict)labels.push('来源冲突，请确认');
     if(labels.length)add(labels.join(' · '),22,400,course.overlap||course.conflict?'#a23b3b':'#607088');
@@ -401,8 +411,8 @@ function baseCanvas(model,pageNumber,pageCount,createCanvas){
   const name=model.semester.name||'当前学期';font(ctx,26);const nameWidth=ctx.measureText(name).width;
   text(ctx,name.slice(0,100),Math.max(PAGE_WIDTH/2,PAGE_WIDTH-MARGIN-Math.min(nameWidth,PAGE_WIDTH/2-MARGIN)),70,26,400,'#516476');
   text(ctx,`${model.days[0].date} — ${model.days[6].date}`,PAGE_WIDTH-MARGIN-530,128,28,500);
-  text(ctx,'按当前生效安排导出 · 调课 / 调休 / 自定义课程 / 晚自习',MARGIN,218,26,400,'#607088');
-  text(ctx,'灰色：此时段不上课    红色标注：重叠或待确认',MARGIN,1652,24,400,'#66788b');
+  text(ctx,'按当前生效安排导出 · 调课 / 调休 / 自定义课程 / 晚自习 / 实验课（蓝色）',MARGIN,218,26,400,'#607088');
+  text(ctx,'灰色：此时段不上课    红色标注：重叠或待确认    蓝色卡片：实验课',MARGIN,1652,24,400,'#66788b');
   const pending=model.unscheduled.length;
   text(ctx,pending?`另有 ${pending} 门未排时间课程，见学期 PDF 附页`:'空课时保留白底，课程时间以卡片标注为准',MARGIN,1694,24,400,'#66788b');
   text(ctx,`第 ${model.week} 周${pageCount>1?` · 续页 ${pageNumber}/${pageCount}`:''}`,PAGE_WIDTH-MARGIN-295,1694,24,400,'#66788b');
@@ -440,8 +450,10 @@ function weekCanvasPages(model,createCanvas=()=>document.createElement('canvas')
         let cardY=y+12;
         for(const card of row.cells[d]){
           const course=card.course;let hash=0;for(const c of course.name)hash+=c.charCodeAt(0);
-          const [fill]=course.cancelled?['#edf0f3','#8c96a2']:PALETTE[hash%PALETTE.length];
+          const lab=course.lab===true&&!course.cancelled;
+          const [fill]=course.cancelled?['#edf0f3','#8c96a2']:lab?[LAB_FILL,'#1565c0']:PALETTE[hash%PALETTE.length];
           rectangle(ctx,x+9,cardY,COL_WIDTH-18,card.height,fill);
+          if(lab)rectangle(ctx,x+9,cardY,6,card.height,LAB_ACCENT);
           let lineY=cardY+10;
           for(const line of card.lines){text(ctx,line.text,x+21,lineY,line.size,line.weight,line.color);lineY+=line.height;}
           cardY+=card.height+10;
@@ -485,6 +497,7 @@ function overviewFont(size,density){return Math.max(8,Math.round(size*density));
 function overviewTags(card,compact=false){
   const tags=[];
   if(card.customCourse)tags.push('自定义');
+  if(card.lab)tags.push('实验课');
   if(card.localActivity)tags.push('晚自习');
   if(card.override)tags.push('本人修改');
   if(card.remap)tags.push('调休');
@@ -504,7 +517,7 @@ function overviewEntryLine(lines,value,size,weight,color,textWidth,density){
 function overviewCourseLines(ctx,card,totalWeeks,density=1,level='full'){
   const lines=[],pad=overviewPad(density),textWidth=COL_WIDTH-42;
   const add=(value,size,weight,color)=>overviewAddLine(lines,ctx,value,size,weight,color,textWidth,density);
-  add(card.name,30,700,'#22364d');
+  add(displayCourseName(card),30,700,'#22364d');
   const weekSpec=formatWeekSpec(card.weeks,totalWeeks);
   if(level==='minimal'){
     const tags=overviewTags(card,true);
@@ -533,7 +546,7 @@ function overviewCompactGroup(ctx,cards,totalWeeks,density=1){
     const columnWidth=(blockWidth-2*pad-(columns-1)*gap)/columns,entries=[];
     for(const card of cards){
       const lines=[],tags=overviewTags(card,true);
-      overviewEntryLine(lines,card.name,24,700,'#22364d',columnWidth,density);
+      overviewEntryLine(lines,displayCourseName(card),24,700,'#22364d',columnWidth,density);
       overviewEntryLine(lines,`周次：${formatWeekSpec(card.weeks,totalWeeks)}`,20,600,'#305b9d',columnWidth,density);
       if(tags.length)overviewEntryLine(lines,tags.join(' · '),18,400,card.overlap||card.conflict?'#a23b3b':'#607088',columnWidth,density);
       entries.push({lines,height:lines.reduce((sum,line)=>sum+line.height,0)+gap});
@@ -625,7 +638,7 @@ function overviewBaseCanvas(model,height,createCanvas){
   text(ctx,name.slice(0,100),Math.max(PAGE_WIDTH/2,PAGE_WIDTH-MARGIN-Math.min(nameWidth,PAGE_WIDTH/2-MARGIN)),70,26,400,'#516476');
   const endDate=addDays(model.semester.startDate,model.totalWeeks*7-1);
   text(ctx,`${model.semester.startDate} — ${endDate}`,PAGE_WIDTH-MARGIN-530,128,28,500);
-  text(ctx,'按当前生效安排合并 · 调休 / 自定义课程 / 晚自习',MARGIN,218,26,400,'#607088');
+  text(ctx,'按当前生效安排合并 · 调休 / 自定义课程 / 晚自习 / 实验课（蓝色）',MARGIN,218,26,400,'#607088');
   return {canvas,ctx};
 }
 function drawOverviewLines(draw,lines,x,y,scaleY){
@@ -634,7 +647,9 @@ function drawOverviewLines(draw,lines,x,y,scaleY){
 }
 function drawOverviewBlock(draw,block,x,y,width,scaleY){
   if(block.kind==='compact'){
-    rectangle(draw,x,y,width,block.height*scaleY,'#f3f8fc','#d7e3ee');
+    const hasLab=block.cards.some(card=>card.lab===true);
+    rectangle(draw,x,y,width,block.height*scaleY,hasLab?LAB_FILL:'#f3f8fc','#d7e3ee');
+    if(hasLab)rectangle(draw,x,y,6,block.height*scaleY,LAB_ACCENT);
     const pad=block.pad*scaleY,headerTop=y+pad;
     text(draw,block.header.text,x+pad,headerTop,Math.max(1,Math.round(block.header.size*scaleY)),block.header.weight,block.header.color);
     const entryTop=headerTop+block.header.height*scaleY;
@@ -649,8 +664,10 @@ function drawOverviewBlock(draw,block,x,y,width,scaleY){
     return;
   }
   let hash=0;for(const character of block.course.name)hash+=character.charCodeAt(0);
-  const [fill]=PALETTE[hash%PALETTE.length];
+  const lab=block.course.lab===true;
+  const [fill]=lab?[LAB_FILL,LAB_ACCENT]:PALETTE[hash%PALETTE.length];
   rectangle(draw,x,y,width,block.height*scaleY,fill);
+  if(lab)rectangle(draw,x,y,6,block.height*scaleY,LAB_ACCENT);
   drawOverviewLines(draw,block.lines,x+12,y+(block.topPad||10)*scaleY,scaleY);
 }
 export function renderSemesterOverviewPage(model,createCanvas=()=>document.createElement('canvas')){
