@@ -1,0 +1,37 @@
+name: 发布未签名 IPA
+
+on:
+  push:
+    branches: [ios-ci]
+    paths:
+      - '.github/workflows/publish-ipa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    name: 下载 CI 产物并挂到公开 release
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 下载未签名 IPA artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh run download 45622875190 --repo "${{ github.repository }}" -n jiangshui-unsigned-ipa -D out
+          find out -type f -name '*.ipa' -print
+      - name: 创建公开 release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release delete ios-ci-7027587 --repo "${{ github.repository }}" --yes || true
+          IPA="$(find out -type f -name '*.ipa' | head -1)"
+          test -n "$IPA"
+          gh release create ios-ci-7027587 "$IPA" --repo "${{ github.repository }}" \
+            --title "iOS 1.5.0 未签名 IPA（7027587）" \
+            --notes "CI run 45622875190 / commit 7027587。未签名，仅供 Sideloadly 等工具重签后侧载。"
