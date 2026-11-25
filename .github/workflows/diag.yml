@@ -1,0 +1,12 @@
+name: diag macos
+on:
+  push:
+    branches: [ios-ci]
+    paths:
+      - '.github/workflows/diag.yml'
+jobs:
+  diag:
+    runs-on: macos-14
+    timeout-minutes: 5
+    steps:
+      - run: echo diag-ok && uname -a
