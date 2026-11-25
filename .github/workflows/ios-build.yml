@@ -1,5 +1,8 @@
 name: iOS 编译（模拟器）
 
+# retrigger 6847573：有父提交，保证 push 触发 workflow
+
+
 # 目的：在没有 Mac 的情况下，用 GitHub 的 macOS runner 拿到真实编译结果。
 # 设计：每一步都记录自己的退出码到 ios/build-out/rc-*，最后由「判定」步骤统一决定成败。
 # 这样即使中间某步崩了，job summary 也会写清楚是哪一步、什么错误，不会只剩一句 exit code 1。
