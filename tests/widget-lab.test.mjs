@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync,readdirSync} from 'node:fs';
+import {readFileSync,readdirSync,mkdtempSync,writeFileSync,cpSync,rmSync,statSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {effectiveDay} from '../web/core.mjs';
 import {normalizeHolidaySettings} from '../web/holiday-settings.mjs';
 import {runNativeWidgetResolver} from './native-widget-resolver-harness.mjs';
@@ -122,6 +126,62 @@ test('read 字段不破坏：hasState/status/courseCount 协议与取消过滤�
   const cancelled=javaRead('lab-holiday');
   assert.equal(cancelled.courseCount,0,'取消的实验课不计数');
   assert.equal(cancelled.status,'今日已无课');
+});
+
+const REPO_ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+function javaTool(name){const home=process.env.JAVA_HOME;const exe=process.platform==='win32'?name+'.exe':name;return home?path.join(home,'bin',exe):exe;}
+function collectJava(dir,out=[]){for(const name of readdirSync(dir)){const file=path.join(dir,name);if(statSync(file).isDirectory())collectJava(file,out);else if(name.endsWith('.java'))out.push(file);}return out;}
+
+test('渲染项可见【实验】：displayName 只给实验课加前缀，5 个绑定点全部走 displayName',()=>{
+  const widgetFile=path.join(REPO_ROOT,'android','app','src','main','java','cn','local','tomorrow','ScheduleWidgetData.java');
+  const stubDir=path.join(REPO_ROOT,'tests','fixtures','widget-resolver');
+  const dir=mkdtempSync(path.join(tmpdir(),'widget-display-'));
+  try{
+    cpSync(stubDir,path.join(dir,'src'),{recursive:true});
+    const probe=[
+      'package cn.local.tomorrow;',
+      'import java.io.*;',
+      'public class WidgetDisplayProbe {',
+      '  static void line(String tag, ScheduleWidgetData.Item item) { System.out.println(tag + "\\t" + ScheduleWidgetData.displayName(item)); }',
+      '  public static void main(String[] args) throws Exception {',
+      '    System.setOut(new PrintStream(new FileOutputStream(args[0]), true, "UTF-8"));',
+      '    ScheduleWidgetData.Item lab = new ScheduleWidgetData.Item(); lab.lab = true; lab.label = "【实验】"; lab.name = "大学物理实验";',
+      '    line("lab", lab);',
+      '    ScheduleWidgetData.Item normal = new ScheduleWidgetData.Item(); normal.name = "高等数学";',
+      '    line("normal", normal);',
+      '    ScheduleWidgetData.Item exam = new ScheduleWidgetData.Item(); exam.exam = true; exam.name = "期末考试";',
+      '    line("exam", exam);',
+      '    ScheduleWidgetData.Item noLabel = new ScheduleWidgetData.Item(); noLabel.lab = true; noLabel.name = "实验课";',
+      '    line("lab-no-label", noLabel);',
+      '    line("null", null);',
+      '  }',
+      '}'
+    ].join('\n');
+    writeFileSync(path.join(dir,'src','cn','local','tomorrow','WidgetDisplayProbe.java'),probe,'utf8');
+    const files=collectJava(path.join(dir,'src'));files.push(widgetFile);
+    const compile=spawnSync(javaTool('javac'),['-encoding','UTF-8','-d',dir,...files],{cwd:dir,encoding:'utf8'});
+    assert.equal(compile.status,0,'javac 编译 displayName probe 失败：'+(compile.stderr||compile.stdout||''));
+    const run=spawnSync(javaTool('java'),['-cp',dir,'cn.local.tomorrow.WidgetDisplayProbe',path.join(dir,'display.txt')],{cwd:dir,encoding:'utf8'});
+    assert.equal(run.status,0,'java 执行 displayName probe 失败：'+(run.stderr||run.stdout||''));
+    assert.deepEqual(readFileSync(path.join(dir,'display.txt'),'utf8').trim().split(/\r?\n/).map(line=>line.split('\t')),[
+      ['lab','【实验】大学物理实验'],
+      ['normal','高等数学'],
+      ['exam','期末考试'],
+      ['lab-no-label','【实验】实验课'],
+      ['null']
+    ],'displayName 渲染字符串必须仅对实验课加【实验】');
+  }finally{try{rmSync(dir,{recursive:true,force:true});}catch{}}
+  const source=readFileSync(widgetFile,'utf8');
+  assert.ok(/static String displayName\(Item item\)/.test(source),'缺少 displayName helper');
+  const bindings=[
+    /R\.id\.widget_course, displayName\(data\.(?:current|next)\)/g,
+    /R\.id\.widget_current_course, first != null \? displayName\(first\)/g,
+    /R\.id\.widget_next_course, second != null \? displayName\(second\)/g,
+    /R\.id\.widget_row_name, displayName\(item\)/g
+  ];
+  let total=0;for(const pattern of bindings)total+=(source.match(pattern)||[]).length;
+  assert.equal(total,5,'5 个课程名绑定点必须全部使用 displayName');
+  assert.equal(/setTextViewText\(R\.id\.widget_(?:course|current_course|next_course|row_name), (?:data\.(?:current|next)|first|second|item)\.name\)/.test(source),false,'仍有绑定点直接使用 raw name');
 });
 
 test('四尺寸与深色资源未被本次改动破坏（静态守卫）',()=>{

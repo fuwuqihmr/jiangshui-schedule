@@ -114,11 +114,11 @@ final class ScheduleWidgetData {
     private static void bindSmall(RemoteViews views, WidgetData data) {
         views.setTextViewText(R.id.widget_status, data.status);
         if (data.current != null) {
-            views.setTextViewText(R.id.widget_course, data.current.name);
+            views.setTextViewText(R.id.widget_course, displayName(data.current));
             views.setTextViewText(R.id.widget_time, data.current.start + "–" + data.current.end);
             views.setTextViewText(R.id.widget_meta, meta(data.current));
         } else if (data.next != null) {
-            views.setTextViewText(R.id.widget_course, data.next.name);
+            views.setTextViewText(R.id.widget_course, displayName(data.next));
             views.setTextViewText(R.id.widget_time, data.next.start + "–" + data.next.end);
             views.setTextViewText(R.id.widget_meta, meta(data.next));
         } else if (data.hasState) {
@@ -140,10 +140,10 @@ final class ScheduleWidgetData {
         views.setViewVisibility(R.id.widget_next_block, second != null || first == null ? View.VISIBLE : View.GONE);
         views.setViewVisibility(R.id.widget_wide_divider, second != null ? View.VISIBLE : View.GONE);
         views.setTextViewText(R.id.widget_current_label, first != null && ongoing(first, data.minute) ? "课程进行中" : "下节课");
-        views.setTextViewText(R.id.widget_current_course, first != null ? first.name : "");
+        views.setTextViewText(R.id.widget_current_course, first != null ? displayName(first) : "");
         views.setTextViewText(R.id.widget_current_meta, first != null ? tallLine(first) : "");
         views.setTextViewText(R.id.widget_next_label, second != null && ongoing(second, data.minute) ? "课程进行中" : first != null && ongoing(first, data.minute) ? "下节课" : "之后的课");
-        views.setTextViewText(R.id.widget_next_course, second != null ? second.name : data.hasState ? "今日已无课" : "请先打开应用同步");
+        views.setTextViewText(R.id.widget_next_course, second != null ? displayName(second) : data.hasState ? "今日已无课" : "请先打开应用同步");
         views.setTextViewText(R.id.widget_next_meta, second != null ? tallLine(second) : "点击打开江水课表");
         if (first == null) views.setTextViewText(R.id.widget_next_label, data.status);
     }
@@ -172,7 +172,7 @@ final class ScheduleWidgetData {
     static RemoteViews row(Context context, Item item, int minute) {
         RemoteViews row = new RemoteViews(context.getPackageName(), R.layout.widget_course_row);
         boolean active = ongoing(item, minute), ended = minutes(item.end) <= minute;
-        row.setTextViewText(R.id.widget_row_name, item.name);
+        row.setTextViewText(R.id.widget_row_name, displayName(item));
         row.setTextViewText(R.id.widget_row_time, item.start + "–" + item.end);
         row.setTextViewText(R.id.widget_row_meta, safe(item.room) + " · " + teacher(item));
         row.setTextViewText(R.id.widget_row_status, courseStatus(item, minute));
@@ -192,6 +192,17 @@ final class ScheduleWidgetData {
         if (DASH.equals(teacher)) return room;
         if (DASH.equals(room)) return teacher;
         return room + " · " + teacher;
+    }
+
+    /**
+     * 小组件可见名称：实验课在课程名前加【实验】短标签（label 缺失时也回退到【实验】，
+     * 保证桌面一定可见）；普通课/考试/本机课原样返回 name，既有呈现逐字符不变。
+     */
+    static String displayName(Item item) {
+        if (item == null) return "";
+        if (!item.lab) return item.name;
+        String label = item.label == null || item.label.isEmpty() ? "【实验】" : item.label;
+        return label + (item.name == null ? "" : item.name);
     }
 
     private static String safe(String value) { return TextUtils.isEmpty(value) ? DASH : value; }
