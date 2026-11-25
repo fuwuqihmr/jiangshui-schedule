@@ -14,8 +14,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: ios-build-main
-  cancel-in-progress: true
+  group: ios-build-${{ github.run_id }}
+  cancel-in-progress: false
 
 jobs:
   build:
