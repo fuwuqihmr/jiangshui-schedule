@@ -110,7 +110,7 @@ test('Android：SharedPreferences 键按规格为 calendar-sync，事件字段�
  assert.equal(nameMatch[1],pkg.version,'build.gradle versionName 必须与 package.json 真源一致');
 });
 test('设置分组收起态摘要：六组常量齐全',()=>{
- const summaries={'自动更新':'打开应用自动核对学校课表','课表与显示':'外观主题 · 首页显示 · 完整课表','请假与调休':'请假服务 · 调休安排 · 休假设置','课程与提醒':'上课提醒 · 晚自习 · 自定义课程','数据与同步':'<b>写入系统日历</b> · 教务系统 · 导出与排查日志','关于与隐私':'版本信息 · 用户协议 · 开源与致谢'};
+ const summaries={'自动更新':'打开应用自动核对学校课表','课表与显示':'外观主题 · 应用图标 · 首页显示 · 完整课表','请假与调休':'请假服务 · 调休安排 · 休假设置','课程与提醒':'上课提醒 · 晚自习 · 自定义课程','数据与同步':'<b>写入系统日历</b> · 教务系统 · 导出与排查日志','关于与隐私':'版本信息 · 用户协议 · 开源与致谢'};
  for(const [title,text] of Object.entries(summaries)) assert.ok(app.includes(`'${title}':'${text}'`),`缺少摘要 ${title}`);
 });
 

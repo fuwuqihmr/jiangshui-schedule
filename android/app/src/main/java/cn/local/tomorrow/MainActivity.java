@@ -47,6 +47,8 @@ public class MainActivity extends Activity {
     static final int MAX_WEBAPP_REOPEN=2;
     static final String STATE_WEBAPP_VISIBLE="webAppVisible",STATE_WEBAPP_TARGET="webAppTargetUrl",STATE_WEBAPP_WARMUP="webAppWarmupUrl",STATE_WEBAPP_PENDING_FILE="pendingFileRequest",STATE_WEBAPP_FILE_STARTED="fileChooserStartedAt",STATE_WEBAPP_REOPEN_COUNT="webAppReopenCount";
     static final String PERMISSION_PREFS="permission-onboarding";
+    static final String ICON_WHALE="cn.local.tomorrow.IconWhale",ICON_WATER="cn.local.tomorrow.IconWater",ICON_THEME_DEFAULT="whale";
+    String iconTheme=ICON_THEME_DEFAULT;
     ValueCallback<Uri[]> pendingFileCallback;
     long fileChooserStartedAt=0L;
     int fileChooserGeneration=0,pendingFileRequest=0;
@@ -121,7 +123,8 @@ public class MainActivity extends Activity {
         super.onCreate(saved);
         log("onCreate sdk="+Build.VERSION.SDK_INT);
         openChangesOnLoad=getIntent().getBooleanExtra("open_changes",false);openTodayOnLoad=getIntent().getBooleanExtra("open_today",false);openDateOnLoad=getIntent().getStringExtra("open_date");
-        try{JSONObject savedState=StateStore.load(this);if(savedState!=null)appThemePreference=savedState.optString("theme","system");}catch(Exception ignored){}
+        try{JSONObject savedState=StateStore.load(this);if(savedState!=null){appThemePreference=savedState.optString("theme","system");iconTheme=savedState.optString("iconTheme",ICON_THEME_DEFAULT);}}catch(Exception ignored){}
+        calibrateIconTheme();
         resolveAppPalette();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS|WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS);
@@ -163,6 +166,33 @@ public class MainActivity extends Activity {
         restoreWebAppState(saved);
         NotificationChannel channel=new NotificationChannel("changes","课表变化",NotificationManager.IMPORTANCE_HIGH);channel.setDescription("近期课表变化提醒");getSystemService(NotificationManager.class).createNotificationChannel(channel);
         CheckScheduler.cancel(this);ClassReminders.reconcile(this);
+    }
+    void applyIconTheme(String theme){
+        iconTheme="water".equals(theme)?"water":ICON_THEME_DEFAULT;
+        try{
+            boolean water="water".equals(iconTheme);
+            PackageManager pm=getPackageManager();
+            pm.setComponentEnabledSetting(new ComponentName(this,water?ICON_WATER:ICON_WHALE),PackageManager.COMPONENT_ENABLED_STATE_ENABLED,PackageManager.DONT_KILL_APP);
+            pm.setComponentEnabledSetting(new ComponentName(this,water?ICON_WHALE:ICON_WATER),PackageManager.COMPONENT_ENABLED_STATE_DISABLED,PackageManager.DONT_KILL_APP);
+        }catch(Exception e){fallbackIconTheme();}
+    }
+    void fallbackIconTheme(){
+        iconTheme=ICON_THEME_DEFAULT;
+        try{
+            PackageManager pm=getPackageManager();
+            pm.setComponentEnabledSetting(new ComponentName(this,ICON_WHALE),PackageManager.COMPONENT_ENABLED_STATE_ENABLED,PackageManager.DONT_KILL_APP);
+            pm.setComponentEnabledSetting(new ComponentName(this,ICON_WATER),PackageManager.COMPONENT_ENABLED_STATE_DISABLED,PackageManager.DONT_KILL_APP);
+        }catch(Exception ignored){}
+    }
+    void calibrateIconTheme(){
+        try{
+            PackageManager pm=getPackageManager();
+            boolean water="water".equals(iconTheme);
+            String desired=water?ICON_WATER:ICON_WHALE,other=water?ICON_WHALE:ICON_WATER;
+            int desiredState=pm.getComponentEnabledSetting(new ComponentName(this,desired));
+            int otherState=pm.getComponentEnabledSetting(new ComponentName(this,other));
+            if(desiredState!=PackageManager.COMPONENT_ENABLED_STATE_ENABLED||otherState!=PackageManager.COMPONENT_ENABLED_STATE_DISABLED)applyIconTheme(iconTheme);
+        }catch(Exception e){fallbackIconTheme();}
     }
     static int parseThemeColor(String value){if(value.length()==4)value="#"+value.charAt(1)+value.charAt(1)+value.charAt(2)+value.charAt(2)+value.charAt(3)+value.charAt(3);return Color.parseColor(value);}
     boolean systemDarkMode(){return (getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES;}
@@ -982,7 +1012,7 @@ public class MainActivity extends Activity {
             case "acceptConsent":{JSONObject accepted=UserConsent.accept(MainActivity.this,p.optString("version"));result(id,accepted);break;}
             case "declineConsent":result(id,object("ok",true));finishAndRemoveTask();break;
             case "loadState": {JSONObject saved=StateStore.load(MainActivity.this);result(id,saved==null?JSONObject.NULL:saved);break;}
-            case "saveState": {JSONObject data=p.getJSONObject("state");long revision=StateStore.save(MainActivity.this,data,p.optLong("expectedRevision",-1));ScheduleWidgetProvider.updateAll(MainActivity.this);result(id,object("revision",revision));break;}
+            case "saveState": {JSONObject data=p.getJSONObject("state");long revision=StateStore.save(MainActivity.this,data,p.optLong("expectedRevision",-1));ScheduleWidgetProvider.updateAll(MainActivity.this);try{if(data.has("iconTheme"))applyIconTheme(data.optString("iconTheme",ICON_THEME_DEFAULT));}catch(Exception ignored){}result(id,object("revision",revision));break;}
             case "setTheme":{String bg=p.optString("background"),surface=p.optString("surface");if(!bg.matches("#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}")||!surface.matches("#[0-9a-fA-F]{3}|#[0-9a-fA-F]{6}"))throw new Exception("主题颜色无效");appThemePreference=p.optString("preference","system");appDark=p.optBoolean("dark");appBackground=parseThemeColor(bg);appSurface=parseThemeColor(surface);applyWindowTheme();result(id,object("ok",true));break;}
             case "classReminderStatus":ClassReminders.reconcile(MainActivity.this);result(id,ClassReminders.status(MainActivity.this));break;
             case "previewClassReminder":XiaomiFocus.invalidate();XiaomiFocus.refreshAsync(MainActivity.this,()->{try{result(id,ClassReminders.preview(MainActivity.this,p.optBoolean("lockedTest")));}catch(Exception e){failure(id,"预览通知暂时无法发送");}});break;
@@ -1102,7 +1132,7 @@ public class MainActivity extends Activity {
         if(saved==null||webAppTargetUrl!=null)return;
         restoreWebAppState(saved);
     }
-    @Override protected void onResume(){super.onResume();if(updates!=null)updates.onResume();if(pendingFileCallback!=null&&fileChooserStartedAt>0L&&SystemClock.elapsedRealtime()-fileChooserStartedAt>FILE_CHOOSER_TIMEOUT_MS){finishFileChooser(null);setWebAppNote(getString(R.string.webapp_file_chooser_timeout));}else if(pendingFileRequest!=0&&pendingFileCallback==null&&webAppVisible)handleRestoredFileRequest();dispatchSystemTheme();applyWindowTheme();ScheduleWidgetProvider.updateAll(this);XiaomiFocus.invalidate();ClassReminders.reconcile(this);if(web!=null)web.evaluateJavascript("window.onNativeResume&&window.onNativeResume()",null);}
+    @Override protected void onResume(){super.onResume();if(updates!=null)updates.onResume();if(pendingFileCallback!=null&&fileChooserStartedAt>0L&&SystemClock.elapsedRealtime()-fileChooserStartedAt>FILE_CHOOSER_TIMEOUT_MS){finishFileChooser(null);setWebAppNote(getString(R.string.webapp_file_chooser_timeout));}else if(pendingFileRequest!=0&&pendingFileCallback==null&&webAppVisible)handleRestoredFileRequest();dispatchSystemTheme();applyWindowTheme();ScheduleWidgetProvider.updateAll(this);XiaomiFocus.invalidate();ClassReminders.reconcile(this);if(web!=null)web.evaluateJavascript("window.onNativeResume&&window.onNativeResume()",null);calibrateIconTheme();}
     void handleRestoredFileRequest(){
         final int restored=pendingFileRequest;
         webAppHandler.postDelayed(()->{

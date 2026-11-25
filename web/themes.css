@@ -17,7 +17,7 @@ html[data-theme=dark] .badge:not(.purple){background:#303030;color:#dedede}html[
 
 .app-title{display:flex;align-items:center;gap:10px}.mobile-app-icon{display:none}
 html[data-theme=blue] .hero-count strong{color:#287fb0}
-@media(max-width:720px){.mobile-app-icon{display:block;width:36px;height:36px;object-fit:contain;border-radius:10px;flex:none;background:#e8f6ff}.app-title h1{font-size:24px}.topbar{gap:9px}.hero{background:var(--hero-a);}.hero h2{line-height:1.4}}
+@media(max-width:720px){.mobile-app-icon{display:block;width:36px;height:36px;object-fit:contain;border-radius:10px;flex:none;background:#FFFFFF}.app-title h1{font-size:24px}.topbar{gap:9px}.hero{background:var(--hero-a);}.hero h2{line-height:1.4}}
 
 /* Course summary uses one flat theme color. */
 .hero{background:var(--hero-a)}

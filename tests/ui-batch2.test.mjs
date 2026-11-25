@@ -5,6 +5,7 @@ import {createState} from '../web/core.mjs';
 
 const app=readFileSync(new URL('../web/app.mjs',import.meta.url),'utf8');
 const css=readFileSync(new URL('../web/style.css',import.meta.url),'utf8');
+const themesCss=readFileSync(new URL('../web/themes.css',import.meta.url),'utf8');
 const java=readFileSync(new URL('../android/app/src/main/java/cn/local/tomorrow/MainActivity.java',import.meta.url),'utf8');
 const base={schemaVersion:1,semester:{id:'t',name:'测试',startDate:'2026-08-31',weeks:8},rules:[],exceptions:[],remaps:[],closedDates:[],unscheduled:[]};
 
@@ -139,4 +140,38 @@ test('state 迁移：旧状态无 autoUpdate/leaveNotice/leaveUnread 时安全�
  assert.equal(state.leaveNoticeEnabled!==false,true,'默认显示须知');
  assert.equal(state.leaveUnread===true,false);
  assert.equal(state.leaveUnreadBaseline??null,null);
+});
+
+test('应用图标：课表与显示分组内、主题面板之后，两选项写 iconTheme 并立即保存',()=>{
+ const panelAt=app.indexOf('function iconThemePanel(){');
+ assert(panelAt>0,'找不到 iconThemePanel');
+ const panel=app.slice(panelAt,panelAt+6000);
+ assert(panel.includes('id="icon-theme-panel"'));
+ assert(panel.includes('role="group" aria-label="选择应用图标"'));
+ assert(panel.includes('data-action="set-icon-theme"'));
+ assert(panel.includes('data-icon-theme="'));
+ assert(panel.includes('aria-pressed="'));
+ assert(panel.includes('current===value'),'选中态由当前值决定');
+ assert(panel.includes('ICON_THEMES.map'),'选项来自统一常量，文案随常量渲染');
+ assert(panel.includes('桌面图标可能需要几秒刷新，部分桌面需重启或重新添加'),'必须提示桌面图标可能延迟刷新');
+ assert(!panel.includes('app-icon-water.png'),'不得引用不存在的 web 图片资源');
+ const groupAt=app.indexOf(`settingsGroup('课表与显示'`);
+ assert(groupAt>0,'找不到课表与显示分组');
+ const group=app.slice(groupAt,groupAt+400);
+ assert(group.includes('themePanel()+iconThemePanel()+homeDisplayPanel()+timetableExportPanel()'),'应用图标必须在主题面板之后、首页显示之前');
+ assert(app.includes(`const ICON_THEMES=[['whale','鲸鱼女仆（默认）'],['water','水宝宝']]`),'两个选项取值与契约一致');
+ assert(app.includes(`function normalizeIconTheme(value){return value==='water'?'water':'whale';}`),'缺省/非法值回退 whale');
+ assert(app.includes('state.iconTheme=normalizeIconTheme(state.iconTheme);'),'旧 state 缺少 iconTheme 时按 whale 归一');
+ assert(app.includes(`else if(a==='set-icon-theme'){`),'点击选择必须走 set-icon-theme 分支');
+ assert(app.includes('const previous=state.iconTheme;state.iconTheme=normalizeIconTheme(el.dataset.iconTheme);'));
+ assert(app.includes('catch(error){state.iconTheme=previous;throw error;}render();'),'保存失败必须回滚并重渲染');
+ assert(app.includes('?.focus();'),'重渲染后焦点回到选中项');
+ assert(app.includes(`toast(state.iconTheme==='water'?'已切换到水宝宝图标':'已切换到鲸鱼女仆图标'`),'切换后给出反馈');
+ const themeAt=app.indexOf('function themePanel(){');
+ const theme=app.slice(themeAt,themeAt+1200);
+ assert(!theme.includes('水宝宝'),'主题面板旧「水宝宝」文案必须移除');
+ assert(theme.includes('默认图标为鲸鱼女仆'),'主题面板说明默认图标');
+ assert(!/\.brand-icon\{[^}]*#e8f6ff/i.test(css),'应用内品牌图衬底必须与白底鲸鱼图标一致');
+ assert(!/\.mobile-app-icon\{[^}]*#e8f6ff/i.test(themesCss),'移动端品牌图衬底同样修正');
+ assert(/\.settings-groups \.icon-theme-options\{[^}]*repeat\(2,/.test(css),'两个图标选项等宽两列');
 });

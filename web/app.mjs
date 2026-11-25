@@ -62,7 +62,7 @@ state.leaveNoticeEnabled=state.leaveNoticeEnabled!==false;
 const SETTINGS_GROUP_KEYS={自动更新:'auto','课表与显示':'display','请假与调休':'leave','课程与提醒':'course','数据与同步':'data','关于与隐私':'about'};
 const SETTINGS_GROUP_SUMMARIES={
  '自动更新':'打开应用自动核对学校课表',
- '课表与显示':'外观主题 · 首页显示 · 完整课表',
+ '课表与显示':'外观主题 · 应用图标 · 首页显示 · 完整课表',
  '请假与调休':'请假服务 · 调休安排 · 休假设置',
  '课程与提醒':'上课提醒 · 晚自习 · 自定义课程',
  '数据与同步':'<b>写入系统日历</b> · 教务系统 · 导出与排查日志',
@@ -72,6 +72,7 @@ const SETTINGS_GROUP_DEFAULT={auto:true,display:false,leave:false,course:false,d
 state.settingsExpanded=normalizeSettingsExpanded(state.settingsExpanded);
 state.calendarOptions=normalizeCalendarOptions(state.calendarOptions);
 state.showDayOverview=state.showDayOverview===true;
+state.iconTheme=normalizeIconTheme(state.iconTheme);
 state.courseSettings ??= {};
 state.customCourses ??= [];
 const alignedCourses=alignCustomCoursesToSemester(state.customCourses,state.snapshot.semester);
@@ -265,6 +266,8 @@ function holidaySettingsForm(){
 }
 function holidayPanel(){return `<section class="panel holiday-panel"><h2>请假与调休</h2><p>请假服务、寒暑假、单日休假（默认取消当天全部课程）与整日调休。设置只保存在本机，学校同步后仍然有效。</p><button class="button" data-action="holiday-settings">打开请假与调休</button><div class="stat-line"><span>寒假</span><strong>${holidaySummary('winter')}</strong></div><div class="stat-line"><span>暑假</span><strong>${holidaySummary('summer')}</strong></div><div class="stat-line"><span>已恢复上课</span><strong>${state.holidaySettings?.restoreDates?.length||0} 天</strong></div><div class="stat-line"><span>单日休假 / 调休</span><strong>${state.holidaySettings?.days?.length||0} / ${state.localMaps.length}</strong></div></section>`;}
 function themeOptions(){const swatches={system:'linear-gradient(90deg,#fff 50%,#000 50%)',blue:'#83d1f4',dark:'#000',light:'#fff',purple:'#8878dc'};return '<div class="theme-options">'+THEMES.map(([value,label])=>'<button class="theme-choice" data-action="set-theme" data-theme="'+value+'" aria-pressed="'+(themePreference()===value)+'"><span class="theme-swatch" style="background:'+swatches[value]+'"></span>'+label+'</button>').join('')+'</div>';}
+const ICON_THEMES=[['whale','鲸鱼女仆（默认）'],['water','水宝宝']];
+function normalizeIconTheme(value){return value==='water'?'water':'whale';}
 function applySelection(){const state=displayState();selectedWeek=Math.min(state.snapshot.semester.weeks,Math.max(1,selectedWeek));if(weekOf(state.snapshot,weekSelectedDate)!==selectedWeek)weekSelectedDate=addDays(state.snapshot.semester.startDate,(selectedWeek-1)*7+weekday(weekSelectedDate)-1);}
 function changeWeek(value){const state=displayState();selectedWeek=Math.min(state.snapshot.semester.weeks,Math.max(1,value));applySelection();render();}
 function studySettings(){const key='local-evening-study',setting=state.courseSettings[key],grade=currentGrade();modal(`<h3>晚自习设置</h3><p class="scope">这是独立的本机可选安排，默认关闭。开启后仅在大一周日至周四 19:00–20:30 生成；遇到学校晚课自动让位，调休日默认仍显示；法定假日、寒暑假与学校停课日默认不排晚自习，可在完整课表中单日恢复。</p><form id="study-settings-form"><label>当前年级<select name="grade"><option value="">未确认</option>${[1,2,3,4,5,6,7,8].map(g=>`<option value="${g}" ${grade===g?'selected':''}>大${'一二三四五六七八'[g-1]}</option>`).join('')}</select></label><label class="switch"><input type="checkbox" name="enabled" ${state.snapshot.studyPolicy?.userEnabled===true?'checked':''}>启用本机晚自习（默认关闭，与学校课程分开）</label><label>固定教室<input name="room" value="${esc(setting?.patch.room==='—'?'':setting?.patch.room||'')}" placeholder="收到首次通知后填写，如B204" maxlength="80"></label><p class="subtle">晚自习不设置任课老师。单独某一天仍可在课程详情中修改地点。</p><div class="actions"><button type="submit" class="button primary">保存晚自习设置</button><button type="button" class="button" data-action="close">取消</button></div></form>`);}
@@ -465,7 +468,8 @@ async function setAllSettingsGroups(expanded){
   render();
   document.querySelector(`[data-action="${expanded?'settings-expand-all':'settings-collapse-all'}"]`)?.focus();
 }
-function themePanel(){return `<section class="panel"><h2>外观主题</h2><p>江水蓝取自水宝宝的蓝色与图标的浅蓝背景。跟随系统会自动切换黑白。</p>${themeOptions()}</section>`;}
+function themePanel(){return `<section class="panel"><h2>外观主题</h2><p>主题只改变应用内配色，不影响桌面图标。默认图标为鲸鱼女仆，可在下方「应用图标」中切换；跟随系统会自动切换黑白。</p>${themeOptions()}</section>`;}
+function iconThemePanel(){const current=normalizeIconTheme(state.iconTheme);const options=ICON_THEMES.map(([value,label])=>`<button type="button" class="icon-theme-choice" data-action="set-icon-theme" data-icon-theme="${value}" aria-pressed="${current===value}"><span class="icon-theme-swatch ${value}" aria-hidden="true"></span><span>${label}</span></button>`).join('');return `<section class="panel" id="icon-theme-panel"><h2>应用图标</h2><p>选择桌面图标样式，只改变桌面图标，不影响课表、通知和小组件。</p><div class="icon-theme-options" role="group" aria-label="选择应用图标">${options}</div><p class="disabled-note" id="icon-theme-help">选择后立即保存。桌面图标可能需要几秒刷新，部分桌面需重启或重新添加；浏览器预览只记住选择。</p></section>`;}
 function homeDisplayPanel(){return `<section class="panel"><h2>首页显示</h2><label class="switch"><input type="checkbox" id="show-day-overview" ${state.showDayOverview?'checked':''} aria-describedby="day-overview-help">显示今日概览卡片</label><p id="day-overview-help">在今日课表顶部显示日期、教学周和课程数量，默认关闭。开启后显示“今天，按这份课表出发”这张卡片。</p></section>`;}
 function schoolPanel(){const examInfo=examSummary(state.snapshot?.exams);return `<section class="panel"><h2>教务系统</h2><p>在学校自己的登录页面输入凭据。登录与课表读取都在本机完成；学校页面不会获得本应用的数据接口。</p><div class="stat-line"><span>当前来源</span><strong>${esc(state.snapshot.source.label||sourceLabel(state.snapshot.source.kind))}</strong></div><div class="stat-line"><span>最近成功读取</span><strong>${stamp(state.courseLastSuccess)}</strong></div><div class="stat-line"><span>考试安排</span><strong>${examInfo.count?`${examInfo.count} 场 · 数据截至 ${stamp(examInfo.fetchedAt)}${examInfo.stale?' · 待更新':''}${examInfo.error?' · 读取不完整或失败':''}`:examInfo.error?'考试安排读取不完整或失败':'暂无考试数据'}</strong></div>${semesterCalendarStat()}<div class="actions"><button class="button primary" data-action="school">${icon('person')}登录学校门户</button><button class="button" data-action="school-mobile">移动教务入口</button><button class="button" data-action="capture">读取学校课表</button></div><p class="disabled-note">${native?'优先复用本机登录状态并静默读取；需要你登录时才显示学校页面。读取失败会保留上次课表。':'当前是浏览器预览。系统登录、凭据保护和系统通知需使用安装版。'}</p></section>`;}
 function studyPanel(){return `<section class="panel"><h2>晚自习与课程设置</h2><div class="actions"><button class="button primary" data-action="study-settings">设置晚自习</button><button class="button" data-action="course-manager">课程统一设置</button></div><p>晚自习是独立的可选本机安排，默认关闭。开启后仅对大一生效；若与学校晚课冲突，只显示学校课程。</p><div class="stat-line"><span>晚自习状态</span><strong>${studyStatus()}</strong></div><div class="stat-line"><span>当前年级</span><strong>${currentGrade()?`大${'一二三四五六七八'[currentGrade()-1]}`:'未确认'}</strong></div><label>年级<select id="study-grade"><option value="" ${!state.snapshot.studentProfile?'selected':''}>未确认</option>${[1,2,3,4,5,6,7,8].map(g=>`<option value="${g}" ${currentGrade()===g?'selected':''}>大${'一二三四五六七八'[g-1]}</option>`).join('')}</select></label><p class="disabled-note">晚自习安排和课程统一属性保存在本机。</p></section>`;}
@@ -544,7 +548,7 @@ function renderSettings(){
  if(sampleState)return `<section class="panel panel-pad"><h2>正在查看示例课表</h2><p class="subtle">示例仅供浏览。个人课程、调休、晚自习设置和登录状态继续保存在本机。</p></section>${sampleModeEntry()}`;
  return `${quickTools()}<div class="settings-groups">${settingsGroupControls()}
  ${settingsGroup('自动更新',autoUpdatePanel(),'auto')}
- ${settingsGroup('课表与显示',themePanel()+homeDisplayPanel()+timetableExportPanel())}
+ ${settingsGroup('课表与显示',themePanel()+iconThemePanel()+homeDisplayPanel()+timetableExportPanel())}
  ${settingsGroup('请假与调休',leaveServicePanel()+holidayPanel())}
  ${settingsGroup('课程与提醒',studyPanel()+customCoursesPanel()+classReminderPanel()+notificationPanel()+permissionPanel())}
  ${settingsGroup('数据与同步',schoolPanel()+calendarPanel()+timetableLocalPanel()+sourcePanel())}
@@ -748,7 +752,7 @@ if(a==='sample-exit'){await exitSampleMode();return;}
  if(a==='sample-menu-calendar'){modal('<h3>系统日历写入预览</h3>'+renderSampleCalendarPreview(displayState())+'<div class="actions"><button class="button" data-action="close">关闭</button></div>');return;}
  if(a==='sample-menu-export'){modal('<h3>课表导出示例</h3>'+renderSampleExportPanel({week:selectedWeek})+'<div class="actions"><button class="button" data-action="close">关闭</button></div>');return;}
  if(a==='sample-menu-diagnostics'){modal('<h3>排查日志示例</h3>'+renderSampleDiagnosticsPreview()+'<div class="actions"><button class="button" data-action="close">关闭</button></div>');return;}
-if(a==='study-settings'){studySettings();return;}else if(a==='course-manager'){courseManager();return;}else if(a==='course-settings'){courseSettingsForm(el.dataset.name);return;}else if(a==='theme-settings'){modal('<h3>外观主题</h3>'+themeOptions());return;}else if(a==='set-theme'){state.theme=el.dataset.theme;applyTheme(state.theme);await save();if(document.querySelector('.modal .theme-options'))modal('<h3>外观主题</h3>'+themeOptions());return;}else if(a==='clear-course-settings'){const row=el.dataset.name==='晚自习'?{name:'晚自习',localActivity:true}:state.snapshot.rules.find(r=>r.name===el.dataset.name);if(row)delete state.courseSettings[courseSettingKey(row)];await save();close();render();return;}else if(a==='select-week-date'){weekSelectedDate=date;render();return;}
+if(a==='study-settings'){studySettings();return;}else if(a==='course-manager'){courseManager();return;}else if(a==='course-settings'){courseSettingsForm(el.dataset.name);return;}else if(a==='theme-settings'){modal('<h3>外观主题</h3>'+themeOptions());return;}else if(a==='set-theme'){state.theme=el.dataset.theme;applyTheme(state.theme);await save();if(document.querySelector('.modal .theme-options'))modal('<h3>外观主题</h3>'+themeOptions());return;}else if(a==='set-icon-theme'){const previous=state.iconTheme;state.iconTheme=normalizeIconTheme(el.dataset.iconTheme);try{await save();}catch(error){state.iconTheme=previous;throw error;}render();document.querySelector(`[data-action="set-icon-theme"][data-icon-theme="${state.iconTheme}"]`)?.focus();toast(state.iconTheme==='water'?'已切换到水宝宝图标':'已切换到鲸鱼女仆图标',{detail:'桌面图标可能需要几秒刷新，部分桌面需重启或重新添加'});return;}else if(a==='clear-course-settings'){const row=el.dataset.name==='晚自习'?{name:'晚自习',localActivity:true}:state.snapshot.rules.find(r=>r.name===el.dataset.name);if(row)delete state.courseSettings[courseSettingKey(row)];await save();close();render();return;}else if(a==='select-week-date'){weekSelectedDate=date;render();return;}
 if(a==='update-check'){await checkAppUpdate(true);return;}
 if(a==='update-download'){await downloadAppUpdate();return;}
 if(a==='update-skip'){await skipAppUpdate(el.dataset.version||appUpdateLatest?.latestVersion||'');return;}
