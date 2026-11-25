@@ -1,1 +1,1 @@
-<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@drawable/ic_icon_background_water"/><foreground android:drawable="@drawable/ic_launcher_foreground_water"/></adaptive-icon>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><!-- 水宝宝（1.3.4 旧版）自适应图标：背景层 #E8F6FF + 键出前景 --><background android:drawable="@drawable/ic_icon_background_water"/><foreground android:drawable="@drawable/ic_launcher_foreground_water"/></adaptive-icon>

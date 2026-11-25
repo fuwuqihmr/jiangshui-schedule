@@ -1,1 +1,1 @@
-<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle"><solid android:color="#E8F6FF"/></shape>
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle"><!-- 背景色实测自 1.3.4 水宝宝源图：work/tmp/icon-backup-2026-11-13/assets/app-icon.png --><solid android:color="#E8F6FF"/></shape>

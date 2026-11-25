@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {createState} from '../web/core.mjs';
 
 const app=readFileSync(new URL('../web/app.mjs',import.meta.url),'utf8');
@@ -154,7 +154,7 @@ test('应用图标：课表与显示分组内、主题面板之后，两选项�
  assert(panel.includes('current===value'),'选中态由当前值决定');
  assert(panel.includes('ICON_THEMES.map'),'选项来自统一常量，文案随常量渲染');
  assert(panel.includes('桌面图标可能需要几秒刷新，部分桌面需重启或重新添加'),'必须提示桌面图标可能延迟刷新');
- assert(!panel.includes('app-icon-water.png'),'不得引用不存在的 web 图片资源');
+ assert(panel.includes('iconThemeAsset(value)'),'选项缩略图走统一 iconTheme 资源映射');
  const groupAt=app.indexOf(`settingsGroup('课表与显示'`);
  assert(groupAt>0,'找不到课表与显示分组');
  const group=app.slice(groupAt,groupAt+400);
@@ -174,4 +174,26 @@ test('应用图标：课表与显示分组内、主题面板之后，两选项�
  assert(!/\.brand-icon\{[^}]*#e8f6ff/i.test(css),'应用内品牌图衬底必须与白底鲸鱼图标一致');
  assert(!/\.mobile-app-icon\{[^}]*#e8f6ff/i.test(themesCss),'移动端品牌图衬底同样修正');
  assert(/\.settings-groups \.icon-theme-options\{[^}]*repeat\(2,/.test(css),'两个图标选项等宽两列');
+});
+
+test('应用图标资源映射：两个主题各有真实图片，品牌图标与选项缩略图跟随 iconTheme',()=>{
+ const assetsAt=app.indexOf('const ICON_THEME_ASSETS=');
+ assert(assetsAt>0,'缺少 iconTheme→资源映射');
+ const assets=app.slice(assetsAt,assetsAt+400);
+ assert(assets.includes("whale:'./assets/app-icon.png'"),'鲸鱼女仆使用现有图标');
+ assert(assets.includes("water:'./assets/app-icon-water.png'"),'水宝宝使用新图标');
+ assert(assets.includes('function iconThemeAsset(value){return ICON_THEME_ASSETS[normalizeIconTheme(value)];}'),'资源映射以归一后的 iconTheme 为准');
+ assert(existsSync(new URL('../web/assets/app-icon.png',import.meta.url)),'鲸鱼女仆图标文件存在');
+ assert(existsSync(new URL('../web/assets/app-icon-water.png',import.meta.url)),'水宝宝图标文件存在');
+ assert(app.includes('<div class="brand-icon"><img src="${iconThemeAsset(state.iconTheme)}" alt="" width="44" height="44"></div>'),'侧栏品牌图跟随 iconTheme');
+ assert(app.includes('<img class="mobile-app-icon" src="${iconThemeAsset(state.iconTheme)}" alt="江水课表图标" width="36" height="36">'),'移动端品牌图跟随 iconTheme');
+ assert(app.includes('<img src="${iconThemeAsset(state.iconTheme)}" alt="江水课表" width="38" height="38">'),'课堂提醒卡图标跟随 iconTheme');
+ assert(!app.includes('江水课表水宝宝图标'),'移除过时的水宝宝 alt 文案');
+ assert(app.includes('<span class="icon-theme-swatch ${value}" aria-hidden="true"><img src="${iconThemeAsset(value)}" alt="" width="24" height="24"></span>'),'选项按钮内嵌真实图标缩略图');
+ const panelAt=app.indexOf('function iconThemePanel(){');
+ const panel=app.slice(panelAt,panelAt+6000);
+ assert(panel.includes('切换后应用内图标与桌面图标一起变化；课表、通知和小组件不受影响。'),'面板文案说明应用内与桌面图标一起变化');
+ assert(!panel.includes('只改变桌面图标'),'移除只改变桌面图标的旧表述');
+ assert(app.includes("detail:'应用内图标已更新；桌面图标可能需要几秒刷新，部分桌面需重启或重新添加'"),'切换反馈同时提示应用内已更新');
+ assert(/\.settings-groups \.icon-theme-swatch img\{[^}]*object-fit:contain/.test(css),'缩略图按图标比例完整显示');
 });
