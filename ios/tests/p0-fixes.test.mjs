@@ -248,3 +248,68 @@ test('leaveLogin 停表并挂 60 秒，finish 只回一次且停掉登录观察�
   assert.match(finish, /completion\s*=\s*nil/);
   assert.match(finish, /callback\?\(result\)/);
 });
+
+test('WebHost 回前台开启新加载会话，自动重试轮不清零，进程回收合并同端口加载', () => {
+  const begin = body(webhost, 'beginLoadSession').code;
+  assert.ok(begin.length > 0, '无法定位 beginLoadSession');
+  assert.match(begin, /autoRetryUsed\s*=\s*false/);
+  assert.match(begin, /isAutoRetryRound\s*=\s*false/);
+  assert.match(begin, /autoRetryWorkItem\?\.cancel\(\)/);
+  assert.match(begin, /autoRetryWorkItem\s*=\s*nil/);
+
+  const scene = body(webhost, 'scenePhaseChanged').code;
+  const active = /case\s+\.active\s*:([\s\S]*?)default\s*:/.exec(scene);
+  assert.ok(active, 'scenePhaseChanged 缺 case .active');
+  order(active[1], 'beginLoadSession()', 'startIfNeeded()', 'resumePageIfReady()');
+
+  const auto = branchAt(webhost, /private\s+func\s+retryPage\s*\(\s*autoRetry\s*:\s*Bool\s*\)/).code;
+  assert.ok(auto.length > 0, '无法定位 retryPage(autoRetry:)');
+  assert.match(auto, /if\s+!autoRetry\s*\{[\s\S]{0,400}?autoRetryUsed\s*=\s*false[\s\S]{0,400}?isAutoRetryRound\s*=\s*false/);
+  assert.match(auto, /else\s*\{[\s\S]{0,300}?autoRetryUsed\s*=\s*true[\s\S]{0,300}?isAutoRetryRound\s*=\s*true/);
+
+  const load = body(webhost, 'loadIndex').code;
+  assert.match(load, /let\s+autoRound\s*=\s*isAutoRetryRound/);
+  const autoAt = load.indexOf('if autoRound');
+  const elseAt = autoAt < 0 ? -1 : load.indexOf('} else {', autoAt);
+  assert.ok(autoAt >= 0 && elseAt > autoAt, 'loadIndex 未按 isAutoRetryRound 区分新加载/自动重试轮');
+  const autoBranch = load.slice(autoAt, elseAt);
+  const elseBranch = load.slice(elseAt);
+  assert.match(autoBranch, /isAutoRetryRound\s*=\s*false/);
+  assert.doesNotMatch(autoBranch, /beginLoadSession\(\)/, '自动重试轮不能开启新会话，否则会无限重试');
+  assert.match(elseBranch, /beginLoadSession\(\)/);
+  assert.equal((load.match(/beginLoadSession\(\)/g) || []).length, 1, 'loadIndex 只允许新加载分支调用一次 beginLoadSession');
+
+  assert.match(webhost, /if\s+self\.isAutoRetryRound\s*\{\s*self\.services\.state\.log\("page-load-retry port=/);
+  assert.match(webhost, /services\.state\.log\("page-load-start port=[^"]*force=[^"]*auto=[^"]*"\)/);
+  assert.match(webhost, /services\.state\.log\("page-load-failed code=[^"]*retry=[^"]*"\)/);
+  assert.match(webhost, /services\.state\.log\("page-loaded port=[^"]*"\)/);
+
+  const termBody = body(webhost, 'webViewWebContentProcessDidTerminate');
+  const term = termBody.code;
+  assert.ok(term.length > 0, '无法定位 webViewWebContentProcessDidTerminate');
+  assert.match(term, /guard\s+webViewStorage\s*===\s*webView\s+else\s*\{\s*return\s*\}/);
+  assert.match(termBody.raw, /page-terminate/);
+  assert.match(term, /if\s+let\s+port\s*=\s*server\.port,\s*isLoading,\s*currentLoadPort\s*==\s*port\s*\{\s*return\s*\}/);
+  assert.match(term, /startIfNeeded\(\)/);
+  assert.doesNotMatch(term, /reloadFromServer\(\)/, '进程回收不应直接 reloadFromServer，否则会取消在飞导航');
+
+  const termRaw = termBody.raw;
+  const pendingAt = termRaw.indexOf('let pendingNavigation = currentNavigation');
+  const watchAt = pendingAt < 0 ? -1 : termRaw.indexOf('if let port = server.port, isLoading, currentLoadPort == port {', pendingAt);
+  const earlyAt = pendingAt < 0 ? -1 : termRaw.indexOf('if let port = server.port, isLoading, currentLoadPort == port { return }', pendingAt);
+  assert.ok(pendingAt >= 0, '进程回收未捕获 pendingNavigation');
+  assert.ok(watchAt > pendingAt, '进程回收未在 early-return 前安排看门狗');
+  assert.ok(earlyAt > watchAt, '原 early-return 必须保留在看门狗之后');
+
+  const open = termRaw.indexOf('{', watchAt);
+  const close = open < 0 ? -1 : matchBalanced(termRaw, open);
+  assert.ok(close > open, '无法切出进程回收看门狗代码块');
+  const watchdog = termRaw.slice(open, close + 1);
+  assert.match(watchdog, /DispatchWorkItem/);
+  assert.match(watchdog, /asyncAfter\(deadline: \.now\(\) \+ 1\.5, execute: work\)/);
+  assert.match(watchdog, /guard self\.pageLoaded == false,[\s\S]*?self\.isLoading,[\s\S]*?self\.currentLoadPort == port,[\s\S]*?self\.currentNavigation === pendingNavigation else \{ return \}/);
+  assert.match(watchdog, /self\.isLoading = false/);
+  assert.match(watchdog, /page-terminate-recover port=/);
+  assert.match(watchdog, /loadIndex\(port: port, force: true\)/);
+  assert.equal((termRaw.match(/asyncAfter\(deadline: \.now\(\) \+ 1\.5/g) || []).length, 1, '只允许安排一次 1.5s 看门狗');
+});

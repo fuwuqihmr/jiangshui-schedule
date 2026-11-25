@@ -88,7 +88,7 @@ else
 fi
 
 # ---------- 4. 静态门禁 ----------
-head1 "4/6 静态门禁 50 项 + 校验器自测 82 项"
+head1 "4/6 静态门禁 50 项 + 校验器自测 83 项"
 if [ -n "$NODE" ]; then
   if ( cd "$IOS_DIR" && node tools/check-ios.mjs ) >>"$LOG" 2>&1; then
     ok "check-ios 全绿"

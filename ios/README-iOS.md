@@ -15,9 +15,9 @@
 > **2026-10-30 真机首跑问题已修**：登录成功后循环「课表已在后台更新，请稍后重试」的保存冲突已加三层兜底（boot 保留磁盘 revision / 冲突自愈重试 / -1 强制保存），并修 P2 四条运行期问题（needLogin 取消死线、SSO 重挂 90s、onDismissed 取消读取、onPageFinished 再抓会话；`loadState` 显式回包只是防御，不是根因）。改动尚未重新编译/重签，待 CI + 真机复跑验证，详见 `docs/P2-SCHOOL-READ.md` §10。
 > **2026-10-30 P3 进展**：顶部白条 A 方案、P2 无头核对（`alpha=0.01` / 禁止交互 / 仅 `needLogin` 转可见）、请假十步深链、定位 shim 已落源码；上传因 `runOpenPanelWith` 仅 iOS 18.4+ 而预留未接线。静态门禁当时扩到 **46 项**（F11 无头、F12 请假/上传/定位），仍未编译、未真机。
 > **2026-11-24 同步公开仓 v1.5.0**：`web/` 升到 391 项测试；B1–B5 改用 `ios/tests/fixtures/bridge-actions.json` 的 45 action 模型（MUST 35 + OPTIONAL 10），E1/E2 改为共享层 manifest（186 文件，不再冻结单一哈希），静态门禁 **48 项**（新增 G1 实时活动）。当时仍未编译（随后由公开仓 `ios-ci` 编译，见下）、未真机。
-> **2026-11-24：版本号 1.5.0 / 64**（跟安卓 v1.5.0 / versionCode 64 对齐）；`web/` 升 v1.5.0（41 文件、sha256 `5c2648ea…86fcb1`）、契约 45、销假/续假已实现；四套静态门禁 50/82/391 全绿；已于 2026-11-24 首次真实编译，未真机。
+> **2026-11-24：版本号 1.5.0 / 64**（跟安卓 v1.5.0 / versionCode 64 对齐）；`web/` 升 v1.5.0（41 文件、sha256 `5c2648ea…86fcb1`）、契约 45、销假/续假已实现；四套静态门禁 50/83/391 全绿；已于 2026-11-24 首次真实编译，未真机。
 > 考试安排已随课表读取透传（`exams` / `examFetchedAt` / `examError` 三字段，待 CI 编译验证）。
-> **2026-11-25 P0 修复**：本机页面服务异常后会自动换端口/重启（`LocalServer.isHealthy` + 代际守卫 + 1.5s waiting 超时），加载失败有原生错误卡片与「重试」按钮（`WebHost.retryPage()`，0.4s 自动重试一次）；学校登录等待改为 6s 呈现窗口 + 180s 前台倒计时，退后台暂停、回前台续时。静态门禁新增 F13/F14（**50 项**），回归测试 **82 项**；task-58/59 又把页面换代（`readingPageURL`/`readingToken` 作废旧轮询）与旧导航身份校验（`isCurrentNavigation`）并入 F14/F13，仍 50 项。仍待 CI 编译与真机验证。
+> **2026-11-25 P0 修复**：本机页面服务异常后会自动换端口/重启（`LocalServer.isHealthy` + 代际守卫 + 1.5s waiting 超时），加载失败有原生错误卡片与「重试」按钮（`WebHost.retryPage()`，0.4s 自动重试一次）；学校登录等待改为 6s 呈现窗口 + 180s 前台倒计时，退后台暂停、回前台续时。静态门禁新增 F13/F14（**50 项**），回归测试 **83 项**；task-58/59 又把页面换代（`readingPageURL`/`readingToken` 作废旧轮询）与旧导航身份校验（`isCurrentNavigation`）并入 F14/F13，仍 50 项。2026-11-25 又修回前台首次加载失败误弹遮罩（beginLoadSession 分轮、自动重试轮保留会话）与加载中进程回收（1.5s terminate 看门狗，四条件校验），F13 扩展但总项数仍 50 项。仍待 CI 编译与真机验证。
 > **2026-11-24 首次真实编译证据**：已由 GitHub Actions（公开仓分支 ios-ci）完成 Debug/Release/真机三种配置编译，48 项门禁与 66 项测试全绿；产物 IPA 3,397,722 B，sha256 `b9282267…62706`，详见 `docs/BUILD-LOG.md` 第 18 轮。
 > **2026-11-25 图标改为与安卓最新版同款**：iOS 图标与安卓最新版同款（公开仓 `assets/app-icon.png`，1024×1024 白底，转 RGB 去 alpha）；上一轮的深色彩格 A 图标已作废，不再使用。App 内 web 与安卓图标资源已恢复公开仓字节，详见 `docs/BUILD-LOG.md` 第 21 轮。
 > 但**未签名、未连真机、未走 TestFlight**，仍不是可上架产物。
@@ -116,11 +116,11 @@ node tools/gen-pbxproj.mjs
 # 静态门禁：50 项检查（工程一致性 / 45 action 契约对齐 / 协议 conformance / plist / 桥接逐字 / 共享层 manifest / F10-F12 白条·无头·请假定位 / G1 实时活动 / F13-F14 P0 页面服务自愈与登录时钟）
 node tools/check-ios.mjs
 
-# 校验器自身的回归测试：82 项
+# 校验器自身的回归测试：83 项
 node --test ios/tests/
 ```
 
-当前结果（2026-11-25）：`check-ios` **50/50 ok，0 fail**；`node --test ios/tests/` **82/82 pass**；`node --test tests/*.test.mjs`（web，v1.5.0）**391/391 pass**；
+当前结果（2026-11-25）：`check-ios` **50/50 ok，0 fail**；`node --test ios/tests/` **83/83 pass**；`node --test tests/*.test.mjs`（web，v1.5.0）**391/391 pass**；
 共享层不再冻结单一哈希，改由 `ios/tools/shared-layer-manifest.json` 逐文件记录 `git ls-files -c -o --exclude-standard -- web android` 的 blob（当前 186 个文件，排除 `*.apk`/`*.zip`/`build/`/`.gradle/`）；E1/E2 只报 missing/extra/changed，重新登记用 `node ios/tools/check-ios.mjs --write-shared-manifest`。
 详细逐项证据见 `docs/AUDIT.md`；误报记录（8 类）与门禁变异记录见同文件 §4；服务层已知差异见 `docs/AUDIT-APPENDIX-SERVICES.md`；
 本轮整合结论与 Mac 首跑清单见 `docs/INTEGRATION-REPORT.md`。

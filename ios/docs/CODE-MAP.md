@@ -31,7 +31,7 @@ Swift 代码（`ios/Jiangshui/` 里的 .swift 文件）不画界面，它只做�
 | `ios/Jiangshui/School/` | 「学校专线」：登录学校、抄课表、请假、定位。这是整个 App 最复杂的部分。 |
 | `ios/Jiangshui/Resources/` | 不是代码的东西：图标、启动配置（Info.plist）、隐私声明。 |
 | `ios/tools/` | 检查工具：自动生成 Xcode 工程文件、自动检查代码有没有违规。 |
-| `ios/tests/` | 自动测试：82 个小检查，改完代码跑一遍就知道有没有弄坏东西。 |
+| `ios/tests/` | 自动测试：83 个小检查，改完代码跑一遍就知道有没有弄坏东西。 |
 | `ios/docs/` | 各种文档（构建记录、审计报告、路线图）。本文就是其中之一。 |
 | `web/` | **两端共用**的界面层：页面长什么样、按钮点了做什么。 |
 | `android/` | 安卓版的原生代码，改动 iOS 时一般不用碰，但可以作为「参考答案」。 |
@@ -179,7 +179,7 @@ Swift 代码（`ios/Jiangshui/` 里的 .swift 文件）不画界面，它只做�
 ## 8. 想改代码，先记住这 6 条规矩
 
 1. **`web/` 是和安卓共用的**。改它等于同时改两端，必须把两端测试都跑过；而且它被 `ios/tools/shared-layer-manifest.json` 逐文件锁着（E1/E2 比对 git 规范化 blob），合法升级后用 `node ios/tools/check-ios.mjs --write-shared-manifest` 重新登记。
-2. **改完 Swift 必须跑两条命令**：`node ios/tools/check-ios.mjs`（50 项静态检查）和 `cd ios && node --test ios/tests/`（82 项测试）。
+2. **改完 Swift 必须跑两条命令**：`node ios/tools/check-ios.mjs`（50 项静态检查）和 `cd ios && node --test ios/tests/`（83 项测试）。
 3. **这台 Windows 电脑编不了 iOS**。Swift 只能靠 GitHub Actions 的 Mac 编译，所以改完要推上去看流水线。
 4. **注释也算代码**：本仓库的注释要求「先讲人话，再讲术语」。
 5. **提交要一次推一条**：流水线开了「新提交取消旧运行」，连着推会把正在跑的那次取消掉。

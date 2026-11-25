@@ -2,7 +2,7 @@
 
 > 交付日期：2026-10-29　实现：Lead（本会话直接开发，未分工）
 > 目标：把「一行不存在的 P2」变成能真正登录学校 → 读课表 → 读假条的 iOS 实现，与 Android 行为对齐。
-> 状态：**已编译通过**（commit `9685ab5`：Debug / Release / iphoneos 三条链路 BUILD SUCCEEDED、0 error，未签名 IPA 3,243,844 B 已产出；静态门禁 50/50、iOS 82 测试、web 391 测试全绿）。**尚未用真实学校账号跑通** —— 真机验证是唯一的验收口径。
+> 状态：**已编译通过**（commit `9685ab5`：Debug / Release / iphoneos 三条链路 BUILD SUCCEEDED、0 error，未签名 IPA 3,243,844 B 已产出；静态门禁 50/50、iOS 83 测试、web 391 测试全绿）。**尚未用真实学校账号跑通** —— 真机验证是唯一的验收口径。
 > 真机验证清单见 §7，必须用真实学校账号跑一遍本文件才算「P2 完成」。
 
 ## 1. 新增/改动的文件
@@ -125,7 +125,7 @@ start(host:completion:)
 cd ios
 node tools/gen-pbxproj.mjs     # 幂等；自动收录新 .swift（当前 Swift 41 个）
 node tools/check-ios.mjs       # 50 项静态门禁
-node --test tests/             # 82 项桥接/工程一致性测试
+node --test tests/             # 83 项桥接/工程一致性测试
 cd .. && node --test tests/*.test.mjs   # web 共享层 391 项
 ```
 
@@ -163,7 +163,7 @@ Sideloadly 重签的 IPA 在真机首次登录成功后，课表已能显示，�
 ### 10.5 状态与验收
 
 - 已落盘：`web/state-sync.mjs`、`web/app.mjs` 三层兜底；`StateStore` 冲突日志；上表四条运行期修复；`BridgeDispatcher` 显式回包防御。
-- 静态门禁 **50/50**、iOS **82 pass**、web **391 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
+- 静态门禁 **50/50**、iOS **83 pass**、web **391 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
 - **尚未重新编译、重签、真机复跑**：本机无 Xcode，结论只到静态与 Node 层。下一次真机重点验：首次登录不弹保存冲突、点「返回课表」立即取消、假条同步不再恒 `NEED_SESSION`、登录等待不再被 60s 误杀（现已改为 6s 呈现 + 180s 前台倒计时，见 §13）。
 
 ## 11. P3 进展：顶部白条、无头核对、请假深链、上传与定位（2026-10-30）
@@ -214,7 +214,7 @@ Sideloadly 重签的 IPA 在真机首次登录成功后，课表已能显示，�
 
 ### 11.6 状态
 
-- 静态门禁 **50/50**、iOS **82 pass**、web **391 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
+- 静态门禁 **50/50**、iOS **83 pass**、web **391 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
 - **考试透传与 P0 修复本轮未编译**；白条视觉、无头容器是否被 WebKit 降频、请假深链回跳、上传/定位两条 P3 偏离都已随 v1.5.0 编译，但仍需 Mac + 真机复核。
 
 ## 12. 考试字段透传（S 档，2026-11-24，未编译验证）
@@ -249,5 +249,12 @@ Sideloadly 重签的 IPA 在真机首次登录成功后，课表已能显示，�
 
 ### 13.3 状态
 
-- 本机静态门禁 **50/50**，iOS 回归 **82/82**，web **391/391**，gen 幂等 sha `b1cfa9e2…41b3d8b`。task-58/59 的 reading 换代与旧导航身份校验已并入 F14/F13，仍 50 项、不新增编号。
+- 本机静态门禁 **50/50**，iOS 回归 **83/83**，web **391/391**，gen 幂等 sha `b1cfa9e2…41b3d8b`。task-58/59 的 reading 换代与旧导航身份校验已并入 F14/F13，仍 50 项、不新增编号。
 - **未编译、未真机**：端口占用/系统回收时的 1.5s 换端口、`stop→start` 后 WKWebView 重载、真机锁屏/切后台时 180s 的累计与恢复、错误卡片布局与按钮交互，都必须由 CI 编译 + 真机（含学校账号）验证。
+
+### 13.4 回前台加载会话与 terminate 看门狗（task-62/task-64）
+
+- **回前台首次加载失败误弹遮罩（task-61）**：`WebHost` 新增 `isAutoRetryRound`，`retryPage(autoRetry:)` 只在手动重试时清零标记、自动重试轮保留当前加载会话；`beginLoadSession()` 统一清四项并取消旧 work；scene 回到 `.active` 时先 `beginLoadSession()` 再 `startIfNeeded()` / `resumePageIfReady()`；`loadIndex` 的 `autoRound` 分支不再重复开轮；`didFinish` 清标记。
+- **加载中进程回收（task-64）**：`webViewWebContentProcessDidTerminate` 先捕获 `pendingNavigation`；若同一端口仍在加载，挂 1.5s `DispatchWorkItem` 看门狗。超时后仍满足 `pageLoaded == false`、`isLoading`、`currentLoadPort == port`、`currentNavigation === pendingNavigation` 四条件时，清 `isLoading`、写 `page-terminate-recover port=…`、`loadIndex(port: port, force: true)`；原 early-return 保留在看门狗之后，避免同一轮重复启动。
+- **门禁与回归**：F13 增补上述形状（`beginLoadSession`、scene 顺序、retry 分支、`loadIndex` 分支、`page-load-*` 日志、看门狗四条件与只调度一次），总数仍 50 项；`ios/tests/p0-fixes.test.mjs` 第 11 条同步，iOS 回归 82→83。变异「删 scene 的 beginLoadSession / auto 轮无条件重开 / 删 terminate 合并守卫 / 删看门狗 / 1.5→2.0 / 弱化四条件 / 删 early-return」均能红。
+- **未验证**：本轮未编译、未真机；WebKit 在真机后台被回收时的 `scenePhase` 时序、回前台首次加载失败是否仍误弹、看门狗 1.5s 后能否在同端口恢复，都必须 CI + 真机/模拟器验证。

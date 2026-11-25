@@ -53,6 +53,8 @@ final class WebHost: NSObject, ObservableObject {
     private var autoRetryUsed = false
     // 0.4 秒后执行的自动重试任务；手动重试/加载成功时取消。
     private var autoRetryWorkItem: DispatchWorkItem?
+    // 当前这一轮是不是自动重试：是的话 loadIndex 不能清零 autoRetryUsed，否则会无限重试。
+    private var isAutoRetryRound = false
 
     /// 注销后延迟清数据，保证 logout 的回包先到 JS（web/app.mjs:595 随后 location.reload()）。
     private static let logoutCleanupDelay: TimeInterval = 0.8
@@ -72,6 +74,10 @@ final class WebHost: NSObject, ObservableObject {
         server.onReady = { [weak self] port in
             guard let self = self else { return }
             self.serverError = nil
+            // 自动重试终于等到端口：先记一笔，再交给 loadIndex 真正加载。
+            if self.isAutoRetryRound {
+                self.services.state.log("page-load-retry port=\(port)")
+            }
             self.loadIndex(port: port)
         }
         server.onFailure = { [weak self] message in
@@ -81,6 +87,7 @@ final class WebHost: NSObject, ObservableObject {
             self.loadedPort = nil
             self.currentLoadPort = nil
             self.currentNavigation = nil
+            self.isAutoRetryRound = false
             self.serverErrorTitle = "页面服务未启动"
             self.serverError = message
         }
@@ -239,6 +246,15 @@ final class WebHost: NSObject, ObservableObject {
 
     // MARK: - 生命周期
 
+    /// 开启一轮全新的页面加载：清零自动重试次数，并取消还没执行的自动重试。
+    /// 自动重试那一轮不能调这里，否则失败后还会再自动重试，变成无限循环。
+    private func beginLoadSession() {
+        autoRetryUsed = false
+        isAutoRetryRound = false
+        autoRetryWorkItem?.cancel()
+        autoRetryWorkItem = nil
+    }
+
     /// App 前台/启动时调用：服务没起就起，起了就直接加载页面。
     func startIfNeeded() {
         if let port = server.port {
@@ -261,6 +277,8 @@ final class WebHost: NSObject, ObservableObject {
     func scenePhaseChanged(_ phase: ScenePhase) {
         switch phase {
         case .active:
+            // 长时间在后台可能已经失败过一轮；回前台先当全新会话，第一次失败仍静默重试。
+            beginLoadSession()
             startIfNeeded()
             resumePageIfReady()
         default:
@@ -307,9 +325,15 @@ final class WebHost: NSObject, ObservableObject {
 
     private func retryPage(autoRetry: Bool) {
         if !autoRetry {
+            // 手动重试 = 新会话：清零计数，取消可能还在排队的自动重试。
             autoRetryUsed = false
             autoRetryWorkItem?.cancel()
             autoRetryWorkItem = nil
+            isAutoRetryRound = false
+        } else {
+            // 自动重试轮：保留 autoRetryUsed=true，并告诉下一轮 loadIndex 不要当新会话。
+            autoRetryUsed = true
+            isAutoRetryRound = true
         }
         serverError = nil
         isLoading = false
@@ -336,6 +360,15 @@ final class WebHost: NSObject, ObservableObject {
             serverError = "页面地址无效"
             return
         }
+        // 先判断这一轮是不是自动重试；只有真正的新加载才清零计数。
+        let autoRound = isAutoRetryRound
+        if autoRound {
+            // 自动重试已经真正开始：保留 autoRetryUsed=true，第二次失败就直接报错。
+            isAutoRetryRound = false
+        } else {
+            beginLoadSession()
+        }
+        services.state.log("page-load-start port=\(port) force=\(force ? 1 : 0) auto=\(autoRound ? 1 : 0)")
         // 重新生成 shim，让页面模块求值时读到当前系统外观。
         installUserScripts(on: webView.configuration.userContentController)
         bridge.reset()
@@ -357,7 +390,7 @@ final class WebHost: NSObject, ObservableObject {
         webView.evaluateJavaScript(script, completionHandler: nil)
     }
 
-    /// 重新加载当前本地页面（注销清缓存、WebKit 崩溃后都用它）。
+    /// 注销清完网页数据后强制重新加载当前本地页面。
     private func reloadFromServer() {
         if let port = server.port, server.isHealthy {
             loadIndex(port: port, force: true)
@@ -371,6 +404,8 @@ final class WebHost: NSObject, ObservableObject {
         guard isLoading, webViewStorage != nil else { return }
         let nsError = error as NSError
         guard nsError.code != NSURLErrorCancelled else { return }
+        let retryLabel = autoRetryUsed ? "第二次" : "used"
+        services.state.log("page-load-failed code=\(nsError.code) retry=\(retryLabel)")
         isLoading = false
         pageLoaded = false
         loadedPort = nil
@@ -484,8 +519,10 @@ extension WebHost: WKNavigationDelegate {
         loadedPort = currentLoadPort
         serverError = nil
         autoRetryUsed = false
+        isAutoRetryRound = false
         autoRetryWorkItem?.cancel()
         autoRetryWorkItem = nil
+        services.state.log("page-loaded port=\(loadedPort ?? 0)")
     }
 
     /// 加载失败：每轮自动重试一次；第二次失败才显示错误遮罩。
@@ -502,9 +539,31 @@ extension WebHost: WKNavigationDelegate {
 
     /// WebKit 的网页进程被系统杀掉：重新加载本地页面，数据不会丢。
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard webViewStorage === webView else { return }
         // WebKit 进程被系统回收：重新加载本地页面（数据在 localStorage/原生里，不丢）。
         pageLoaded = false
-        reloadFromServer()
+        services.state.log("page-terminate")
+        // 页面进程被回收后，这轮加载可能已经死了，但 WebKit 不一定补 didFail，补的也可能是 cancelled。
+        // 那样 isLoading 会一直 true，startIfNeeded 永远被同端口 loading 挡住，白屏且没有遮罩。
+        // 所以先挂一个只执行一次的 1.5 秒看门狗：认准触发回收时的端口和导航，期间有任何变化就不动。
+        let pendingNavigation = currentNavigation
+        if let port = server.port, isLoading, currentLoadPort == port {
+            let work = DispatchWorkItem { [weak self] in
+                guard let self = self else { return }
+                guard self.pageLoaded == false,
+                      self.isLoading,
+                      self.currentLoadPort == port,
+                      self.currentNavigation === pendingNavigation else { return }
+                self.isLoading = false
+                self.services.state.log("page-terminate-recover port=\(port)")
+                self.loadIndex(port: port, force: true)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: work)
+        }
+        // 同一端口已经有一轮加载在飞（可能正是 startIfNeeded 刚发起的）：别再发一次，
+        // 否则会把那次导航取消；换端口或没在加载则交给 startIfNeeded 统一处理。
+        if let port = server.port, isLoading, currentLoadPort == port { return }
+        startIfNeeded()
     }
 }
 

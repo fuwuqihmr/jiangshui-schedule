@@ -637,6 +637,45 @@ iOS 转换口径：用 Pillow `Image.open(...).convert("RGB")` 保存，**不缩
 - **登录时钟必须真机锁屏验证**：`willResignActive/didBecomeActive` 是否成对、180s 是否只累计前台时间、6s 未 present 的文案与诊断、`xskb` 落点是否不再白等，`simctl` 无法注入锁屏。
 - 未 commit / push。
 
+## 第 23 轮：回前台加载会话 + terminate 看门狗（2026-11-25，未编译验证）
+
+本轮不新增产品代码，只把 task-61/task-64 的运行期修复补成门禁、回归测试与文档；产品改动仍在工作树，未 commit / push。
+
+### 23.1 修复口径
+
+- **回前台首次加载失败误弹遮罩（task-61）**：`WebHost` 引入 `isAutoRetryRound` 区分手动重试与自动重试；新增 `beginLoadSession()` 统一清四项并取消旧 work；scene 回到 `.active` 时先 `beginLoadSession()` 再 `startIfNeeded()` / `resumePageIfReady()`；`retryPage(autoRetry:)` 只在手动分支清零、自动分支保留当前会话；`loadIndex` 的 `autoRound` 分支不再重复开轮；`didFinish` 清标记。
+- **加载中进程回收（task-64）**：`webViewWebContentProcessDidTerminate` 先捕获 `pendingNavigation`；同一端口仍在加载时挂 1.5s `DispatchWorkItem` 看门狗。超时后仍满足 `pageLoaded == false`、`isLoading`、`currentLoadPort == port`、`currentNavigation === pendingNavigation` 四条件时，清 `isLoading`、写 `page-terminate-recover port=…`、`loadIndex(port: port, force: true)`；原 early-return 保留在看门狗之后。`WebHost.swift` 最终 618 行。
+
+### 23.2 门禁与回归
+
+- F13 增补：`beginLoadSession` 四项清零/取消、scene `.active` 顺序、`retryPage` 手动/自动分支、`loadIndex` 的 `autoRound` 分支、`page-load-*` 日志、terminate 身份 guard / 合并守卫 / 看门狗捕获 `pendingNavigation` / 调度在 early-return 之前 / 四条件 / `isLoading=false` / `page-terminate-recover` / `loadIndex(force: true)` / 只调度一次。总数仍 **50 项**。
+- `ios/tests/p0-fixes.test.mjs` 第 11 条同步扩展；`node --test ios/tests/` 从 **82** 增至 **83**。
+
+### 23.3 门禁变异（临时副本，已清理）
+
+- control：F13 ok。
+- 删 scene `.active` 的 `beginLoadSession` → F13 FAIL。
+- `loadIndex` 的 `autoRound` 改为无条件 `beginLoadSession` → F13 FAIL。
+- 删 terminate 合并守卫 → F13 FAIL。
+- 删 1.5s 看门狗块 → F13 FAIL。
+- 看门狗 `1.5` 改 `2.0` → F13 FAIL。
+- 四条件里的导航身份改成自比较 → F13 FAIL。
+- 删看门狗之后的原 early-return → F13 FAIL。
+
+### 23.4 本机结果
+
+- `gen-pbxproj` 连跑两次，pbxproj sha256 前/中/后均 `b1cfa9e26a82765e555f434a8ad02e7668f3404aaad3f3503d306f98741b3d8b`（幂等）；主 App Swift 41 个（共享 1 个）/ 资源 3 个 / 文件引用 51 条，Widget 3 个 / iOS 16.1。
+- `check-ios`：**50 项，ok 50，fail 0**（退出码 0）。
+- `node --test ios/tests/`：**83 tests / 83 pass / 0 fail**。
+- `node --test tests/*.test.mjs`（web v1.5.0）：**391 tests / 391 pass / 0 fail**。
+- 共享层 E1/E2 仍 186 文件 / `fd4960f5…c61f9ce`；未改 `web/`、`android/`。
+- 未 commit / push。
+
+### 23.5 未证明 / 风险
+
+- **未编译**：本机无 Xcode；F13 第 11 条只证明源码形状，`WebKit` 的 scenePhase 时序、回前台首次失败是否仍误弹、加载中进程回收后 1.5s 看门狗能否恢复，都需 CI 编译 + 真机/模拟器。
+- 看门狗只覆盖同一端口、同一轮加载；换端口或新加载会让四条件之一失败而自动失效，这是设计，但真机行为未验。
+
 ## 尚未取得的证据（不要当成已通过）
 
 | 项 | 需要什么 |

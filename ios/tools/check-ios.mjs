@@ -2708,8 +2708,90 @@ export function runChecks(root) {
     else {
       need(/serverError\s*=\s*nil/.test(didFinish), 'didFinish 未清 serverError');
       need(/autoRetryUsed\s*=\s*false/.test(didFinish), 'didFinish 未重置自动重试计数');
+      need(/isAutoRetryRound\s*=\s*false/.test(didFinish), 'didFinish 未结束自动重试轮标记');
       need(/pageLoaded\s*=\s*true/.test(didFinish), 'didFinish 未标记页面已加载');
     }
+
+    // 回归（task-61）：回前台必须开启全新加载会话；自动重试轮不能被误清零，否则会无限重试。
+    const beginSession = webBody('beginLoadSession');
+    if (!beginSession) problems.push('无法定位 WebHost.beginLoadSession');
+    else {
+      need(/autoRetryUsed\s*=\s*false/.test(beginSession), 'beginLoadSession 未清零 autoRetryUsed');
+      need(/isAutoRetryRound\s*=\s*false/.test(beginSession), 'beginLoadSession 未清自动重试轮标记');
+      need(/autoRetryWorkItem\?\.cancel\(\)/.test(beginSession), 'beginLoadSession 未取消待执行的自动重试');
+      need(/autoRetryWorkItem\s*=\s*nil/.test(beginSession), 'beginLoadSession 未释放自动重试任务');
+    }
+
+    const scene = webBody('scenePhaseChanged');
+    if (!scene) problems.push('无法定位 WebHost.scenePhaseChanged');
+    else {
+      const active = /case\s+\.active\s*:([\s\S]*?)default\s*:/.exec(scene);
+      if (!active) problems.push('scenePhaseChanged 缺 case .active');
+      else {
+        const block = active[1];
+        need(/beginLoadSession\s*\(\)/.test(block), 'App 回前台未开启全新加载会话（缺 beginLoadSession）');
+        const beginAt = block.indexOf('beginLoadSession()');
+        const startAt = block.indexOf('startIfNeeded()');
+        const resumeAt = block.indexOf('resumePageIfReady()');
+        need(beginAt >= 0 && startAt > beginAt, 'scene .active 必须先 beginLoadSession 再 startIfNeeded');
+        need(startAt >= 0 && resumeAt > startAt, 'scene .active 未在 startIfNeeded 后恢复页面');
+      }
+    }
+
+    need(/if\s+!autoRetry\s*\{[\s\S]{0,400}?autoRetryUsed\s*=\s*false[\s\S]{0,400}?isAutoRetryRound\s*=\s*false/.test(retryBody), '手动 retryPage 未结束上一轮自动重试');
+    need(/else\s*\{[\s\S]{0,300}?autoRetryUsed\s*=\s*true[\s\S]{0,300}?isAutoRetryRound\s*=\s*true/.test(retryBody), '自动重试轮未保留 autoRetryUsed=true / 未标记 isAutoRetryRound');
+
+    need(/let\s+autoRound\s*=\s*isAutoRetryRound/.test(load), 'loadIndex 未记录本轮是否自动重试');
+    const autoAt = load.indexOf('if autoRound');
+    const elseAt = autoAt < 0 ? -1 : load.indexOf('} else {', autoAt);
+    if (autoAt < 0 || elseAt < 0) {
+      problems.push('loadIndex 未按 isAutoRetryRound 区分新加载/自动重试轮');
+    } else {
+      const autoBranch = load.slice(autoAt, elseAt);
+      const elseBranch = load.slice(elseAt);
+      need(/isAutoRetryRound\s*=\s*false/.test(autoBranch), '自动重试轮未结束 isAutoRetryRound 标记');
+      need(!/beginLoadSession\s*\(\)/.test(autoBranch), '自动重试轮不能调用 beginLoadSession（会导致无限重试）');
+      need(/beginLoadSession\s*\(\)/.test(elseBranch), '全新加载轮未调用 beginLoadSession');
+    }
+    need((load.match(/beginLoadSession\s*\(\)/g) || []).length === 1, 'loadIndex 只允许全新加载分支调用一次 beginLoadSession');
+
+    const terminate = webBody('webViewWebContentProcessDidTerminate');
+    if (!terminate) problems.push('无法定位 WebHost.webViewWebContentProcessDidTerminate');
+    else {
+      need(/guard\s+webViewStorage\s*===\s*webView\s+else\s*\{\s*return\s*\}/.test(terminate), '进程回收回调未校验 webView 身份');
+      need(/page-terminate/.test(terminate), '进程回收未记录 page-terminate 诊断');
+      need(/startIfNeeded\s*\(\)/.test(terminate), '进程回收后未交给 startIfNeeded');
+      need(!/reloadFromServer\s*\(\)/.test(terminate), '进程回收不应直接 reloadFromServer（会取消在飞导航）');
+
+      // task-64：同端口 isLoading 的 early-return 前必须有 1.5s 看门狗，只对同一轮加载生效。
+      const pendingAt = terminate.indexOf('let pendingNavigation = currentNavigation');
+      const watchStart = pendingAt < 0 ? -1 : terminate.indexOf('if let port = server.port, isLoading, currentLoadPort == port {', pendingAt);
+      const earlyReturnAt = pendingAt < 0 ? -1 : terminate.indexOf('if let port = server.port, isLoading, currentLoadPort == port { return }', pendingAt);
+      need(pendingAt >= 0, '进程回收未捕获 pendingNavigation');
+      need(watchStart > pendingAt, '进程回收未在 early-return 前安排看门狗');
+      need(earlyReturnAt > watchStart, '进程回收的原 early-return 必须保留在看门狗之后');
+      if (watchStart > pendingAt) {
+        const open = terminate.indexOf('{', watchStart);
+        const close = open < 0 ? -1 : matchBalanced(terminate, open);
+        const watchdog = close > open ? terminate.slice(open, close + 1) : '';
+        if (!watchdog) problems.push('无法切出进程回收看门狗代码块');
+        else {
+          need(/DispatchWorkItem\s*\{/.test(watchdog), '进程回收看门狗未使用 DispatchWorkItem');
+          need(/DispatchQueue\.main\.asyncAfter\(deadline:\s*\.now\(\)\s*\+\s*1\.5,\s*execute:\s*work\)/.test(watchdog), '进程回收看门狗未在 1.5s 后执行');
+          need(/guard\s+self\.pageLoaded\s*==\s*false,\s*self\.isLoading,\s*self\.currentLoadPort\s*==\s*port,\s*self\.currentNavigation\s*===\s*pendingNavigation\s+else\s*\{\s*return\s*\}/.test(watchdog), '看门狗未同时校验 pageLoaded/isLoading/端口/导航身份，可能误救新加载');
+          need(/self\.isLoading\s*=\s*false/.test(watchdog), '看门狗触发时未清 isLoading');
+          need(/self\.services\.state\.log\("page-terminate-recover port=/.test(watchdog), '看门狗未记录 page-terminate-recover');
+          need(/self\.loadIndex\(port:\s*port,\s*force:\s*true\)/.test(watchdog), '看门狗未强制重新加载同一端口');
+        }
+      }
+      need((terminate.match(/asyncAfter\(deadline:\s*\.now\(\)\s*\+\s*1\.5/g) || []).length === 1, '进程回收看门狗只允许安排一次 1.5s');
+    }
+
+    need(/if\s+self\.isAutoRetryRound\s*\{\s*self\.services\.state\.log\("page-load-retry port=/.test(web), '自动重试等到端口时未记录 page-load-retry');
+    need(/services\.state\.log\("page-load-start port=[^"]*force=[^"]*auto=[^"]*"\)/.test(web), 'loadIndex 缺 page-load-start/force/auto 诊断字段');
+    need(/services\.state\.log\("page-load-failed code=[^"]*retry=[^"]*"\)/.test(web), '加载失败缺 page-load-failed/code/retry 诊断字段');
+    need(/services\.state\.log\("page-loaded port=[^"]*"\)/.test(web), '加载成功缺 page-loaded 诊断');
+    need(/services\.state\.log\("page-terminate"\)/.test(web), '进程回收缺 page-terminate 诊断');
 
     const currentNav = bodyOf(web, webCode, 'isCurrentNavigation');
     if (!currentNav) problems.push('无法定位 WebHost.isCurrentNavigation');
@@ -2725,7 +2807,7 @@ export function runChecks(root) {
     need(/Text\s*\(\s*host\.serverErrorTitle\s*\)/.test(root), 'RootView 未显示 host.serverErrorTitle');
     need(/Button\s*\(\s*"重试"\s*\)\s*\{\s*host\.retryPage\(\)\s*\}/.test(root), 'RootView 重试按钮未调用 host.retryPage()');
 
-    return problems.length ? fail(truncateList(problems)) : pass('LocalServer 健康判定/代际失效/waiting 1.5s 换端口/failed·cancelled 先清理再重启/单一 onFailure，WebHost 错误遮罩与 stop→start 重试、0.4s 自动重试一次、旧导航按 currentNavigation 身份拒绝、RootView 重试按钮均在位');
+    return problems.length ? fail(truncateList(problems)) : pass('LocalServer 健康判定/代际失效/waiting 1.5s 换端口/failed·cancelled 先清理再重启/单一 onFailure，WebHost 错误遮罩与 stop→start 重试、0.4s 自动重试一次、回前台 beginLoadSession 开启新会话、自动重试轮保留计数、进程回收合并同端口加载并挂 1.5s 看门狗、page-load-* 诊断齐全、旧导航按 currentNavigation 身份拒绝、RootView 重试按钮均在位');
   });
 
   add('F14', 'P0 登录时钟：6s 呈现窗口 + 180s 活跃倒计时，后台暂停，xskb 落点先 leaveLogin', () => {
@@ -2894,7 +2976,7 @@ export function runChecks(root) {
     if (!leave) problems.push('无法定位 leaveLogin');
     else need(/stopLoginClock\(\)/.test(leave) && /scheduleDeadline\s*\(\s*Self\.leaveLoginDeadline\s*\)/.test(leave), 'leaveLogin 未停表并改挂 60s 离开登录页上限');
 
-    return problems.length ? fail(truncateList(problems)) : pass('loginDeadline=180、presenting 6s/0.5s 轮询、后台暂停回前台续时、xskb 先 leaveLogin、reading 三处复位，页面换代由 readingPageURL/readingToken 作废旧轮询均在位');
+    return problems.length ? fail(truncateList(problems)) : pass('loginDeadline=180、presenting 6s/0.5s 轮询、后台暂停回前台续时、xskb 先 leaveLogin、reading 四处复位（start/登录结果/xskb换代/finish），页面换代由 readingPageURL/readingToken 作废旧轮询均在位');
   });
 
   return results;

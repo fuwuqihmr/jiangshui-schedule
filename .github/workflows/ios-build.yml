@@ -20,7 +20,7 @@ concurrency:
 jobs:
   build:
     name: xcodebuild 模拟器编译
-    runs-on: macos-15-intel
+    runs-on: macos-14
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -63,7 +63,7 @@ jobs:
           node tools/check-ios.mjs 2>&1 | tee "$OUT/check.log"
           echo $? > "$OUT/rc-check"
 
-      - name: 校验器自测 82 项
+      - name: 校验器自测 83 项
         working-directory: ios
         run: |
           OUT=build-out
@@ -285,9 +285,3 @@ jobs:
             exit 1
           fi
           echo '全部通过。'
-
-# sync 7027587 P0
-
-# retrigger 7027587 1795612866
-
-# retrigger after runner fix 1795612928
