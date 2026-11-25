@@ -22,16 +22,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh run download 45622875190 --repo "${{ github.repository }}" -n jiangshui-unsigned-ipa -D out
+          gh run download 45648616594 --repo "${{ github.repository }}" -n jiangshui-unsigned-ipa -D out
           find out -type f -name '*.ipa' -print
       - name: 创建公开 release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh release delete ios-ci-7027587 --repo "${{ github.repository }}" --yes || true
+          gh release delete ios-ci-9961a99 --repo "${{ github.repository }}" --yes || true
           IPA="$(find out -type f -name '*.ipa' | head -1)"
           test -n "$IPA"
-          gh release create ios-ci-7027587 "$IPA" --repo "${{ github.repository }}" \
-            --title "iOS 1.5.0 未签名 IPA（7027587）" \
-            --notes "CI run 45622875190 / commit 7027587。未签名，仅供 Sideloadly 等工具重签后侧载。"
+          gh release create ios-ci-9961a99 "$IPA" --repo "${{ github.repository }}" \
+            --title "iOS 1.5.0 未签名 IPA（9961a99）" \
+            --notes "CI run 45648616594 / commit 9961a99。未签名，仅供 Sideloadly 等工具重签后侧载。"
