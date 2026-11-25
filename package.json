@@ -1,9 +1,9 @@
 {
   "name": "course-change",
   "productName": "江水课表",
-  "version": "1.5.1-rc2",
+  "version": "1.5.1",
   "android": {
-    "versionCode": 66
+    "versionCode": 67
   },
   "private": true,
   "license": "GPL-3.0-or-later",

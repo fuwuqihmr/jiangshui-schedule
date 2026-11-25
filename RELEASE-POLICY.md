@@ -21,7 +21,7 @@
 
 ## 当前状态
 
-- 当前版本 **1.5.1-rc2**（versionCode **66**，发布 tag `v1.5.1-rc2`）：预发布测试版（水宝宝素材纠错 + 应用内图标跟随真机验证），由 CI 构建并用固定证书签名；GitHub Release 发布为 prerelease，不占用 latest（latest 仍为 v1.5.0）。
-- 版本号唯一真源为仓库根 `package.json`：`version=1.5.1-rc2`、`android.versionCode=66`；Gradle、构建脚本、CI、README 与测试均从该文件读取或断言一致，不再各写一份需要手工同步的字面量。
+- 当前版本 **1.5.1**（versionCode **67**，发布 tag `v1.5.1`）：正式版（Android 桌面图标可在「设置 → 课表与显示 → 应用图标」切换：鲸鱼女仆 / 水宝宝，默认鲸鱼女仆），由 CI 构建并用固定证书签名；GitHub Release 发布为正式版（占用 latest）。
+- 版本号唯一真源为仓库根 `package.json`：`version=1.5.1`、`android.versionCode=67`；Gradle、构建脚本、CI、README 与测试均从该文件读取或断言一致，不再各写一份需要手工同步的字面量。
 - 历史版本状态（1.3.0 / 1.3.1 系列与 1.4.0 预发布序列）见 `DECISIONS.md` 与 `ANDROID-CHANGELOG.md`；本文件只保留版本规则与当前状态。
 - 下一版本号由维护者按修订单点递增，交付时只改 `package.json`（`android.versionCode` 同步 +1）。
