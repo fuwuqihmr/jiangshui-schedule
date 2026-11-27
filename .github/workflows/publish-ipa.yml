@@ -23,7 +23,7 @@ jobs:
         run: |
           set +e
           {
-            gh run download 45648616594 --repo "${{ github.repository }}" -n jiangshui-unsigned-ipa -D out
+            gh run download 45946273362 --repo "${{ github.repository }}" -n jiangshui-unsigned-ipa -D out
           } > /tmp/dl.log 2>&1
           rc=$?
           {
@@ -42,10 +42,10 @@ jobs:
             IPA="$(find out -type f -name '*.ipa' | head -1)"
             echo "IPA=$IPA"
             test -n "$IPA"
-            gh release delete ios-ci-9961a99 --repo "${{ github.repository }}" --yes || true
-            gh release create ios-ci-9961a99 "$IPA" --repo "${{ github.repository }}" \
-              --title "iOS 1.5.0 未签名 IPA（9961a99）" \
-              --notes "CI run 45648616594 / commit 9961a99。未签名，仅供 Sideloadly 等工具重签后侧载。"
+            gh release delete ios-ci-077f124 --repo "${{ github.repository }}" --yes || true
+            gh release create ios-ci-077f124 "$IPA" --repo "${{ github.repository }}" \
+              --title "iOS 1.5.2 未签名 IPA（077f124）" \
+              --notes "CI run 45946273362 / commit 077f124。未签名，仅供 Sideloadly 等工具重签后侧载。"
           } > /tmp/rel.log 2>&1
           rc=$?
           {
