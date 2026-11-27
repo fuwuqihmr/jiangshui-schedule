@@ -1,6 +1,6 @@
 # iOS 壳层交付说明（implementer-shell / 契约角色 A）
 
-TASK STATE：P1 壳层 + P2/P3 追加（顶部白条、无头核对、请假深链、定位）代码与工程文件已落盘；本机 Windows 不编译。v1.5.0 已由公开仓 `ios-ci` 真实编译并在 iPhone 16 Pro / iOS 18.5 模拟器启动（见 `BUILD-LOG.md` 第 18 轮），**真机仍未验证**。本文列出 Mac 侧必须复核的项与设计取舍。
+TASK STATE：P1 壳层 + P2/P3 追加（顶部白条、无头核对、请假深链、定位）代码与工程文件已落盘；本机 Windows 不编译。v1.5.0 已由公开仓 `ios-ci` 真实编译并在 iPhone 16 Pro / iOS 18.5 模拟器启动（见 `BUILD-LOG.md` 第 18 轮）；**v1.5.2（实验课透传 + 备选图标主题）只做了静态校验，尚未编译，真机仍未验证**。本文列出 Mac 侧必须复核的项与设计取舍。
 
 ## 0. 结论
 
@@ -83,10 +83,11 @@ C:/Users/19890/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin/node.
 - [ ] **4.16 后台模式**：Info.plist 含 UIBackgroundModes=[fetch,processing] 与 BGTaskSchedulerPermittedIdentifiers=[cn.local.tomorrow.background-check, cn.local.tomorrow.class-reminder]；**P1 原生未注册 BGTask**（B 确认）。若审核询问后台模式对应功能，P2 补注册或暂时移除这两个键。
 - [ ] **4.17 UA/平台检测**：注入 window.Android 让 web 走原生分支；未伪装 UA、未注入平台标识（web 也未使用）。若后续 web 增加 UA 分支，需同步。
 - [ ] **4.18 Info.plist 其他键**：UILaunchScreen 空 dict（默认启动屏）、UIApplicationSceneManifest 仅 UIApplicationSupportsMultipleScenes=false（SwiftUI App 生命周期，Xcode 14+ 模板即如此）、CFBundleIconName=AppIcon；如 Xcode 校验报多余/缺失再按提示调整。
-- [ ] **4.19 静态检查**：`node ios/tools/check-ios.mjs` 应 **50/50、0 fail**；本层自查：45 个 action 全枚举、全部 **41 个** Swift 文件括号配平、Web/* 与 App/* 无 as! / try! / 叹号强解包（桥接三文件由 C6 守住）。P0 后 SchoolReadController 1080 行、SchoolWebViewHost 712 行，已不再是「全部 <400 行」。
+- [ ] **4.19 静态检查**：`node ios/tools/check-ios.mjs` 应 **51/51、0 fail**；本层自查：45 个 action 全枚举、全部 **41 个** Swift 文件括号配平、Web/* 与 App/* 无 as! / try! / 叹号强解包（桥接三文件由 C6 守住）。P0 后 SchoolReadController 1080 行、SchoolWebViewHost 712 行，已不再是「全部 <400 行」。
 - [ ] **4.20 真机网络**：NWListener 只绑 127.0.0.1；验证本地可访问、局域网上不可达。App Store 4.2 审核说明可强调「页面由应用内本地服务器提供 + 原生日历/通知/文件能力」，不是单纯网页壳。
 - [x] **4.21 前台通知展示**：App/NotificationPresenter.swift（37 行）实现 UNUserNotificationCenterDelegate；willPresent 回 [.banner, .sound, .list]（P1 一律前台显示，预览提醒可见），didReceive 直接 completionHandler()；JiangshuiApp.init() 设置 delegate，NotificationPresenter.shared 强持有（delegate 是 weak）。B 的 ClassReminderService / SystemNotificationService 目前未设 categoryIdentifier 或 jiangshui.foreground，故 P1 不做分支；P2 接通知分类后再按标记收窄。真机需验证前台横幅与声音。
 - [ ] **4.22 顶部白条 / 无头 / 请假 / 定位真机核对**：白条是否与页面 `--bg` 同色、状态栏区域有无色差；无头 WebView（`alpha=0.01`、`isUserInteractionEnabled=false`、`insertSubview(at:0)`）是否被 WebKit 降频或暂停导致读取超时；请假十步（warmup/CAS/450ms 复检/relogin/retarget）是否收敛；定位 shim 在真实 xgxt 页面的授权与回包；附件按钮在 iOS 18.4+ 的真实行为。见 `docs/P2-SCHOOL-READ.md` §11。
+- [ ] **4.24 备选图标（AppIconWater）真机核对**：`AppIconWater.appiconset` 为单张 1024×1024 RGB 无 alpha；`project.yml`/`gen-pbxproj.mjs`/pbxproj 只在主 App 设置 `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES=AppIconWater`；`ThemeController.applyIconTheme` 用 `alternateIconName == desired` 去重后调 `setAlternateIconName`；`BridgeDispatcher.saveState` 在保存成功后应用、`AppEnvironment.didBecomeActive` 只校准一次。需真机验证系统确认弹窗、主屏图标切换/重启保持、后台回前台是否闪回。v1.5.2 尚未编译。
 - [ ] **4.23 公开仓 CI 的 runner 回退（坑）**：workflow 写的是 `runs-on: macos-14`，但公开仓实际分配到 **`macos-15-intel`**，annotations 原文 `The configuration 'macos-14-arm64-us-default' is not supported`。该 runner 是 macOS 15.7.9 / Xcode **16.4** / Swift 6.1.2，不是旧文档假设的 Xcode 15.4。以后判断编译器版本以 artifact 里的 `env.txt` 为准；若必须固定，显式改 `runs-on: macos-15` 并确认公开仓标签可用。
 
 ## 5. ATS 上架说明（Lead 指定）

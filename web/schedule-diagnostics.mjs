@@ -3,7 +3,7 @@ import {examSkipCounts} from './jiaowu-exam.mjs';
 
 // Export only dates, periods, counts and origin categories. Never serialize a rule,
 // school response, course name, location, teacher or credential into diagnostics.
-const kind = value => ['school','sample','local','exam'].includes(value) ? value : 'other';
+const kind = value => ['school','sample','local','exam','lab'].includes(value) ? value : 'other';
 const examState = value => ['http','session','timeout','format','other'].includes(value) ? value : 'unknown';
 const safeDate = value => {try{return validDate(value)?value:null;}catch{return null;}};
 const safeTime = value => typeof value==='string' && /^\d{2}:\d{2}$/.test(value) ? value : '--:--';
@@ -15,6 +15,15 @@ const slot = row => Array.isArray(row.periods) && row.periods.length && row.peri
   : `${safeTime(row.startTime)}-${safeTime(row.endTime)}`;
 const slots = (state,date) => sourceRows(state,date).filter(row=>!row.cancelled).map(slot).sort().join('/') || '-';
 const count = value => Array.isArray(value) ? value.length : 0;
+// 实验课 skipped 的 reason 只有 week/name/section，不能复用考试分类（section 会被归 other）。
+const labSkipCounts = rows => {
+ const result={week:0,name:0,section:0,other:0};
+ for(const row of Array.isArray(rows)?rows:[]){
+  const reason=row&&['week','name','section'].includes(row.reason)?row.reason:'other';
+  result[reason]+=1;
+ }
+ return result;
+};
 
 export function appendScheduleTrace(before,after,mode,at=new Date().toISOString()) {
  const action=['foreground','background','adopt','foreground-error','background-error'].includes(mode) ? mode : 'foreground-error';
@@ -31,20 +40,23 @@ export function appendScheduleTrace(before,after,mode,at=new Date().toISOString(
 export function scheduleDiagnosticLines(state,date=today()) {
  if(!state?.snapshot || !safeDate(date))return [];
  try {
-  const s=state.snapshot,examIds=new Set((Array.isArray(s.exams?.items)?s.exams.items:[]).map(item=>item&&item.id).filter(id=>typeof id==='string')),monday=addDays(date,1-weekday(date));
+  const s=state.snapshot,examIds=new Set((Array.isArray(s.exams?.items)?s.exams.items:[]).map(item=>item&&item.id).filter(id=>typeof id==='string')),labIds=new Set((Array.isArray(s.labs?.items)?s.labs.items:[]).map(item=>item&&item.id).filter(id=>typeof id==='string')),monday=addDays(date,1-weekday(date));
   // 保留旧考试数据时 lastSkipped 是本轮跳过；没有则用该批数据的 skipped（T15 第三轮 P2-R3-2）。
   const examSkipRows=Array.isArray(s.exams?.lastSkipped)?s.exams.lastSkipped:(Array.isArray(s.exams?.skipped)?s.exams.skipped:[]);
   const examSkipCountsById=examSkipCounts(examSkipRows);
   const examSkipParts=Object.keys(examSkipCountsById).filter(reason=>examSkipCountsById[reason]>0).map(reason=>reason+'='+examSkipCountsById[reason]).join('/')||'-';
+  const labSkipRows=Array.isArray(s.labs?.lastSkipped)?s.labs.lastSkipped:(Array.isArray(s.labs?.skipped)?s.labs.skipped:[]);
+  const labSkipCountsById=labSkipCounts(labSkipRows);
+  const labSkipParts=Object.keys(labSkipCountsById).filter(reason=>labSkipCountsById[reason]>0).map(reason=>reason+'='+labSkipCountsById[reason]).join('/')||'-';
   const lines=[
-   `快照：来源=${kind(s.source?.kind)} 学期起始=${safeDate(s.semester?.startDate)||'unknown'} 总周数=${Number.isInteger(s.semester?.weeks)?s.semester.weeks:0} 规则数=${count(s.rules)} 考试数=${count(s.exams?.items)} 考试跳过=${examSkipRows.length} 考试跳过分类=${examSkipParts} 考试截至=${stamp(s.exams?.fetchedAt)} 考试状态=${s.exams?.error?examState(s.exams.error):'ok'} 上次成功=${stamp(state.lastSuccess)} 上次尝试=${stamp(state.lastAttempt)} 状态=${state.error?'failed':'ok'}`,
+   `快照：来源=${kind(s.source?.kind)} 学期起始=${safeDate(s.semester?.startDate)||'unknown'} 总周数=${Number.isInteger(s.semester?.weeks)?s.semester.weeks:0} 规则数=${count(s.rules)} 考试数=${count(s.exams?.items)} 考试跳过=${examSkipRows.length} 考试跳过分类=${examSkipParts} 考试截至=${stamp(s.exams?.fetchedAt)} 考试状态=${s.exams?.error?examState(s.exams.error):'ok'} 实验数=${count(s.labs?.items)} 实验跳过=${labSkipRows.length} 实验跳过分类=${labSkipParts} 实验截至=${stamp(s.labs?.fetchedAt)} 实验状态=${s.labs?.error?examState(s.labs.error):'ok'} 上次成功=${stamp(state.lastSuccess)} 上次尝试=${stamp(state.lastAttempt)} 状态=${state.error?'failed':'ok'}`,
    `本地修改：单次=${count(state.overrides)} 调休=${count(state.localMaps)} 自定义=${count(state.customCourses)} 课程设置=${Object.keys(state.courseSettings||{}).length}`
   ];
   for(let i=0;i<7;i++){
    const day=addDays(monday,i),base=sourceRows(state,day),shown=dayRows(state,day),active=shown.filter(r=>!r.cancelled);
    lines.push(`日期=${day} 周次=${weekOf(s,day)} 来源课=${base.length} 显示课=${active.length} 停课或空位=${shown.length-active.length} 时段=${slots(state,day)}`);
    for(const r of shown){
-    const origin=r.localActivity?'study':r.customCourse?'custom':r.exam===true?'exam':kind(r.source),inSource=r.exam===true?examIds.has(r.examId):base.some(x=>x.ruleId===r.ruleId&&x.originDate===r.originDate);
+    const origin=r.localActivity?'study':r.customCourse?'custom':r.exam===true?'exam':r.lab===true?'lab':kind(r.source),inSource=r.lab===true?labIds.has(r.labId):r.exam===true?examIds.has(r.examId):base.some(x=>x.ruleId===r.ruleId&&x.originDate===r.originDate);
     lines.push(`课程位置=${day}/${slot(r)} 来源=${origin} 学校快照内=${inSource?'yes':'no'} 状态=${r.vacant?'vacant':r.cancelled?'cancelled':'active'} 覆盖=${r.overrideId?'yes':'no'} 调休=${r.remapId?'yes':'no'} 冲突=${r.conflict?'yes':'no'}`);
    }
   }

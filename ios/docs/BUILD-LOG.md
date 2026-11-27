@@ -676,6 +676,53 @@ iOS 转换口径：用 Pillow `Image.open(...).convert("RGB")` 保存，**不缩
 - **未编译**：本机无 Xcode；F13 第 11 条只证明源码形状，`WebKit` 的 scenePhase 时序、回前台首次失败是否仍误弹、加载中进程回收后 1.5s 看门狗能否恢复，都需 CI 编译 + 真机/模拟器。
 - 看门狗只覆盖同一端口、同一轮加载；换端口或新加载会让四条件之一失败而自动失效，这是设计，但真机行为未验。
 
+## 第 24 轮：同步公开仓 v1.5.2（实验课透传 + 备选图标主题）（2026-11-27，未编译验证）
+
+本轮把公开仓 v1.5.2 的 web 整包同步（A）、iOS 实验课字段透传与备选图标链路（B/C）收口为门禁、回归测试、版本与文档；产品改动仍在工作树，未 commit / push。**本轮没有编译，也没有真机验证。**
+
+### 24.1 改动面
+
+| 面 | 内容 |
+| --- | --- |
+| 版本 | `project.yml` 三处（base / 主 App / Widget）与 `gen-pbxproj.mjs` 的 `VERSION/BUILD` 升到 **1.5.2 / 69**；pbxproj 由生成器重建，4 个 `XCBuildConfiguration` 均为 1.5.2 / 69。 |
+| 实验课透传 | `SchoolReadController.swift` 的 `handleReadResult` 在考试三字段之后增加 `labHtml` / `labFetchedAt` / `labError` / `labHttpStatus`：前两者非空才写，`labError` 复用 `examErrorKinds` 五类白名单（白名单外归 `other`），`labHttpStatus` 只在 `result.hasKey` 时写、默认 0 且 0 合法；并写 `web-read-lab bytes=… error=…` 日志。只扩 `capture` 的 payload，**不新增 action**。 |
+| 备选图标 | 新增 `Resources/Assets.xcassets/AppIconWater.appiconset`（单张 1024×1024、8-bit RGB、无 alpha，436,432 B，sha256 `011d8be0…ffcb0b`）；默认 `AppIcon` 不变。`project.yml`、`gen-pbxproj.mjs`、pbxproj 只在主 App 设置 `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES=AppIconWater`，Widget 两配置不带。 |
+| 图标切换链路 | `ServiceProtocols` 增 `applyIconTheme(_:)`；`ThemeController` 用 `alternateIconName == desired` 去重后调 `setAlternateIconName`；`BridgeDispatcher` 的 `saveState` 保存成功后按 `iconTheme` 应用；`AppEnvironment` 监听 `didBecomeActiveNotification`，只校准一次。 |
+
+### 24.2 门禁与回归
+
+- **F8 扩写（不新增编号）**：`allowedKeys` 从 4 键扩到 8 键；断言 lab 四字段的写入条件、`labError` 五类白名单、`labHttpStatus` 的 `hasKey` + `optInt(...,0)`、`web-read-lab` 日志、顺序（base < exams < lab < log < persist < finish）、每键恰好一次、禁止整体 merge。pass 文案改为「考试三字段与实验课四字段透传均在位」。
+- **F9 重写**：`project.yml` 的 `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` 各恰好 3 处且为 1.5.2 / 69；pbxproj 中所有带版本号的 `XCBuildConfiguration`（≥4 个）全部一致。
+- **新增 F15 备选图标（+1 项）**：资产存在且为单张 1024 universal/ios、PNG 1024×1024 / colorType=2 / 非交错 / sha256；`project.yml` 恰好 1 处 alternate 且只在主 App；`gen-pbxproj.mjs` 的 `targetShared` 有、`widgetShared` 无；pbxproj 主 App Debug/Release 有、Widget 无；`ThemeControlling` 声明、`ThemeController` 的 `water → AppIconWater` 映射 / `alternateIconName == desired` 去重 / `setAlternateIconName` / 错误日志；`setAlternateIconName` 全仓只允许一处；`BridgeDispatcher` 仅 1 处 `applyIconTheme` 且在 `saveState` 的保存成功之后；`AppEnvironment` 的 `didBecomeActive` 监听、`deinit` 移除、校准只一次、读取 `state.load()` 的 `iconTheme`（默认 `whale`）。小检从 **50** 增至 **51**。
+- **回归测试**：新增 `ios/tests/v152-sync.test.mjs` 5 条 source-scan；`ios/tests/exam-passthrough.test.mjs:97` 的未知键白名单补 4 个 lab 键；`full-suite.test.mjs` 的 `expectedIds` 追加 F15 并断言 51；`pbxproj.test.mjs:61-62` 版本改 1.5.2 / 69。iOS 测试从 **83** 增至 **88**。
+
+### 24.3 门禁变异（临时副本，已清理）
+
+| 变异 | 结果 |
+| --- | --- |
+| 删 `SchoolReadController` 的 `labHtml` 透传块 | F8 FAIL（未做非空守卫后写入 / `payload["labHtml"]` 写入次数 0 / 顺序失败）；`v152-sync` 2 条 FAIL |
+| 删 `project.yml` 的 `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIconWater` | F15 FAIL（应恰好 1 处；主 App 未声明）；`v152-sync` 1 条 FAIL |
+| 删 `BridgeDispatcher.saveState` 的 `if state.hasKey("iconTheme") { services.theme.applyIconTheme(...) }` | F15 FAIL（`applyIconTheme` 应恰好 1 处；saveState 未判断/未应用/顺序失败）；`v152-sync` 1 条 FAIL |
+
+还原后 control 全绿；临时目录 `C:/Users/19890/AppData/Local/Temp/v152-mut1..3` 已删除。
+
+### 24.4 本机结果
+
+- `gen-pbxproj` 连跑两次：pbxproj sha256 前/后均为 `23f4a4c12e90ef36cd77c3f81980ba89a670479642010470004baa0fd43df96a`（幂等）；主 App Swift 41 个（共享 1 个）/ 资源 3 个 / 文件引用 51 条，Widget 3 个 / iOS 16.1。
+- `check-ios`：**51 项，ok 51，fail 0**（退出码 0）；E1「清单与工作树一致：188 个文件」，E2「blob 一致：188 个文件；聚合指纹 `b244f1eadd1105d61ee82b1e153b9df425d123b0e8aad7936665943be4af234b`（仅诊断）」。
+- `node --test ios/tests/`：**88 tests / 88 pass / 0 fail**。
+- `node --test tests/*.test.mjs`（web v1.5.2）：**436 tests / 436 pass / 0 fail**。
+- 共享层 manifest 从 186 增至 **188**（web 43 + android 145），文件 sha256 `83e6c4676b302f895a347b40032bee27b59b60ba8031eb3f079e6dfd54659f5a`；`android/` 无改动。
+- 未 commit / push。
+
+### 24.5 未证明 / 风险
+
+- **未编译、未真机**：本机无 Xcode；F8/F9/F15 与 5 条测试只证明源码与工程文件形状。v1.5.2 的 iPhone 编译、实验课页面渲染、`labHtml` 真数据、`labHttpStatus` 的实际取值、备选图标切换的系统弹窗 / 主屏生效 / 重启保持 / 回前台是否闪回，都需 CI 编译 + 真机。
+- **F15 不能验证资产编译**：`actool` 是否为 `AppIconWater` 生成全套尺寸、Info.plist 是否出现 `CFBundleAlternateIcons`，只能在 Xcode 构建产物里核对。
+- **实验课字段依赖 web**：iOS 只是透传；`school-reader.js` 的分页/超时/失败分类若与真机网络行为不一致，门禁抓不到。
+- **契约未变**：45 个 action、fixture `v0-2026-11-18` 与 Android 对照均未放宽；lab 是 payload 扩展，不是新 action。
+- **独立审计（task-70）**：0 个必坏编译错误、0 个疑似；中风险 2 条（`JSBridge` 回包无大小上限，数百 KB 实验课 HTML 会有一次主线程编码停顿；弱网最坏 72s 读取预算可能顶穿登录后 60s 窗口，Android 同为 90s/60s），均不阻塞本轮。actool 产物、真实 lab 页面大小、图标切换保持需 CI/真机。
+
 ## 尚未取得的证据（不要当成已通过）
 
 | 项 | 需要什么 |

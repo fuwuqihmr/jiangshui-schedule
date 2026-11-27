@@ -10,4 +10,5 @@ import './reminder-schedule.test.mjs';
 import './live-activity.test.mjs';
 import './exam-passthrough.test.mjs';
 import './p0-fixes.test.mjs';
+import './v152-sync.test.mjs';
 import './full-suite.test.mjs';

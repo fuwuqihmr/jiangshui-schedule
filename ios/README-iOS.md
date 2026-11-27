@@ -1,11 +1,11 @@
 # 江水课表 · iOS 端
 
-本目录是 `江水课表` 的 iOS 实现（WKWebView 壳 + 复用 `../web/` 的纯 ES Module（v1.5.0 当前 28 个）+ 原生能力层）。
+本目录是 `江水课表` 的 iOS 实现（WKWebView 壳 + 复用 `../web/` 的纯 ES Module（v1.5.2 当前 28 个）+ 原生能力层）。
 
 > **想先弄懂代码怎么组织？** 看 [docs/CODE-MAP.md](docs/CODE-MAP.md) —— 写给不懂编程的人：整体构造、目录地图、两条核心链路（读课表 / 请假）的分步说明、全部 Swift 文件逐个一句话、数据存在哪、改代码的 6 条规矩。
 
-> **状态：v1.5.0 已编译通过并在 iPhone 16 Pro 模拟器（iOS 18.5）里真实启动、进入主界面**（GitHub Actions / macOS 15 / Xcode 16.4，2026-11-24 run `45417661000`；
-> Debug、Release 与真机 iphoneos 三种配置均 BUILD SUCCEEDED；模拟器用 `simctl` 启动并截图）。
+> **状态：v1.5.2 源码已收口，尚未编译、未真机**；上一次真实编译是 v1.5.0（GitHub Actions / macOS 15 / Xcode 16.4，2026-11-24 run `45417661000`，
+> Debug、Release 与真机 iphoneos 三种配置均 BUILD SUCCEEDED；模拟器用 `simctl` 启动并截图）。v1.5.2 的实验课透传与备选图标主题只做了静态校验，编译/真机验证仍待 CI。
 > 界面已按平台能力裁剪：权限面板只显示 iOS 真有的项（通知）；返回键改为左边缘右划手势，不再有压住标题的浮动按钮
 > （本轮截图已验证：两页标题均无遮挡、权限弹窗只剩「通知」一行；旧 run #12 的 iPhone 15 Pro / iOS 17 / Xcode 15.4 记录见 `docs/BUILD-LOG.md` 第 10 轮）。
 > 顶部白条改为 A 方案（2026-10-30）：RootView 底层铺 `shellBackgroundColor`，WebView 只让开底边、顶边落在安全区下沿，`WebHost` 用 `clipsToBounds` 物理裁剪并同步 `--bg`；不再依赖 CSS 遮挡状态栏。
@@ -18,7 +18,8 @@
 > **2026-11-24：版本号 1.5.0 / 64**（跟安卓 v1.5.0 / versionCode 64 对齐）；`web/` 升 v1.5.0（41 文件、sha256 `5c2648ea…86fcb1`）、契约 45、销假/续假已实现；四套静态门禁 50/83/391 全绿；已于 2026-11-24 首次真实编译，未真机。
 > 考试安排已随课表读取透传（`exams` / `examFetchedAt` / `examError` 三字段，待 CI 编译验证）。
 > **2026-11-25 P0 修复**：本机页面服务异常后会自动换端口/重启（`LocalServer.isHealthy` + 代际守卫 + 1.5s waiting 超时），加载失败有原生错误卡片与「重试」按钮（`WebHost.retryPage()`，0.4s 自动重试一次）；学校登录等待改为 6s 呈现窗口 + 180s 前台倒计时，退后台暂停、回前台续时。静态门禁新增 F13/F14（**50 项**），回归测试 **83 项**；task-58/59 又把页面换代（`readingPageURL`/`readingToken` 作废旧轮询）与旧导航身份校验（`isCurrentNavigation`）并入 F14/F13，仍 50 项。2026-11-25 又修回前台首次加载失败误弹遮罩（beginLoadSession 分轮、自动重试轮保留会话）与加载中进程回收（1.5s terminate 看门狗，四条件校验），F13 扩展但总项数仍 50 项。仍待 CI 编译与真机验证。
-> **2026-11-24 首次真实编译证据**：已由 GitHub Actions（公开仓分支 ios-ci）完成 Debug/Release/真机三种配置编译，48 项门禁与 66 项测试全绿；产物 IPA 3,397,722 B，sha256 `b9282267…62706`，详见 `docs/BUILD-LOG.md` 第 18 轮。
+> **2026-11-27：版本号 1.5.2 / 69**（跟安卓 v1.5.2 / versionCode 69 对齐）；`web/` 升 v1.5.2（43 文件、436 项测试），实验课字段透传（`labHtml` / `labFetchedAt` / `labError` / `labHttpStatus`）与备选图标主题（`AppIconWater`，`iconTheme=water`）已落源码；静态门禁 **51 项**、iOS 回归 **88 项**。尚未编译、未真机。
+> **2026-11-24 首次真实编译证据**：已由 GitHub Actions（公开仓分支 ios-ci）完成 v1.5.0 的 Debug/Release/真机三种配置编译，当时 48 项门禁与 66 项测试全绿；产物 IPA 3,397,722 B，sha256 `b9282267…62706`，详见 `docs/BUILD-LOG.md` 第 18 轮。
 > **2026-11-25 图标改为与安卓最新版同款**：iOS 图标与安卓最新版同款（公开仓 `assets/app-icon.png`，1024×1024 白底，转 RGB 去 alpha）；上一轮的深色彩格 A 图标已作废，不再使用。App 内 web 与安卓图标资源已恢复公开仓字节，详见 `docs/BUILD-LOG.md` 第 21 轮。
 > 但**未签名、未连真机、未走 TestFlight**，仍不是可上架产物。
 > 证据见 `docs/BUILD-LOG.md`（含每轮退出码、截图内容、修掉的运行期 bug）。本机是 Windows，没有 Xcode / swiftc；
@@ -28,7 +29,7 @@
 
 | 层 | 复用/新写 | 说明 |
 |----|-----------|------|
-| UI + 业务逻辑 | **复用** `../web/` | 与 Android 完全同一套 ES Module，391 项 Node 测试锁住 |
+| UI + 业务逻辑 | **复用** `../web/` | 与 Android 完全同一套 ES Module，436 项 Node 测试锁住 |
 | JS ↔ 原生桥 | **新写**，与 Android 逐字等价 | 45 个 action（MUST 35 + OPTIONAL 10），见 `docs/IOS-PORT-CONTRACT.md` §2/§3 |
 | 页面承载 | **新写** loopback HTTP 服务 | `127.0.0.1:47851`；因为 `type="module"` + 顶层 `fetch` 在 `file://` 下不工作 |
 | 原生能力 | **新写** EventKit / UserNotifications / UIDocumentPicker / Keychain | 与 Android 的日历、通知、SAF、KeyStore 一一对应 |
@@ -113,15 +114,15 @@ node --test ios/tests/*.test.mjs   # 桥接契约测试
 # 工程文件生成物（幂等，可反复跑；改完 .swift 必须重跑）
 node tools/gen-pbxproj.mjs
 
-# 静态门禁：50 项检查（工程一致性 / 45 action 契约对齐 / 协议 conformance / plist / 桥接逐字 / 共享层 manifest / F10-F12 白条·无头·请假定位 / G1 实时活动 / F13-F14 P0 页面服务自愈与登录时钟）
+# 静态门禁：51 项检查（工程一致性 / 45 action 契约对齐 / 协议 conformance / plist / 桥接逐字 / 共享层 manifest / F10-F12 白条·无头·请假定位 / G1 实时活动 / F13-F14 P0 页面服务自愈与登录时钟 / F15 备选图标主题）
 node tools/check-ios.mjs
 
-# 校验器自身的回归测试：83 项
+# 校验器自身的回归测试：88 项
 node --test ios/tests/
 ```
 
-当前结果（2026-11-25）：`check-ios` **50/50 ok，0 fail**；`node --test ios/tests/` **83/83 pass**；`node --test tests/*.test.mjs`（web，v1.5.0）**391/391 pass**；
-共享层不再冻结单一哈希，改由 `ios/tools/shared-layer-manifest.json` 逐文件记录 `git ls-files -c -o --exclude-standard -- web android` 的 blob（当前 186 个文件，排除 `*.apk`/`*.zip`/`build/`/`.gradle/`）；E1/E2 只报 missing/extra/changed，重新登记用 `node ios/tools/check-ios.mjs --write-shared-manifest`。
+当前结果（2026-11-27）：`check-ios` **51/51 ok，0 fail**；`node --test ios/tests/` **88/88 pass**；`node --test tests/*.test.mjs`（web，v1.5.2）**436/436 pass**；
+共享层不再冻结单一哈希，改由 `ios/tools/shared-layer-manifest.json` 逐文件记录 `git ls-files -c -o --exclude-standard -- web android` 的 blob（当前 188 个文件：web 43 + android 145，排除 `*.apk`/`*.zip`/`build/`/`.gradle/`）；E1/E2 只报 missing/extra/changed，重新登记用 `node ios/tools/check-ios.mjs --write-shared-manifest`。
 详细逐项证据见 `docs/AUDIT.md`；误报记录（8 类）与门禁变异记录见同文件 §4；服务层已知差异见 `docs/AUDIT-APPENDIX-SERVICES.md`；
 本轮整合结论与 Mac 首跑清单见 `docs/INTEGRATION-REPORT.md`。
 

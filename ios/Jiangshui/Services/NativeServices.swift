@@ -37,6 +37,8 @@ public final class NativeServices: NativeServicesProviding, LogoutHandling {
         let consent = ConsentStore()
         let state = StateStore()
         let theme = ThemeController()
+        // 图标切换失败只写诊断日志，不影响课表保存和启动。
+        theme.log = { state.log($0) }
         let notifications = SystemNotificationService()
         let reminders = ClassReminderService(state: state, consent: consent)
         let calendar = CalendarService()

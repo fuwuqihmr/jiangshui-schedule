@@ -627,6 +627,33 @@ final class SchoolReadController {
             }
             payload["examError"] = examError
         }
+        // 实验课原始 HTML 透传：读取脚本 web/school-reader.js 已单独抓取 /jsxsd/syjx/toXskb.do，
+        // 这里与 Android SchoolClient.java:81-84 对齐——只做白名单归一和字段转发，
+        // 真正的解析、容错与“失败保留旧数据”全部交给共享 web 层（web/jiaowu-lab.mjs）。
+        let labHtml = result.optString("labHtml")
+        if labHtml.isEmpty == false {
+            payload["labHtml"] = labHtml
+        }
+        let labFetchedAt = result.optString("labFetchedAt")
+        if labFetchedAt.isEmpty == false {
+            payload["labFetchedAt"] = labFetchedAt
+        }
+        var labError = result.optString("labError")
+        if labError.isEmpty == false {
+            if Self.examErrorKinds.contains(labError) == false {
+                labError = "other"
+            }
+            payload["labError"] = labError
+        }
+        // labHttpStatus 只有脚本真的带了才转发：0 是合法状态码，不能用“0 表示缺失”的写法。
+        if result.hasKey("labHttpStatus") {
+            payload["labHttpStatus"] = result.optInt("labHttpStatus", 0)
+        }
+        // 日志只记实验课 HTML 大小和失败类别，不写 URL、Cookie、学号或页面内容；
+        // 走 StateStore.log 与 Android StateStore.log 同格式，追加到同一个 applog.txt。
+        let labErrorText = labError.isEmpty ? "none" : labError
+        let state = StateStore()
+        state.log("web-read-lab bytes=\(labHtml.utf8.count) error=\(labErrorText)")
         persistSessionCookies()
         finish(.success(payload))
     }

@@ -15,8 +15,8 @@ import { fileURLToPath } from 'node:url';
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 export const BUNDLE_ID = 'cn.local.tomorrow';
-export const MARKETING_VERSION = '1.5.0';
-export const CURRENT_PROJECT_VERSION = '64';
+export const MARKETING_VERSION = '1.5.2';
+export const CURRENT_PROJECT_VERSION = '69';
 export const LOOPBACK_FIRST = 47851;
 export const LOOPBACK_LAST = 47860;
 export const HANDLER_NAME = 'jiangshuiBridge';
@@ -2267,12 +2267,33 @@ export function runChecks(root) {
       if (!kindsMatch || kinds.length !== expectedKinds.length || new Set(kinds).size !== expectedKinds.length || !expectedKinds.every((kind) => kinds.includes(kind))) {
         problems.push('examErrorKinds 白名单必须恰好是 http/session/timeout/format/other');
       }
-      // 未知字段防护：payload 只允许初始 3 键 + studentProfile + 考试 3 键；出现整体 merge/赋值即视为回归。
+      // 实验课四字段透传（v1.5.2）：脚本已经抓回 labHtml/labFetchedAt/labError/labHttpStatus，
+      // 原生只做非空/白名单/类型收窄，真正的解析与失败保留旧数据在 web/jiaowu-lab.mjs。
+      if (!/let\s+labHtml\s*=\s*result\.optString\s*\(\s*"labHtml"\s*\)\s*if\s+labHtml\.isEmpty\s*==\s*false\s*\{\s*payload\s*\[\s*"labHtml"\s*\]\s*=\s*labHtml\s*\}/.test(readResultBody)) {
+        problems.push('labHtml 未做非空守卫后写入');
+      }
+      if (!/let\s+labFetchedAt\s*=\s*result\.optString\s*\(\s*"labFetchedAt"\s*\)\s*if\s+labFetchedAt\.isEmpty\s*==\s*false\s*\{\s*payload\s*\[\s*"labFetchedAt"\s*\]\s*=\s*labFetchedAt\s*\}/.test(readResultBody)) {
+        problems.push('labFetchedAt 未做非空守卫后写入');
+      }
+      if (!/var\s+labError\s*=\s*result\.optString\s*\(\s*"labError"\s*\)\s*if\s+labError\.isEmpty\s*==\s*false\s*\{[\s\S]{0,260}?Self\.examErrorKinds\.contains\s*\(\s*labError\s*\)\s*==\s*false\s*\{\s*labError\s*=\s*"other"\s*\}[\s\S]{0,80}?payload\s*\[\s*"labError"\s*\]\s*=\s*labError\s*\}/.test(readResultBody)) {
+        problems.push('labError 未做非空守卫并复用五类白名单归一后写入');
+      }
+      if (!/if\s+result\.hasKey\s*\(\s*"labHttpStatus"\s*\)\s*\{\s*payload\s*\[\s*"labHttpStatus"\s*\]\s*=\s*result\.optInt\s*\(\s*"labHttpStatus"\s*,\s*0\s*\)\s*\}/.test(readResultBody)) {
+        problems.push('labHttpStatus 未按 hasKey 守卫并用 optInt(...,0) 写入（0 是合法状态码，不能当缺失）');
+      }
+      if (!readResultBody.includes('let labErrorText = labError.isEmpty ? "none" : labError')) {
+        problems.push('实验课日志未把空 labError 归一为 none');
+      }
+      if (!readResultBody.includes('state.log("web-read-lab bytes=\\(labHtml.utf8.count) error=\\(labErrorText)")')) {
+        problems.push('实验课读取未写 web-read-lab 诊断日志（bytes/error）');
+      }
+      // 未知字段防护：payload 只允许初始 3 键 + studentProfile + 考试 3 键 + 实验课 4 键；
+      // 出现整体 merge/赋值即视为回归。
       const assignedKeys = [...readResultBody.matchAll(/payload\s*\[\s*"([^"]+)"\s*\]\s*=/g)].map((m) => m[1]);
-      const allowedKeys = new Set(['studentProfile', 'exams', 'examFetchedAt', 'examError']);
+      const allowedKeys = new Set(['studentProfile', 'exams', 'examFetchedAt', 'examError', 'labHtml', 'labFetchedAt', 'labError', 'labHttpStatus']);
       const unknownKeys = assignedKeys.filter((key) => !allowedKeys.has(key));
       if (unknownKeys.length) problems.push('payload 出现未登记的透传键：' + [...new Set(unknownKeys)].join('/'));
-      for (const key of ['exams', 'examFetchedAt', 'examError']) {
+      for (const key of ['exams', 'examFetchedAt', 'examError', 'labHtml', 'labFetchedAt', 'labError', 'labHttpStatus']) {
         const count = assignedKeys.filter((item) => item === key).length;
         if (count !== 1) problems.push('payload["' + key + '"] 必须恰好写入一次（实际 ' + count + ' 次）');
       }
@@ -2281,29 +2302,44 @@ export function runChecks(root) {
       }
       const baseIndex = readResultBody.indexOf('var payload: JSONObject =');
       const examIndex = readResultBody.indexOf('if let exams = result.optArray("exams")');
+      const labIndex = readResultBody.indexOf('let labHtml = result.optString("labHtml")');
+      const logIndex = readResultBody.indexOf('state.log("web-read-lab');
       const persistIndex = readResultBody.indexOf('persistSessionCookies()');
       const finishIndex = readResultBody.indexOf('finish(.success(payload))');
-      if (baseIndex < 0 || examIndex < 0 || persistIndex < 0 || finishIndex < 0 || !(baseIndex < examIndex && examIndex < persistIndex && persistIndex < finishIndex)) {
-        problems.push('考试透传必须在 payload 初始组装之后、persistSessionCookies/finish 之前');
+      if (baseIndex < 0 || examIndex < 0 || labIndex < 0 || logIndex < 0 || persistIndex < 0 || finishIndex < 0 || !(baseIndex < examIndex && examIndex < labIndex && labIndex < logIndex && logIndex < persistIndex && persistIndex < finishIndex)) {
+        problems.push('考试/实验课透传与 web-read-lab 日志必须在 payload 初始组装之后、persistSessionCookies/finish 之前');
       }
     }
-    return problems.length ? fail(truncateList(problems)) : pass('状态机四阶段、请假/销假/续假三表单、pageEnc 分键、15s watchdog、续假失败只记日志、返回回调一次性、考试三字段透传均在位');
+    return problems.length ? fail(truncateList(problems)) : pass('状态机四阶段、请假/销假/续假三表单、pageEnc 分键、15s watchdog、续假失败只记日志、返回回调一次性、考试三字段与实验课四字段透传均在位');
   });
 
-  add('F9', 'project.yml 与 pbxproj 常量一致', () => {
+  add('F9', 'project.yml 与 pbxproj 版本常量一致（1.5.2 / 69）', () => {
     const yml = projectYml();
     const problems = [];
     const check = (label, re) => { if (!re.test(yml)) problems.push('project.yml 缺 ' + label); };
-    check('MARKETING_VERSION 1.5.0', /MARKETING_VERSION:\s*"?1\.5\.0"?/);
-    check('CURRENT_PROJECT_VERSION 64', /CURRENT_PROJECT_VERSION:\s*"?64"?/);
+    const marketingQuoted = 'MARKETING_VERSION: "' + MARKETING_VERSION + '"';
+    const buildQuoted = 'CURRENT_PROJECT_VERSION: "' + CURRENT_PROJECT_VERSION + '"';
+    check('MARKETING_VERSION ' + MARKETING_VERSION, new RegExp('MARKETING_VERSION:\\s*"?' + MARKETING_VERSION.replace(/\./g, '\\.') + '"?'));
+    check('CURRENT_PROJECT_VERSION ' + CURRENT_PROJECT_VERSION, new RegExp('CURRENT_PROJECT_VERSION:\\s*"?' + CURRENT_PROJECT_VERSION + '"?'));
     check('IPHONEOS_DEPLOYMENT_TARGET 15.0', /IPHONEOS_DEPLOYMENT_TARGET:\s*"?15\.0"?/);
     check('PRODUCT_BUNDLE_IDENTIFIER ' + BUNDLE_ID, new RegExp('PRODUCT_BUNDLE_IDENTIFIER:\\s*' + BUNDLE_ID.replace(/\./g, '\\.')));
     check('INFOPLIST_FILE', /INFOPLIST_FILE:\s*Jiangshui\/Resources\/Info\.plist/);
     check('GENERATE_INFOPLIST_FILE NO', /GENERATE_INFOPLIST_FILE:\s*NO/);
     check('web folder reference', /path:\s*\.\.\/web/);
     check('web type folder', /type:\s*folder/);
-    if (yml.indexOf('MARKETING_VERSION: "1.5.0"') < 0 && yml.indexOf('MARKETING_VERSION: 1.5.0') < 0) problems.push('project.yml MARKETING_VERSION 写法不明确');
-    return problems.length ? fail(truncateList(problems)) : pass('project.yml 版本/部署目标/bundle id/web 引用与 pbxproj 一致');
+    const marketingCount = yml.split(marketingQuoted).length - 1;
+    const buildCount = yml.split(buildQuoted).length - 1;
+    if (marketingCount !== 3) problems.push('project.yml 的 MARKETING_VERSION 应恰好 3 处（base/App/Widget），实际 ' + marketingCount);
+    if (buildCount !== 3) problems.push('project.yml 的 CURRENT_PROJECT_VERSION 应恰好 3 处（base/App/Widget），实际 ' + buildCount);
+    const configs = Object.values(objects()).filter((obj) => obj.isa === 'XCBuildConfiguration');
+    const versioned = configs.filter((config) => config.buildSettings && config.buildSettings.MARKETING_VERSION !== undefined);
+    if (versioned.length < 4) problems.push('pbxproj 带版本号的 buildConfiguration 少于 4 个（实际 ' + versioned.length + '）');
+    for (const config of versioned) {
+      const settings = config.buildSettings || {};
+      if (String(settings.MARKETING_VERSION) !== MARKETING_VERSION) problems.push((config.name || '配置') + ' 的 MARKETING_VERSION 应为 ' + MARKETING_VERSION + '（实际 ' + settings.MARKETING_VERSION + '）');
+      if (String(settings.CURRENT_PROJECT_VERSION) !== CURRENT_PROJECT_VERSION) problems.push((config.name || '配置') + ' 的 CURRENT_PROJECT_VERSION 应为 ' + CURRENT_PROJECT_VERSION + '（实际 ' + settings.CURRENT_PROJECT_VERSION + '）');
+    }
+    return problems.length ? fail(truncateList(problems)) : pass('project.yml 3 处版本与 pbxproj ' + versioned.length + ' 个配置均为 ' + MARKETING_VERSION + ' / ' + CURRENT_PROJECT_VERSION);
   });
 
   add('F10', '安全区：注入 env(safe-area-inset-*) 样式，顶部不被状态栏遮挡', () => {
@@ -2977,6 +3013,198 @@ export function runChecks(root) {
     else need(/stopLoginClock\(\)/.test(leave) && /scheduleDeadline\s*\(\s*Self\.leaveLoginDeadline\s*\)/.test(leave), 'leaveLogin 未停表并改挂 60s 离开登录页上限');
 
     return problems.length ? fail(truncateList(problems)) : pass('loginDeadline=180、presenting 6s/0.5s 轮询、后台暂停回前台续时、xskb 先 leaveLogin、reading 四处复位（start/登录结果/xskb换代/finish），页面换代由 readingPageURL/readingToken 作废旧轮询均在位');
+  });
+
+  add('F15', 'v1.5.2 图标主题：AppIconWater 资产、工程三处设置与保存/回前台校准链路', () => {
+    const problems = [];
+    const files = swiftFiles();
+    const assetsDir = path.join('Jiangshui', 'Resources', 'Assets.xcassets', 'AppIconWater.appiconset');
+    const contentsPath = path.join(ROOT, 'ios', assetsDir, 'Contents.json');
+    const pngPath = path.join(ROOT, 'ios', assetsDir, 'AppIconWater-1024.png');
+
+    // ---- 1) 备选图标资产：单张 1024x1024、8-bit RGB、无 alpha ----
+    if (!existsSync(contentsPath)) {
+      problems.push('缺少 AppIconWater.appiconset/Contents.json');
+    } else {
+      let contents = null;
+      try { contents = JSON.parse(readText(contentsPath)); } catch (e) { problems.push('AppIconWater Contents.json 不是合法 JSON'); }
+      if (contents) {
+        const images = Array.isArray(contents.images) ? contents.images : [];
+        if (images.length !== 1) problems.push('AppIconWater 应只有 1 张 1024 图（实际 ' + images.length + ' 张）');
+        const image = images.find((item) => item && item.filename === 'AppIconWater-1024.png');
+        if (!image) problems.push('AppIconWater Contents.json 未指向 AppIconWater-1024.png');
+        else {
+          if (image.idiom !== 'universal') problems.push('AppIconWater idiom 应为 universal');
+          if (image.platform !== 'ios') problems.push('AppIconWater platform 应为 ios');
+          if (image.size !== '1024x1024') problems.push('AppIconWater size 应为 1024x1024');
+        }
+        if (!contents.info || contents.info.version !== 1) problems.push('AppIconWater Contents.json 缺 info.version=1');
+      }
+    }
+    if (!existsSync(pngPath)) {
+      problems.push('缺少 AppIconWater-1024.png');
+    } else {
+      const buffer = readFileSync(pngPath);
+      if (buffer.length < 33 || buffer.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') {
+        problems.push('AppIconWater-1024.png 不是合法 PNG');
+      } else {
+        const width = buffer.readUInt32BE(16);
+        const height = buffer.readUInt32BE(20);
+        const bitDepth = buffer[24];
+        const colorType = buffer[25];
+        const interlace = buffer[28];
+        if (width !== 1024 || height !== 1024) problems.push('AppIconWater-1024.png 尺寸应为 1024x1024（实际 ' + width + 'x' + height + '）');
+        if (bitDepth !== 8) problems.push('AppIconWater-1024.png 应为 8-bit（实际 ' + bitDepth + '）');
+        if (colorType !== 2) problems.push('AppIconWater-1024.png 应为 RGB 无 alpha（colorType=2，实际 ' + colorType + '）');
+        if (interlace !== 0) problems.push('AppIconWater-1024.png 不应交错');
+      }
+      if (sha256(buffer) !== '011d8be062a2a6280d8c2ab86e0f70de88b361f62cc3040c764c8fff22ffcb0b') {
+        problems.push('AppIconWater-1024.png 字节与 v1.5.2 备份不一致（sha256 变化，需确认图标来源）');
+      }
+    }
+
+    // ---- 2) 工程三处：project.yml / gen-pbxproj.mjs / project.pbxproj ----
+    const yml = projectYml();
+    const ymlMainStart = yml.indexOf('\n  Jiangshui:\n');
+    const ymlWidgetStart = yml.indexOf('\n  JiangshuiWidgets:\n');
+    if (ymlMainStart < 0 || ymlWidgetStart < 0 || ymlWidgetStart <= ymlMainStart) {
+      problems.push('project.yml 无法定位 targets.Jiangshui / JiangshuiWidgets 块');
+    } else {
+      const mainYml = yml.slice(ymlMainStart, ymlWidgetStart);
+      const widgetYml = yml.slice(ymlWidgetStart);
+      if ((yml.match(/ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES:\s*AppIconWater/g) || []).length !== 1) {
+        problems.push('project.yml 的 ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES 应恰好 1 处');
+      }
+      if (!/ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES:\s*AppIconWater/.test(mainYml)) {
+        problems.push('project.yml 主 App target 未声明 AppIconWater 备选图标');
+      }
+      if (/ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES:/.test(widgetYml)) {
+        problems.push('project.yml Widget target 不得声明备选图标（asset 只在主 App）');
+      }
+      if (!/ASSETCATALOG_COMPILER_APPICON_NAME:\s*AppIcon\b/.test(mainYml)) {
+        problems.push('project.yml 主 App 默认图标必须仍是 AppIcon');
+      }
+    }
+
+    const gen = readText(path.join(ROOT, 'ios', 'tools', 'gen-pbxproj.mjs'));
+    const genTargetStart = gen.indexOf('const targetShared = {');
+    const genWidgetStart = gen.indexOf('const widgetShared = {');
+    const genRenderStart = gen.indexOf('function renderSettings');
+    if (genTargetStart < 0 || genWidgetStart <= genTargetStart || genRenderStart <= genWidgetStart) {
+      problems.push('gen-pbxproj.mjs 无法定位 targetShared/widgetShared 块');
+    } else {
+      const targetBlock = gen.slice(genTargetStart, genWidgetStart);
+      const widgetBlock = gen.slice(genWidgetStart, genRenderStart);
+      if (!targetBlock.includes('ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIconWater"')) {
+        problems.push('gen-pbxproj.mjs 主 targetShared 未声明 AppIconWater');
+      }
+      if (widgetBlock.includes('ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES')) {
+        problems.push('gen-pbxproj.mjs widgetShared 不得声明备选图标');
+      }
+    }
+
+    const pbxObjects = objects();
+    const targets = nativeTargets(pbxObjects);
+    const mainTarget = targets.find((target) => target.name === 'Jiangshui');
+    const widgetTarget = targets.find((target) => target.productType === 'com.apple.product-type.app-extension');
+    const configsOf = (target) => {
+      if (!target) return [];
+      const list = pbxObjects[String(target.buildConfigurationList || '')];
+      return (list && list.buildConfigurations ? list.buildConfigurations : []).map((id) => pbxObjects[String(id)]).filter(Boolean);
+    };
+    if (!mainTarget) problems.push('pbxproj 找不到主 App target Jiangshui');
+    if (!widgetTarget) problems.push('pbxproj 找不到 Widget Extension target');
+    if (mainTarget) {
+      const mainConfigs = configsOf(mainTarget);
+      if (mainConfigs.length !== 2) problems.push('主 App 应有 Debug/Release 两个配置（实际 ' + mainConfigs.length + '）');
+      for (const config of mainConfigs) {
+        const settings = config.buildSettings || {};
+        if (String(settings.ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES || '') !== 'AppIconWater') {
+          problems.push('主 App ' + config.name + ' 配置的备选图标应为 AppIconWater（实际 ' + settings.ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES + '）');
+        }
+        if (String(settings.ASSETCATALOG_COMPILER_APPICON_NAME || '') !== 'AppIcon') {
+          problems.push('主 App ' + config.name + ' 配置的默认图标应为 AppIcon');
+        }
+      }
+    }
+    if (widgetTarget) {
+      const widgetConfigs = configsOf(widgetTarget);
+      for (const config of widgetConfigs) {
+        if (config.buildSettings && config.buildSettings.ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES !== undefined) {
+          problems.push('Widget ' + config.name + ' 配置不得带备选图标设置');
+        }
+      }
+    }
+
+    // ---- 3) 运行时：协议、ThemeController 比较后切换、saveState 应用、回前台校准一次 ----
+    const proto = files['Jiangshui/Services/ServiceProtocols.swift'] || '';
+    if (!/protocol\s+ThemeControlling[\s\S]{0,900}?func\s+applyIconTheme\s*\(\s*_ value\s*:\s*String\s*\)/.test(proto)) {
+      problems.push('ThemeControlling 未声明 applyIconTheme(_ value: String)');
+    }
+
+    const functionBody = (raw, code, name) => {
+      const match = new RegExp('func\\s+' + name + '\\s*\\(').exec(code);
+      if (!match) return '';
+      const open = code.indexOf('{', match.index);
+      if (open < 0) return '';
+      const close = matchBalanced(code, open);
+      return close > open ? raw.slice(open, close + 1) : '';
+    };
+
+    const themeSrc = files['Jiangshui/Services/ThemeController.swift'] || '';
+    const themeCode = stripSwift(themeSrc);
+    const themeBody = functionBody(themeSrc, themeCode, 'applyIconTheme');
+    if (!themeBody) problems.push('ThemeController 无法定位 applyIconTheme');
+    else {
+      if (!/value == "water" \? "AppIconWater" : nil/.test(themeBody)) problems.push('applyIconTheme 未把 water 映射到 AppIconWater（其它值回默认）');
+      if (!/alternateIconName == desired/.test(themeBody)) problems.push('applyIconTheme 未先比较 alternateIconName，可能重复触发系统提示');
+      if (!/setAlternateIconName\(desired/.test(themeBody)) problems.push('applyIconTheme 未调用 setAlternateIconName(desired)');
+      if (!/DispatchQueue\.main\.async/.test(themeBody)) problems.push('applyIconTheme 未切到主线程');
+      if (!/icon-theme apply failed/.test(themeBody)) problems.push('applyIconTheme 失败未写 icon-theme apply failed 诊断');
+    }
+    const setIconSites = Object.entries(files).filter(([, source]) => /setAlternateIconName\s*\(/.test(stripSwift(source)));
+    if (setIconSites.length !== 1 || setIconSites[0][0] !== 'Jiangshui/Services/ThemeController.swift') {
+      problems.push('setAlternateIconName 只应出现在 ThemeController（实际 ' + setIconSites.map(([file]) => file).join(', ') + '）');
+    }
+
+    const dispatcher = dispatcherText();
+    if ((dispatcher.match(/applyIconTheme\s*\(/g) || []).length !== 1) {
+      problems.push('BridgeDispatcher 的 applyIconTheme 调用应恰好 1 处（只在 saveState）');
+    }
+    const saveStart = dispatcher.indexOf('case "saveState":');
+    const themeStart = saveStart >= 0 ? dispatcher.indexOf('case "setTheme":', saveStart) : -1;
+    if (saveStart < 0 || themeStart <= saveStart) {
+      problems.push('BridgeDispatcher 无法定位 saveState case 块');
+    } else {
+      const saveBlock = dispatcher.slice(saveStart, themeStart);
+      if (!/state\.hasKey\("iconTheme"\)/.test(saveBlock)) problems.push('saveState 未判断 payload.state.iconTheme 是否存在');
+      if (!/services\.theme\.applyIconTheme\(state\.optString\("iconTheme", "whale"\)\)/.test(saveBlock)) {
+        problems.push('saveState 未按 iconTheme（缺省 whale）调用 applyIconTheme');
+      }
+      const saveAt = saveBlock.indexOf('services.state.save');
+      const applyAt = saveBlock.indexOf('applyIconTheme');
+      const replyAt = saveBlock.indexOf('reply(id, ["revision"');
+      if (!(saveAt >= 0 && applyAt > saveAt && replyAt > applyAt)) {
+        problems.push('saveState 必须先保存成功再应用图标，最后回 revision');
+      }
+    }
+
+    const appSrc = files['Jiangshui/App/AppEnvironment.swift'] || '';
+    const appCode = stripSwift(appSrc);
+    if (!/didBecomeActiveNotification/.test(appCode)) problems.push('AppEnvironment 未监听 didBecomeActiveNotification');
+    if (!/removeObserver/.test(appCode)) problems.push('AppEnvironment 未在 deinit 移除图标校准观察者');
+    const calibrateBody = functionBody(appSrc, appCode, 'calibrateIconTheme');
+    if (!calibrateBody) problems.push('AppEnvironment 无法定位 calibrateIconTheme');
+    else {
+      if (!/guard iconCalibrated == false else \{ return \}/.test(calibrateBody)) problems.push('calibrateIconTheme 未保证只执行一次');
+      if (!/services\.state\.load\(\)/.test(calibrateBody)) problems.push('calibrateIconTheme 未读取已保存状态');
+      if (!calibrateBody.includes('services.theme.applyIconTheme(saved?.optString("iconTheme", "whale") ?? "whale")')) {
+        problems.push('calibrateIconTheme 未按已保存 iconTheme（缺省 whale）校准');
+      }
+    }
+    if (!/calibrateIconTheme\s*\(\s*\)/.test(appCode)) problems.push('AppEnvironment 的 didBecomeActive 回调未调用 calibrateIconTheme');
+
+    return problems.length ? fail(truncateList(problems)) : pass('AppIconWater 为 1024 RGB，project.yml/gen-pbxproj/pbxproj 仅主 App 声明，ThemeController 比较后切换、saveState 应用、回前台只校准一次');
   });
 
   return results;

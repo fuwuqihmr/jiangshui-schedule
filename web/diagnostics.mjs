@@ -22,6 +22,7 @@ export function safeDiagnosticLines(lines){
  /^session-renewal failed reason=repeat$/, /^profile-read recognized=(?:true|false) links=\d+$/,
  /^web-read ok weeks=\d+ rows=\d+ elapsed-ms=\d+ sso=(?:true|false) background=(?:true|false)$/,
  /^web-read-exams count=\d+ error=(?:none|http|session|timeout|format|other)$/,
+  /^web-read-lab bytes=\d+ error=(?:none|http|session|timeout|format|other)$/,
  /^reader-selection semester=(?:\d{4}-\d{4}-[12]|unknown) mode-known=(?:true|false) calendar-cached=(?:true|false)$/,
  /^school-page (?:http-error=\d{3}|network-error=-?\d+) page=(?:portal|school-login|academic-home|timetable|academic|mobile-academic|school) method=(?:GET|POST|OTHER)$/,
  /^reader-error stage=(?:weeks|courses|unknown) http-status=\d{1,3} kind=(?:http|session|timeout|format|other)$/,

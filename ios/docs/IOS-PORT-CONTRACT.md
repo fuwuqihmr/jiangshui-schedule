@@ -5,12 +5,12 @@
 
 ## 0. 目标与硬约束
 
-- 路线：**WKWebView 壳 + 复用 `web/` 的纯 ES Module（v1.5.0 当前 28 个）**，与 `android/` 结构 1:1 对应；苹果 4.2 拒审风险靠原生能力（日历/通知/导出）补足。
-- **禁止单独修改 `web/` 与 `android/`**：`web/` 是 Android 与 iOS 共用层，任何 iOS 需求只能通过桥接与原生实现满足；v1.5.0 同步公开仓属于整包升级的登记例外，升级后以 `shared-layer-manifest.json` 锁定逐文件内容。
-  共享层不再冻结单一哈希：`ios/tools/shared-layer-manifest.json` 逐文件记录 `git ls-files -c -o --exclude-standard -- web android` 的规范化 blob（排除 `*.apk` / `*.zip` / `*/build/*` / `*/.gradle/*`），当前 186 个文件；E1/E2 只报 missing / extra / changed。重新登记：`node ios/tools/check-ios.mjs --write-shared-manifest`。
+- 路线：**WKWebView 壳 + 复用 `web/` 的纯 ES Module（v1.5.2 当前 28 个）**，与 `android/` 结构 1:1 对应；苹果 4.2 拒审风险靠原生能力（日历/通知/导出）补足。
+- **禁止单独修改 `web/` 与 `android/`**：`web/` 是 Android 与 iOS 共用层，任何 iOS 需求只能通过桥接与原生实现满足；v1.5.2 同步公开仓属于整包升级的登记例外，升级后以 `shared-layer-manifest.json` 锁定逐文件内容。
+  共享层不再冻结单一哈希：`ios/tools/shared-layer-manifest.json` 逐文件记录 `git ls-files -c -o --exclude-standard -- web android` 的规范化 blob（排除 `*.apk` / `*.zip` / `*/build/*` / `*/.gradle/*`），当前 188 个文件（web 43 + android 145）；E1/E2 只报 missing / extra / changed。重新登记：`node ios/tools/check-ios.mjs --write-shared-manifest`。
 - 无第三方依赖（不加 SwiftPM/CocoaPods 包），只用系统框架：WebKit / EventKit / UserNotifications / UniformTypeIdentifiers / Network / Security / ActivityKit / WidgetKit。
 - 最低系统：**iOS 15.0**（为兼容 2014 款 MacBook Air 上的 Xcode 13.2.1 / iOS 15.2 SDK 而降级；iOS 16 API 已用 `if #available(iOS 16.0, *)` 回退）。Widget Extension 单独要求 **iOS 16.1**，Live Activity 代码标 `@available(iOS 16.1, *)`。
-- Bundle ID：`cn.local.tomorrow`（与 Android `applicationId` 一致）；`MARKETING_VERSION = 1.5.0`、`CURRENT_PROJECT_VERSION = 64`（对齐公开仓 v1.5.0 与 Android versionCode 64）。
+- Bundle ID：`cn.local.tomorrow`（与 Android `applicationId` 一致）；`MARKETING_VERSION = 1.5.2`、`CURRENT_PROJECT_VERSION = 69`（对齐公开仓 v1.5.2 与 Android versionCode 69）。
 - 代码风格：Swift 5.0（`project.yml` / pbxproj）；单文件尽量 <400 行，P2/P3 状态机等超长文件已在 AUDIT 登记；桥接路径禁止 `!` 强解包；错误一律转成 `BridgeFailure` 文案回给 JS，不允许 crash。
 
 ## 1. 页面承载方式（关键决策，已定）
@@ -51,7 +51,7 @@ window.__jiangshuiSystemDarkMode = function () { return <bool>; };  // 与 Andro
 
 ## 3. action 全表（**45 个 = MUST 35 + OPTIONAL 10**；权威清单 `ios/tests/fixtures/bridge-actions.json`）
 
-下表 1–35 是 1.3.1 legacy 顺序（`runtimeStatus` 第 14、`logout` 第 35），与 `MainActivity.java:718-758` 的 35 个分支 1:1。v1.5.0 契约的 45 个 action 中 `logout` 顺延为第 36，37–45 为 OPTIONAL；`BridgeDispatcher.swift` 主 switch 必须覆盖 45 个（MUST 全部，OPTIONAL 可路由到 `OptionalBridgeActions`）。**P1/P2/P3 均已实现**；P3 的上传/定位有登记过的平台偏离，见 §7.1。
+下表 1–35 是 1.3.1 legacy 顺序（`runtimeStatus` 第 14、`logout` 第 35），与 `MainActivity.java:718-758` 的 35 个分支 1:1。v1.5.2 契约的 45 个 action 中 `logout` 顺延为第 36，37–45 为 OPTIONAL；`BridgeDispatcher.swift` 主 switch 必须覆盖 45 个（MUST 全部，OPTIONAL 可路由到 `OptionalBridgeActions`）。**P1/P2/P3 均已实现**；P3 的上传/定位有登记过的平台偏离，见 §7.1。v1.5.2 的 `capture` 只扩展 payload（考试三字段 + 实验课四字段 + `web-read-lab` 日志），不新增 action。
 
 | # | action | 入参 payload | 出参 value | 阶段 |
 |---|--------|--------------|-----------|------|
@@ -87,7 +87,7 @@ window.__jiangshuiSystemDarkMode = function () { return <bool>; };  // 与 Andro
 | 33 | exportDiagnostics | `{filename,text}` | 写文件；文件名必须匹配 `江水课表-排查日志-[0-9-]+\.txt`，text ≤200000 | P1 |
 | 34 | exportFile | `{mime,filename,base64}` | 写文件；mime ∈ {image/png,application/pdf,text/plain}；base64 ≤44,739,244；解码 1..32MB；文件名禁止 `\/:*?"<>|` 且 ≤180 | P1 |
 | 35 | logout | — | `{ok:true}`，清除状态/同意/缓存/Cookie/Keychain/日志 | P1 |
-**OPTIONAL 10（v1.5.0 编号 36–45；上表第 35 行 `logout` 在 fixture 里是第 36）**：
+**OPTIONAL 10（v1.5.2 编号 36–45；上表第 35 行 `logout` 在 fixture 里是第 36）**：
 
 - **37 feedbackInfo**：无入参；回反馈信息对象（`enabled,title,intro,url`）。
 - **38 openFeedback**：无入参；回 `{ok:true}` 并打开反馈页。
@@ -155,7 +155,7 @@ ios/
    - `project.pbxproj` 内部一致：所有 24 位 hex 引用都有定义、所有 `*.swift` 都在 Sources 阶段、`web` folder reference 存在、Info.plist/Assets 在 Resources 阶段；
    - Info.plist 是合法 XML 且包含必需键（`NSCalendarsFullAccessUsageDescription`/`NSCalendarsWriteOnlyAccessUsageDescription`、`NSUserNotificationUsageDescription`?（iOS 不需要）、`UIBackgroundModes`、`NSAppTransportSecurity`）；
    - 所有 Swift 文件括号/引号配平（粗检）；
-   - `ios/tools/shared-layer-manifest.json` 登记的 186 个文件与 `git ls-files -c -o --exclude-standard -- web android` 的集合/逐文件 blob 一致（E1/E2 无 missing/extra/changed；重新登记用 `node ios/tools/check-ios.mjs --write-shared-manifest`）。
+   - `ios/tools/shared-layer-manifest.json` 登记的 188 个文件与 `git ls-files -c -o --exclude-standard -- web android` 的集合/逐文件 blob 一致（E1/E2 无 missing/extra/changed；重新登记用 `node ios/tools/check-ios.mjs --write-shared-manifest`）。
 2. `node --test ios/tests/`：用 Node 模拟 `window.Android` + `webkit.messageHandlers`，加载真实 `web/bridge.mjs` 与 `web/consent.mjs`，验证 shim 协议、result/error 语义、id 往返；同时覆盖 fixture 45 action 的契约/Android/iOS 对齐、pbxproj、plist、manifest 与 permission 映射。
 3. **不能验证**（必须在交付说明里明写）：编译、签名、模拟器/真机运行、EventKit/通知/文档选择器实际行为、App Store 审核。
 

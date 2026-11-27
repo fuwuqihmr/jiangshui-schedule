@@ -5,7 +5,7 @@
 // - 幂等：扫描 ios/Jiangshui 与 ios/JiangshuiWidgets，队友新增 .swift 后重跑即可纳入 Sources
 // - 双 target：主 App Jiangshui（iOS 15.0）+ Widget Extension JiangshuiWidgetsExtension（iOS 16.1）
 // - 扩展以 .appex 形式经 PBXCopyFilesBuildPhase(dstSubfolderSpec=13) 嵌入主 App
-// - 与 ios/project.yml 等价：cn.local.tomorrow / 1.5.0 (64)
+// - 与 ios/project.yml 等价：cn.local.tomorrow / 1.5.2 (69)
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -25,8 +25,8 @@ const WIDGET_NAME = "JiangshuiWidgetsExtension";
 const WIDGET_DIR = "JiangshuiWidgets";
 const WIDGET_BUNDLE_ID = "cn.local.tomorrow.widgets";
 const BUNDLE_ID = "cn.local.tomorrow";
-const VERSION = "1.5.0";
-const BUILD = "64";
+const VERSION = "1.5.2";
+const BUILD = "69";
 const TARGET_OS = "15.0";
 const WIDGET_OS = "16.1";
 const SWIFT = "5.0";
@@ -259,7 +259,8 @@ const projectReleaseSettings = Object.assign({}, projectShared, {
   SWIFT_COMPILATION_MODE: "wholemodule", SWIFT_OPTIMIZATION_LEVEL: "-O", VALIDATE_PRODUCT: "YES"
 });
 const targetShared = {
-  ASSETCATALOG_COMPILER_APPICON_NAME: "AppIcon", ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: "AccentColor",
+  ASSETCATALOG_COMPILER_APPICON_NAME: "AppIcon", ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIconWater",
+  ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: "AccentColor",
   CODE_SIGN_STYLE: "Automatic", CURRENT_PROJECT_VERSION: BUILD, GENERATE_INFOPLIST_FILE: "NO",
   INFOPLIST_FILE: "Jiangshui/Resources/Info.plist", IPHONEOS_DEPLOYMENT_TARGET: TARGET_OS, MARKETING_VERSION: VERSION,
   PRODUCT_BUNDLE_IDENTIFIER: BUNDLE_ID, PRODUCT_NAME: "$(TARGET_NAME)", SWIFT_EMIT_LOC_STRINGS: "YES",

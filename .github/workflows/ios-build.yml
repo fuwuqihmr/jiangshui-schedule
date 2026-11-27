@@ -54,7 +54,7 @@ jobs:
           node tools/gen-pbxproj.mjs 2>&1 | tee "$OUT/gen.log"
           echo $? > "$OUT/rc-gen"
 
-      - name: 静态门禁 50 项
+      - name: 静态门禁 51 项
         working-directory: ios
         run: |
           OUT=build-out
@@ -63,7 +63,7 @@ jobs:
           node tools/check-ios.mjs 2>&1 | tee "$OUT/check.log"
           echo $? > "$OUT/rc-check"
 
-      - name: 校验器自测 83 项
+      - name: 校验器自测 88 项
         working-directory: ios
         run: |
           OUT=build-out

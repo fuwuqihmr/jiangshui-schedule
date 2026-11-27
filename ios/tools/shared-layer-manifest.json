@@ -602,7 +602,11 @@
     },
     {
       "path": "web/app.mjs",
-      "blob": "0b30330fe0b1653338f61f7dc8f4156ecc5b2fc4"
+      "blob": "1e033c31094bd92d6a0de359fa8ae23cbfaec3bd"
+    },
+    {
+      "path": "web/assets/app-icon-water.png",
+      "blob": "b9819c098ac6e753b54b7362ff25e3c9f649b04b"
     },
     {
       "path": "web/assets/app-icon.png",
@@ -626,7 +630,7 @@
     },
     {
       "path": "web/core.mjs",
-      "blob": "fe53dcf5cd54884a73491d8b156cebeb6c94315f"
+      "blob": "1a3ffde34241540412e4b3641f79c7273db0be00"
     },
     {
       "path": "web/course-time.mjs",
@@ -650,7 +654,7 @@
     },
     {
       "path": "web/diagnostics.mjs",
-      "blob": "495e519549db3b88990eab1baac9a01ad83f553c"
+      "blob": "f8d394637840efe482c6a0a03ff2cd2da4ba4831"
     },
     {
       "path": "web/feedback.json",
@@ -675,6 +679,10 @@
     {
       "path": "web/jiaowu-exam.mjs",
       "blob": "64f2be7aa959e5c8bf4aa0bfafec5e3d30228b8f"
+    },
+    {
+      "path": "web/jiaowu-lab.mjs",
+      "blob": "e6f9e0246a786b648d90d6c9a81958eccc888f1d"
     },
     {
       "path": "web/jsxsd.mjs",
@@ -714,11 +722,11 @@
     },
     {
       "path": "web/schedule-diagnostics.mjs",
-      "blob": "c715a8840a81406f54f6c0460b40bfefb157550d"
+      "blob": "f799496f6fc76bc4ec91119b5b1f55c7ada8090a"
     },
     {
       "path": "web/school-reader.js",
-      "blob": "ab4eba21cbc007986bcc7159a61858592d84c036"
+      "blob": "a99293cf2c2fe2e67375ab271cc01fddfcf6f9d4"
     },
     {
       "path": "web/school.mjs",
@@ -738,7 +746,7 @@
     },
     {
       "path": "web/style.css",
-      "blob": "7864380d14aa7fa94d55589da367592775eb30eb"
+      "blob": "761420526cc2a43c3588561b154e8ea363d5c2e5"
     },
     {
       "path": "web/theme.mjs",
@@ -746,7 +754,7 @@
     },
     {
       "path": "web/themes.css",
-      "blob": "fb4107fd4a6abcc5909107c8c164a7607e3da75e"
+      "blob": "b659e28476e9adf9a7c5bba156617604f3539abe"
     },
     {
       "path": "web/timetable-export.mjs",

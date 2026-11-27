@@ -3,9 +3,9 @@
 - 项目根：`D:\JS\pkg\02-项目源码\course-change`
 - 审计对象：`ios/`（WKWebView 壳 + 原生服务 + 资源 + 工程文件）
 - 审计者：verifier（独立静态校验）
-- 审计日期：2026-10-27（初版）；2026-10-30（第 11 轮基线/门禁同步）；2026-10-30（第 12 轮：F10 扩展 + F11/F12，门禁 46 项）；2026-11-03（task-34：Widget 扩展 + A5/A6 分 target，门禁 47 项）；2026-11-03（task-35：G1 实时活动，门禁 48 项）；2026-11-24（task-42：B1–B5 换 45 action fixture、E1–E2 换共享层 manifest，门禁仍 48 项）；2026-11-24（task-45：公开仓 ios-ci 首次真实编译 run 45417661000，门禁/测试仍 48/66）；2026-11-24（task-47：考试三字段透传，F8 增第 8 节，iOS 测试 66→72）；2026-11-25（task-55：P0 页面服务自愈 + 登录等待时钟，门禁 48→50，iOS 测试 72→82）；2026-11-25（task-58/59 收口：reading 页面换代与旧导航身份校验并入 F14/F13，仍 50 项、82 测试）；2026-11-25（task-62/task-64：回前台加载会话与 1.5s terminate 看门狗并入 F13，仍 50 项；iOS 测试 82→83）
+- 审计日期：2026-10-27（初版）；2026-10-30（第 11 轮基线/门禁同步）；2026-10-30（第 12 轮：F10 扩展 + F11/F12，门禁 46 项）；2026-11-03（task-34：Widget 扩展 + A5/A6 分 target，门禁 47 项）；2026-11-03（task-35：G1 实时活动，门禁 48 项）；2026-11-24（task-42：B1–B5 换 45 action fixture、E1–E2 换共享层 manifest，门禁仍 48 项）；2026-11-24（task-45：公开仓 ios-ci 首次真实编译 run 45417661000，门禁/测试仍 48/66）；2026-11-24（task-47：考试三字段透传，F8 增第 8 节，iOS 测试 66→72）；2026-11-25（task-55：P0 页面服务自愈 + 登录等待时钟，门禁 48→50，iOS 测试 72→82）；2026-11-25（task-58/59 收口：reading 页面换代与旧导航身份校验并入 F14/F13，仍 50 项、82 测试）；2026-11-25（task-62/task-64：回前台加载会话与 1.5s terminate 看门狗并入 F13，仍 50 项；iOS 测试 82→83）；2026-11-27（task-69：v1.5.2 实验课四字段透传 + 备选图标主题，门禁 50→51，iOS 测试 83→88）
 - 本机环境：Windows（无 Xcode、无 swiftc、无模拟器）；Node v24.21.0（DSH bundled）
-- 结论：**`node ios/tools/check-ios.mjs` 50/50 ok，fail 0，退出码 0；`node --test ios/tests/` 83/83 pass；`node --test tests/*.test.mjs`（web v1.5.0）391/391 pass。未发现可由静态手段确认的产品缺陷。另由公开仓 `ios-ci` 的 run `45417661000` 完成 Debug/Release/真机三配置真实编译（0 error；warning 未清零，见 §1.5），产物 IPA 3,397,722 B / `b9282267…62706`；未签名、未真机。**
+- 结论：**`node ios/tools/check-ios.mjs` 51/51 ok，fail 0，退出码 0；`node --test ios/tests/` 88/88 pass；`node --test tests/*.test.mjs`（web v1.5.2）436/436 pass。未发现可由静态手段确认的产品缺陷。另由公开仓 `ios-ci` 的 run `45417661000` 完成 Debug/Release/真机三配置真实编译（0 error；warning 未清零，见 §1.5），产物 IPA 3,397,722 B / `b9282267…62706`；未签名、未真机。**
 
 > 说明：本机无法编译 Swift、无法启动 WKWebView/Network.framework、无法跑真机，因此本审计只覆盖「静态可判定的结构与契约一致性」。编译、签名、运行时行为见 §6「未验证（需 Mac）」。
 
@@ -30,7 +30,7 @@ NODE="C:/Users/19890/.dsh/dsh-runtimes/dsh-primary-runtime/dependencies/node/bin
 ### 1.2 全量检查与测试
 
 ```bash
-# 静态检查：50 项，退出码 0=全绿 / 1=有 fail
+# 静态检查：51 项，退出码 0=全绿 / 1=有 fail
 node ios/tools/check-ios.mjs
 
 # 测试：Node 24 在 Windows 下不会递归展开目录参数，
@@ -52,7 +52,7 @@ node --input-type=module -e "import {runChecks} from './ios/tools/check-ios.mjs'
 ```bash
 # 逐文件登记 git 工作树里的共享层 blob（git hash-object 规范化行尾）
 node ios/tools/check-ios.mjs --write-shared-manifest
-# 已登记：ios/tools/shared-layer-manifest.json（formatVersion=1，186 个文件）
+# 已登记：ios/tools/shared-layer-manifest.json（formatVersion=1，188 个文件）
 ```
 
 E1 只报 `missing` / `extra`（清单与 `git ls-files -c -o --exclude-standard -- web android` 的集合差异），E2 只报 `changed`（逐文件 blob 不同）；排除 `*.apk` / `*.zip` / `*/build/*` / `*/.gradle/*`。聚合哈希仅用于诊断，不再是门禁口径。`check-ios.mjs` 内置 git 解析回退（PATH → DSH/MSYS/Git for Windows），不依赖外部 sha256sum。
@@ -77,7 +77,7 @@ E1 只报 `missing` / `extra`（清单与 `git ls-files -c -o --exclude-standard
 
 ---
 
-## 2. 通过项（50/50）
+## 2. 通过项（51/51）
 
 执行命令：`node ios/tools/check-ios.mjs`（每条检查的单项命令见 §1.3）。
 
@@ -140,8 +140,8 @@ E1 只报 `missing` / `extra`（清单与 `git ls-files -c -o --exclude-standard
 
 | 编号 | 检查内容 | 关键证据 | 结果 |
 | --- | --- | --- | --- |
-| E1 | 共享层文件集合 == `shared-layer-manifest.json`，只报 missing / extra | `git ls-files -c -o --exclude-standard -- web android`（排除 `*.apk` / `*.zip` / `build/` / `.gradle/`）vs 清单 186 条 | ok（missing 0 / extra 0） |
-| E2 | 每个文件的 git blob（`git hash-object`，行尾规范化）与清单一致，只报 changed | 186 个文件逐条比较 | ok（changed 0） |
+| E1 | 共享层文件集合 == `shared-layer-manifest.json`，只报 missing / extra | `git ls-files -c -o --exclude-standard -- web android`（排除 `*.apk` / `*.zip` / `build/` / `.gradle/`）vs 清单 188 条 | ok（missing 0 / extra 0） |
+| E2 | 每个文件的 git blob（`git hash-object`，行尾规范化）与清单一致，只报 changed | 188 个文件逐条比较 | ok（changed 0） |
 
 ### F. 桥接常量/文案/桩（F1–F12，全 ok）
 
@@ -173,7 +173,13 @@ E1 只报 `missing` / `extra`（清单与 `git ls-files -c -o --exclude-standard
 | F13 | 页面服务自愈：LocalServer 的 `isRunning/isHealthy` 精确形状、`generation` 代际守卫、`waitingTimeout=1.5`、`onInterrupted`、`stop()` 可重入、`.waiting` 超时换端口、`.failed/.cancelled` 先 `dropListenerLocked` 再 `recoverLocked`、`failLocked` 全文件唯一 `onFailure`；端口仍 47851..47860 且只绑 127.0.0.1。WebHost 的 `serverErrorTitle`、`retryPage()` 公开/私有重载（先 stop 后 start）、`startIfNeeded` 用 `isHealthy` 识别半死 listener、`loadIndex` 清错误且同端口去重、`handleLoadFailure` 0.4s 只自动重试一次、`didFinish` 清错误；`didFinish/didFail/didFailProvisional` 均以 `isCurrentNavigation` 做对象身份校验拒绝旧导航（task-59）；RootView 显示标题并调用 `retryPage()`；`webViewWebContentProcessDidTerminate` 捕获 `pendingNavigation` 并挂 1.5s `DispatchWorkItem` 看门狗（`pageLoaded == false` / `isLoading` / 同端口 / 导航身份四条件；超时清 `isLoading`、写 `page-terminate-recover`、`loadIndex(force: true)`；原早退保留） | `Web/LocalServer.swift` / `Web/WebHost.swift` / `App/RootView.swift` | ok（健康判定 + 端口回退 + 错误遮罩 + 手动/自动重试 + 旧导航拒绝 + 1.5s 看门狗均在位） |
 | F14 | 登录等待时钟：`loginDeadline=180`、`loginPresentationWait=6`、0.5s 轮询；`LoginPhase` 的 idle/presenting/waiting；`reading` 在 start / 登录结果 / xskb 换代 / finish 四处复位（`read()` 本身只置位）；`needLogin` 先 `cancelDeadline()` 再启动呈现轮询，而非只取消截止；`isApplicationActive` 判 `.active`；退后台暂停并累计已用时长、回前台续跑；6s 内未转可见写 `login-present-ignored` 诊断并回「学校登录页暂时无法打开…」；`xskb` 落点先 `leaveLogin()` 再进 `reading` 守卫；`leaveLogin` 停表并挂 60s；task-58 起用 `readingPageURL`/`readingToken` 记录本轮页面并作废旧注入/轮询（同一 URL 重复 `didFinish` 直接返回） | `School/SchoolReadController.swift` | ok（6s 呈现窗口 + 180s 活跃倒计时 + 后台暂停 + xskb 落点 + 页面换代均在位） |
 
-### 测试（83/83 pass）
+### I. v1.5.2 实验课透传与备选图标（F15，全 ok）
+
+| 编号 | 检查内容 | 关键证据 | 结果 |
+| --- | --- | --- | --- |
+| F15 | AppIconWater 资产（单张 1024 universal/ios、PNG 1024×1024 8-bit RGB 无 alpha、sha256 `011d8be0…ffcb0b`）；project.yml / gen-pbxproj / pbxproj 三处 `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES=AppIconWater` 只在主 App；`ThemeControlling.applyIconTheme`、ThemeController 的 `alternateIconName == desired` 比较与 `setAlternateIconName`；`BridgeDispatcher.saveState` 保存成功后按 `iconTheme` 应用；`AppEnvironment.didBecomeActive` 只校准一次 | `Resources/Assets.xcassets/AppIconWater.appiconset/`、`Services/ThemeController.swift`、`Web/BridgeDispatcher.swift`、`App/AppEnvironment.swift`、`project.yml`、`tools/gen-pbxproj.mjs`、`Jiangshui.xcodeproj/project.pbxproj` | ok（资产、三处工程设置、切换链路、回前台校准均在位） |
+
+### 测试（88/88 pass）
 
 | 测试文件 | 覆盖 |
 | --- | --- |
@@ -186,7 +192,8 @@ E1 只报 `missing` / `extra`（清单与 `git ls-files -c -o --exclude-standard
 | `ios/tests/live-activity.test.mjs` | 实时活动只在 iOS 16.1+ 可见、请求/更新/T+10 结束、失败只写诊断、ClassReminderService 接入并限制 60 条、Info.plist 与 Widget 无关闭入口 |
 | `ios/tests/exam-passthrough.test.mjs` | exams 只有 JSON 数组才透传、examFetchedAt/examError 非空才写、examError 五类白名单外归 other 且只归一一次、未知字段不污染 rows/totalWeeks/semesterId、三字段顺序在 persist/finish 之前 |
 | `ios/tests/p0-fixes.test.mjs` | P0 页面服务自愈（isHealthy/stop 可重入/waiting 1.5s/failed·cancelled 先清理再恢复/单一 onFailure）、WebHost 错误卡片与 stop→start 重试、0.4s 自动重试一次、RootView 重试按钮；登录 180s/6s 时钟、后台暂停、xskb 先 leaveLogin、reading 四处复位（read() 本身只置位）；WebHost 回前台 beginLoadSession 分轮、自动重试轮不清零、terminate 合并守卫与 1.5s 看门狗四条件 |
-| `ios/tests/full-suite.test.mjs` | 50 项齐全且全 ok、formatResults 汇总、CLI 退出码 0 |
+| `ios/tests/v152-sync.test.mjs` | 实验课 labHtml/labFetchedAt/labError 非空才透传、labHttpStatus 按 hasKey 保留 0、payload 只多 4 个登记键、AppIconWater 1024 RGB、工程三处 alternate 只在主 App、saveState 应用与回前台只校准一次 |
+| `ios/tests/full-suite.test.mjs` | 51 项齐全且全 ok、formatResults 汇总、CLI 退出码 0 |
 | `ios/tests/fixtures/bridge-actions.json` | v0-2026-11-18 权威 action 清单（45 个，含 level/webUsage/payload/response、8 个 callback） |
 
 ---
@@ -196,7 +203,7 @@ E1 只报 `missing` / `extra`（清单与 `git ls-files -c -o --exclude-standard
 **无。** 最终两轮复跑结果一致：
 
 ```text
-汇总：50 项，ok 50，fail 0
+汇总：51 项，ok 51，fail 0
 全绿，退出码：0
 ```
 
@@ -279,6 +286,9 @@ E1 只报 `missing` / `extra`（清单与 `git ls-files -c -o --exclude-standard
 | F13：看门狗 `1.5` 改 `2.0` | F13 fail | FAIL：看门狗未在 1.5s 后执行 |
 | F13：四条件里的导航身份改成 `self.currentNavigation === self.currentNavigation` | F13 fail | FAIL：未同时校验 pageLoaded/isLoading/端口/导航身份 |
 | F13：删掉看门狗之后的原 early-return | F13 fail | FAIL：原 early-return 必须保留在看门狗之后 |
+| F8：删 `SchoolReadController` 的 `labHtml` 非空透传块 | F8 fail | FAIL：labHtml 未做非空守卫后写入；`payload["labHtml"]` 恰好一次（实际 0 次） |
+| F15：删 project.yml 的 `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIconWater` | F15 fail | FAIL：project.yml 应恰好 1 处；主 App target 未声明 AppIconWater 备选图标 |
+| F15：删 `BridgeDispatcher` saveState 的 `applyIconTheme` 调用 | F15 fail | FAIL：applyIconTheme 应恰好 1 处；saveState 未判断/未应用/顺序失败 |
 
 **F11 的一轮返工**：最初只断言 `attachHeadlessOnMain` 内「至少一处 alpha=0.01」，只改 :179 时 :187 的 else 分支仍满足，变异没有失败。已改成按 `if parent == nil` / `else` 两个分支分别断言 `alpha=0.01`、`isUserInteractionEnabled=false`、`accessibilityElementsHidden=true`，并只要求首次挂载分支有 `insertSubview(view, at: 0)`；再跑上述三种 alpha 变异均能 FAIL 并指出具体分支。该结构断言比「函数内至少一处」更严，未来若把两条分支合并成一次赋值，需要同步更新断言而不是删掉。
 
@@ -305,7 +315,8 @@ E1 只报 `missing` / `extra`（清单与 `git ls-files -c -o --exclude-standard
 15. **共享层不再冻结单一哈希**：E1/E2 改为 `ios/tools/shared-layer-manifest.json` 的逐文件 git blob 比对，只报 missing / extra / changed；清单要随 `web/`、`android/` 的合法改动重跑 `node ios/tools/check-ios.mjs --write-shared-manifest`。`contractVersion` 与 45 action fixture 才是契约门禁的权威口径。
 16. **考试字段只做透传，业务语义仍在 web 层**（`SchoolReadController.swift` / `web/school-reader.js`）：原生只把 `exams`（数组）、`examFetchedAt`（非空串）、`examError`（五类白名单，其它归 `other`）写进 payload，**不透传 `examHttpStatus`**；考试失败时是否保留旧快照、页面如何展示均由 `web/jiaowu-exam.mjs` 决定。F8 第 8 节与 `exam-passthrough.test.mjs` 只能验证静态源码形状；本轮 +19 行尚未重新编译、未真机、未用学校账号验证考试接口。
 17. **P0 两处修复只能静态验形状**（task-55）：F13/F14 锁住的是 LocalServer 的健康判定/代际/顺序、WebHost 的 stop→start 与 0.4s 重试、登录时钟的常量/分支/后台通知订阅；端口真被占用时能否在 1.5s 内换端口、WKWebView 在 stop→start 后能否重新加载、真机锁屏/切后台时 180s 是否按前台时间累计，都必须真机 + 真实网络验证。`p0-fixes.test.mjs` 同样只读源码，不执行 Swift。
-18. **回前台加载会话与 terminate 看门狗只能静态验形状**（task-62/task-64）：F13 锁的是 `beginLoadSession` 四项清零、scene `.active` 顺序、自动重试轮不清零、`loadIndex` 的 `autoRound` 分支、1.5s `DispatchWorkItem` 的四条件与 `loadIndex(force: true)`；WebKit 在真机后台被回收时的 `scenePhase` 时序、回前台首次加载失败是否仍误弹、同一端口能否在 1.5s 后恢复，都必须 CI 编译 + 真机/模拟器验证。
+18. **实验课透传与备选图标只能静态验形状**（task-69）：F8 第 8 节与 `v152-sync.test.mjs` 锁的是 `labHtml`/`labFetchedAt`/`labError` 的非空守卫、`labHttpStatus` 的 `hasKey` 语义、`web-read-lab` 日志、AppIconWater 的字节与工程三处设置、`setAlternateIconName` 的调用链；实际实验课页面渲染、iOS 是否真的切换主屏图标、后台恢复时图标是否闪回默认，都必须 CI 编译 + 真机验证。v1.5.2 尚未编译。
+19. **回前台加载会话与 terminate 看门狗只能静态验形状**（task-62/task-64）：F13 锁的是 `beginLoadSession` 四项清零、scene `.active` 顺序、自动重试轮不清零、`loadIndex` 的 `autoRound` 分支、1.5s `DispatchWorkItem` 的四条件与 `loadIndex(force: true)`；WebKit 在真机后台被回收时的 `scenePhase` 时序、回前台首次加载失败是否仍误弹、同一端口能否在 1.5s 后恢复，都必须 CI 编译 + 真机/模拟器验证。
 
 ---
 
@@ -335,6 +346,7 @@ E1 只报 `missing` / `extra`（清单与 `git ls-files -c -o --exclude-standard
 - EventKit：权限弹窗、读写日历、删除、`requestAccess(to: .event)` 在 iOS 16 的实际行为与错误码。
 - UNUserNotificationCenter：授权、排期、前台展示、点通知进 App、Badge、声音；`UNCalendarNotificationTrigger` 的时区/重复规则。
 - Live Activity：`ActivityAuthorizationInfo` 系统开关、锁屏/灵动岛展示、T+10 的 `.after` 结束策略、App 被杀后的活动清理、`endAll` 撤销；静态检查只能确认 API 调用与 16.1 门槛。
+- 备选图标（AppIconWater / `iconTheme=water`）：`setAlternateIconName` 是否触发系统确认、主屏图标是否立即切换、App 重启/回前台后是否保持；Asset catalog 能否把 `AppIconWater.appiconset` 编进 IPA。v1.5.2 尚未编译。
 - BGTaskScheduler：`BGTaskSchedulerPermittedIdentifiers` 与实际 `register`/提交任务是否一致（本审计只查 plist）；后台 fetch/processing 是否被系统调度。
 - UIDocumentPicker：导入 JSON、导出 txt/png/pdf 的真实可用性、取消回调、临时文件清理。
 - Keychain（`kSecClassGenericPassword` / `AfterFirstUnlock`）在真机上的保存/读取/清除。
@@ -347,12 +359,12 @@ E1 只报 `missing` / `extra`（清单与 `git ls-files -c -o --exclude-standard
 
 ## 7. 审计结论
 
-- 静态检查：50 项全部通过，fail 0（`node ios/tools/check-ios.mjs` 退出码 0）。
-- 测试：iOS 83 项全部通过（`node --test ios/tests/`）；web 391 项全部通过（`node --test tests/*.test.mjs`，v1.5.0）。
-- 共享层：`shared-layer-manifest.json` 登记 186 个文件，E1/E2 逐文件 blob 一致（不再冻结 182 / 单一聚合哈希）。
+- 静态检查：51 项全部通过，fail 0（`node ios/tools/check-ios.mjs` 退出码 0）。
+- 测试：iOS 88 项全部通过（`node --test ios/tests/`）；web 436 项全部通过（`node --test tests/*.test.mjs`，v1.5.2）。
+- 共享层：`shared-layer-manifest.json` 登记 188 个文件（web 43 + android 145），E1/E2 逐文件 blob 一致（不再冻结 182 / 单一聚合哈希）。
 - 真实编译：公开仓 `ios-ci` run `45417661000`（commit `823c522`）18 步全 success，8 个 rc 全 0，check 48/48、test 66/66，三份 xcodebuild 0 error / BUILD SUCCEEDED；warning 19/17/9 行（未清零），IPA 3,397,722 B / `b9282267…62706` / arm64 / 未签名。
-- 真实缺陷：**本轮未发现可由静态手段确认的缺陷**；§5 是观察项，§6 是必须到 Mac 上补验的清单。task-34 新增 A11 后，Widget 扩展只能验证工程结构与源码门槛；task-35 新增 G1 后，Live Activity 也只验证 API 调用、16.1 门槛与 T+10 策略；task-42 的 B1–B5/E1–E2 只能验证 45 action 契约与共享层清单，task-47 的 F8 第 8 节与 `exam-passthrough.test.mjs` 只能验证考试三字段的静态透传形状；task-55 的 F13/F14 与 `p0-fixes.test.mjs` 只能验证页面服务自愈与登录时钟的源码形状（9 条变异均能红）；task-58/59 的页面换代（`readingPageURL`/`readingToken`）与旧导航身份校验（`isCurrentNavigation`）同样只是静态形状（新增 3 条变异均能红）；task-62/task-64 的回前台加载会话与 1.5s terminate 看门狗同样只是静态形状（新增 4 条变异均能红），都不能替代 Xcode 编译/签名/真机锁屏、端口占用或灵动岛验证。
+- 真实缺陷：**本轮未发现可由静态手段确认的缺陷**；§5 是观察项，§6 是必须到 Mac 上补验的清单。task-34 新增 A11 后，Widget 扩展只能验证工程结构与源码门槛；task-35 新增 G1 后，Live Activity 也只验证 API 调用、16.1 门槛与 T+10 策略；task-42 的 B1–B5/E1–E2 只能验证 45 action 契约与共享层清单，task-47 的 F8 第 8 节与 `exam-passthrough.test.mjs` 只能验证考试三字段的静态透传形状；task-55 的 F13/F14 与 `p0-fixes.test.mjs` 只能验证页面服务自愈与登录时钟的源码形状（9 条变异均能红）；task-58/59 的页面换代（`readingPageURL`/`readingToken`）与旧导航身份校验（`isCurrentNavigation`）同样只是静态形状（新增 3 条变异均能红）；task-62/task-64 的回前台加载会话与 1.5s terminate 看门狗同样只是静态形状（新增 4 条变异均能红）；task-69 的 F15 与实验课透传也只是静态形状（3 条变异均能红），都不能替代 Xcode 编译/签名/真机锁屏、端口占用、灵动岛或图标切换验证。
 - 产物：
   - `ios/tools/check-ios.mjs`：纯 Node、零第三方依赖、可重复运行。
-  - `ios/tests/{pbxproj,actions,permission,plist-bridge,baseline,reminder-schedule,live-activity,exam-passthrough,p0-fixes,full-suite}.test.mjs` + `tests/fixtures/bridge-actions.json` + `package.json` + `index.mjs`（目录入口，兼容 Node 24 Windows）。
+  - `ios/tests/{pbxproj,actions,permission,plist-bridge,baseline,reminder-schedule,live-activity,exam-passthrough,p0-fixes,v152-sync,full-suite}.test.mjs` + `tests/fixtures/bridge-actions.json` + `package.json` + `index.mjs`（目录入口，兼容 Node 24 Windows）。
   - `ios/docs/AUDIT.md`：本文件。

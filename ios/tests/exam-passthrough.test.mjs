@@ -94,7 +94,7 @@ test('未知字段不会进入 payload，rows/totalWeeks/semesterId 的原有组
     'payload 必须先用 rows/totalWeeks/semesterId 组装'
   );
   const assigned = assignedPayloadKeys();
-  const allowed = new Set(['studentProfile', 'exams', 'examFetchedAt', 'examError']);
+  const allowed = new Set(['studentProfile', 'exams', 'examFetchedAt', 'examError', 'labHtml', 'labFetchedAt', 'labError', 'labHttpStatus']);
   const unknown = assigned.filter((key) => !allowed.has(key));
   assert.deepEqual(unknown, [], 'payload 出现未登记键：' + unknown.join('/'));
   for (const key of EXAM_KEYS) {

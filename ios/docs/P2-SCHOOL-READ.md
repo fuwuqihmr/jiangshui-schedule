@@ -2,7 +2,7 @@
 
 > 交付日期：2026-10-29　实现：Lead（本会话直接开发，未分工）
 > 目标：把「一行不存在的 P2」变成能真正登录学校 → 读课表 → 读假条的 iOS 实现，与 Android 行为对齐。
-> 状态：**已编译通过**（commit `9685ab5`：Debug / Release / iphoneos 三条链路 BUILD SUCCEEDED、0 error，未签名 IPA 3,243,844 B 已产出；静态门禁 50/50、iOS 83 测试、web 391 测试全绿）。**尚未用真实学校账号跑通** —— 真机验证是唯一的验收口径。
+> 状态：**v1.5.2 源码已收口，尚未编译、未真机**。上一次真实编译是 commit `9685ab5` 的 v1.5.0（Debug / Release / iphoneos 三条链路 BUILD SUCCEEDED、0 error，未签名 IPA 3,243,844 B；当时静态门禁 50/50、iOS 83 测试、web 391 测试全绿）。v1.5.2 的实验课透传与备选图标只做了静态校验。**尚未用真实学校账号跑通** —— 真机验证是唯一的验收口径。
 > 真机验证清单见 §7，必须用真实学校账号跑一遍本文件才算「P2 完成」。
 
 ## 1. 新增/改动的文件
@@ -23,9 +23,9 @@
 | `Jiangshui/Web/LocalServer.swift` | 399 | P0 页面服务自愈：健康判定/代际/1.5s waiting/端口回退 |
 | `Jiangshui/Web/WebHost.swift` | 559 | P0 错误遮罩、`retryPage()` stop→start、0.4s 自动重试一次 |
 | `Jiangshui/App/RootView.swift` | 138 | P0 错误卡片标题与「重试」按钮 |
-| `tools/check-ios.mjs` | — | F8 P2/P3 门禁 + F10-F14 + G1（当前 50 项） |
+| `tools/check-ios.mjs` | — | F8 P2/P3 门禁 + F10-F15 + G1（当前 51 项） |
 
-未改动：`android/`、`harmony/`。`web/` 基线 **182 文件 / `1ea23688…18cbdd`**；相对接手时新增 `web/state-sync.mjs`（保存三层兜底，见 §10），`web/app.mjs` 有启动/保存自愈改动，其余 ES Module 未动。
+未改动：`android/`、`harmony/`。`web/` 当前是 **v1.5.2：43 个文件 / 436 项测试**；共享层不再冻结单一文件数/哈希，改由 `ios/tools/shared-layer-manifest.json` 逐文件登记（当前 188 = web 43 + android 145），只报 missing/extra/changed。`web/state-sync.mjs`（保存三层兜底，见 §10）与 `web/jiaowu-lab.mjs`（实验课页面解析）都在当前清单内。
 
 ## 2. 四阶段状态机
 
@@ -124,9 +124,9 @@ start(host:completion:)
 ```bash
 cd ios
 node tools/gen-pbxproj.mjs     # 幂等；自动收录新 .swift（当前 Swift 41 个）
-node tools/check-ios.mjs       # 50 项静态门禁
-node --test tests/             # 83 项桥接/工程一致性测试
-cd .. && node --test tests/*.test.mjs   # web 共享层 391 项
+node tools/check-ios.mjs       # 51 项静态门禁
+node --test tests/             # 88 项桥接/工程一致性测试
+cd .. && node --test tests/*.test.mjs   # web 共享层 436 项
 ```
 
 ## 10. 真机首跑故障与修复（2026-10-30）
@@ -163,12 +163,12 @@ Sideloadly 重签的 IPA 在真机首次登录成功后，课表已能显示，�
 ### 10.5 状态与验收
 
 - 已落盘：`web/state-sync.mjs`、`web/app.mjs` 三层兜底；`StateStore` 冲突日志；上表四条运行期修复；`BridgeDispatcher` 显式回包防御。
-- 静态门禁 **50/50**、iOS **83 pass**、web **391 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
+- 静态门禁 **51/51**、iOS **88 pass**、web **436 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
 - **尚未重新编译、重签、真机复跑**：本机无 Xcode，结论只到静态与 Node 层。下一次真机重点验：首次登录不弹保存冲突、点「返回课表」立即取消、假条同步不再恒 `NEED_SESSION`、登录等待不再被 60s 误杀（现已改为 6s 呈现 + 180s 前台倒计时，见 §13）。
 
 ## 11. P3 进展：顶部白条、无头核对、请假深链、上传与定位（2026-10-30）
 
-静态门禁已扩到 **50 项**：F10 增补白条 A 方案断言，新增 F11（无头核对）与 F12（请假深链 + 上传/定位资产）；task-55 又新增 F13（页面服务自愈）与 F14（登录时钟，见 §13）。以下四项仍需真机/真账号验证，本机只到静态层。
+静态门禁已扩到 **51 项**：F10 增补白条 A 方案断言，新增 F11（无头核对）与 F12（请假深链 + 上传/定位资产）；task-55 新增 F13（页面服务自愈）与 F14（登录时钟，见 §13）；task-69 新增 F15（备选图标主题，见 §14）。以下各项仍需真机/真账号验证，本机只到静态层。
 
 ### 11.1 顶部白条：WebView 只落底部安全区
 
@@ -214,8 +214,8 @@ Sideloadly 重签的 IPA 在真机首次登录成功后，课表已能显示，�
 
 ### 11.6 状态
 
-- 静态门禁 **50/50**、iOS **83 pass**、web **391 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
-- **考试透传与 P0 修复本轮未编译**；白条视觉、无头容器是否被 WebKit 降频、请假深链回跳、上传/定位两条 P3 偏离都已随 v1.5.0 编译，但仍需 Mac + 真机复核。
+- 静态门禁 **51/51**、iOS **88 pass**、web **436 pass**（`node tools/check-ios.mjs` / `node --test tests/` / `node --test tests/*.test.mjs`）。
+- **考试/实验课透传、P0 修复与备选图标本轮未编译**；白条视觉、无头容器是否被 WebKit 降频、请假深链回跳、上传/定位两条 P3 偏离都已随 v1.5.0 编译，但仍需 Mac + 真机复核。
 
 ## 12. 考试字段透传（S 档，2026-11-24，未编译验证）
 
@@ -249,12 +249,34 @@ Sideloadly 重签的 IPA 在真机首次登录成功后，课表已能显示，�
 
 ### 13.3 状态
 
-- 本机静态门禁 **50/50**，iOS 回归 **83/83**，web **391/391**，gen 幂等 sha `b1cfa9e2…41b3d8b`。task-58/59 的 reading 换代与旧导航身份校验已并入 F14/F13，仍 50 项、不新增编号。
+- 本机静态门禁 **51/51**，iOS 回归 **88/88**，web **436/436**，gen 幂等 sha `23f4a4c1…df96a`。task-58/59 的 reading 换代与旧导航身份校验已并入 F14/F13，仍不新增编号；task-69 的实验课/图标另立 F15。
 - **未编译、未真机**：端口占用/系统回收时的 1.5s 换端口、`stop→start` 后 WKWebView 重载、真机锁屏/切后台时 180s 的累计与恢复、错误卡片布局与按钮交互，都必须由 CI 编译 + 真机（含学校账号）验证。
 
 ### 13.4 回前台加载会话与 terminate 看门狗（task-62/task-64）
 
 - **回前台首次加载失败误弹遮罩（task-61）**：`WebHost` 新增 `isAutoRetryRound`，`retryPage(autoRetry:)` 只在手动重试时清零标记、自动重试轮保留当前加载会话；`beginLoadSession()` 统一清四项并取消旧 work；scene 回到 `.active` 时先 `beginLoadSession()` 再 `startIfNeeded()` / `resumePageIfReady()`；`loadIndex` 的 `autoRound` 分支不再重复开轮；`didFinish` 清标记。
 - **加载中进程回收（task-64）**：`webViewWebContentProcessDidTerminate` 先捕获 `pendingNavigation`；若同一端口仍在加载，挂 1.5s `DispatchWorkItem` 看门狗。超时后仍满足 `pageLoaded == false`、`isLoading`、`currentLoadPort == port`、`currentNavigation === pendingNavigation` 四条件时，清 `isLoading`、写 `page-terminate-recover port=…`、`loadIndex(port: port, force: true)`；原 early-return 保留在看门狗之后，避免同一轮重复启动。
-- **门禁与回归**：F13 增补上述形状（`beginLoadSession`、scene 顺序、retry 分支、`loadIndex` 分支、`page-load-*` 日志、看门狗四条件与只调度一次），总数仍 50 项；`ios/tests/p0-fixes.test.mjs` 第 11 条同步，iOS 回归 82→83。变异「删 scene 的 beginLoadSession / auto 轮无条件重开 / 删 terminate 合并守卫 / 删看门狗 / 1.5→2.0 / 弱化四条件 / 删 early-return」均能红。
+- **门禁与回归**：F13 增补上述形状（`beginLoadSession`、scene 顺序、retry 分支、`loadIndex` 分支、`page-load-*` 日志、看门狗四条件与只调度一次），F13/F14 之后 F15 另立，总数 51 项；`ios/tests/p0-fixes.test.mjs` 第 11 条同步，iOS 回归 88。变异「删 scene 的 beginLoadSession / auto 轮无条件重开 / 删 terminate 合并守卫 / 删看门狗 / 1.5→2.0 / 弱化四条件 / 删 early-return」均能红。
 - **未验证**：本轮未编译、未真机；WebKit 在真机后台被回收时的 `scenePhase` 时序、回前台首次加载失败是否仍误弹、看门狗 1.5s 后能否在同端口恢复，都必须 CI + 真机/模拟器验证。
+
+## 14. 实验课透传与备选图标（v1.5.2，2026-11-27，未编译验证）
+
+### 14.1 实验课原始 HTML 透传
+
+- **数据链**：`web/school-reader.js:88-98` 在考试之后读取实验课页面 `/jsxsd/syjx/toXskb.do`（同源固定地址，12s 超时），只抓原始 HTML，不在网页层解析；成功时带 `labHtml` + `labFetchedAt`，失败时带 `labError`（`session`/`http`/`format`/`timeout`/`other`）+ `labHttpStatus`，且失败时**不带** `labHtml`/`labFetchedAt`，保证课表与考试数据不被实验课失败连坐。
+- **iOS 透传**：`SchoolReadController.swift:630-656` 在 `payload` 初始组装之后、`persistSessionCookies()`/`finish(.success(payload))` 之前写入四个字段：
+  - `labHtml`、`labFetchedAt`：`optString` 后仅非空才写；
+  - `labError`：非空才写，复用考试的五类白名单 `examErrorKinds`，白名单外归 `other`；
+  - `labHttpStatus`：仅当 `result.hasKey("labHttpStatus")` 才写，用 `optInt(..., 0)`，**0 是合法状态码**（不能用“0 表示缺失”的写法）；
+  - 随后写 `web-read-lab bytes=<labHtml.utf8.count> error=<none|labError>` 日志，再持久化会话并回包。
+- **网页消费**：`web/jiaowu-lab.mjs` 优先用 `labs` 数组，其次用 `labHtml` 解析；解析成功替换同学期快照并记 `fetchedAt`，失败/带 `labError` 时保留旧数据并写 `error`/`lastAttempt`/`lastSkipped`。
+- **回归**：F8 的 allowedKeys 增加四个 lab 键，并逐项断言非空守卫、白名单、`hasKey` 语义、`web-read-lab` 日志与写入顺序；`ios/tests/v152-sync.test.mjs` 覆盖四字段透传与 payload 键集合，`exam-passthrough.test.mjs` 的未知键集合同步放行四个登记键。变异「删 `labHtml` 非空透传块」会让 F8 与 v152-sync 同时红。
+- **未验证**：v1.5.2 尚未编译、未真机、未用学校账号验证 `toXskb.do` 的实际返回与实验课页面渲染；本文件只说明原生透传边界。
+
+### 14.2 备选图标主题（AppIconWater）
+
+- **资产**：`ios/Jiangshui/Resources/Assets.xcassets/AppIconWater.appiconset/`，`Contents.json` 单张 `1024x1024` `universal`/`ios`，文件名 `AppIconWater-1024.png`；PNG 为 1024×1024、8-bit RGB、无 alpha，436,432 B，sha256 `011d8be062a2a6280d8c2ab86e0f70de88b361f62cc3040c764c8fff22ffcb0b`。默认图标仍是 `AppIcon`（`AppIcon-1024.png`）。
+- **工程设置**：`project.yml` 主 target 设 `ASSETCATALOG_COMPILER_APPICON_NAME=AppIcon` + `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES=AppIconWater`；`gen-pbxproj.mjs` 的 `targetShared` 同步，`widgetShared` 不带 alternate；重生成的 pbxproj 只在主 App Debug/Release 两个配置出现 alternate，Widget 两个配置没有。
+- **切换链路**：`ThemeControlling.applyIconTheme(_ value: String)` 声明在 `ServiceProtocols.swift`；`ThemeController.applyIconTheme` 把 `"water"` 映射为 `"AppIconWater"`、其它值映射为 `nil`，先比较 `UIApplication.shared.alternateIconName == desired` 再调 `setAlternateIconName`（主线程，失败写 `icon-theme apply failed` 日志）；`BridgeDispatcher` 的 `saveState` 在 `state.save` 成功后、回 `revision` 之前按 `state.iconTheme`（缺省 `whale`）应用；`AppEnvironment` 在 `UIApplication.didBecomeActiveNotification` 时只校准一次（`iconCalibrated` guard），从 `state.load()` 读 `iconTheme` 再应用。
+- **回归**：F15 校验资产字节、三处工程设置只落在主 App、协议声明、ThemeController 的比较/调用、saveState 顺序、AppEnvironment 监听与一次性校准；`ios/tests/v152-sync.test.mjs` 覆盖 PNG/工程/切换链路。变异「删 project.yml alternate」「删 saveState 应用」均会让 F15 与 v152-sync 红。
+- **未验证**：v1.5.2 尚未编译；`setAlternateIconName` 的系统确认、主屏图标实际切换、App 重启/回前台是否保持、Asset catalog 是否把 AppIconWater 编进 IPA，都必须 CI + 真机验证。

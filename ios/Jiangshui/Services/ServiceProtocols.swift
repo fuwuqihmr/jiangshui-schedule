@@ -79,6 +79,8 @@ public protocol ThemeControlling: AnyObject {
     func isSystemDark() -> Bool
     /// action setTheme；必须校验颜色是 #[0-9a-fA-F]{3} 或 #[0-9a-fA-F]{6}
     func apply(background: String, surface: String, preference: String, dark: Bool) throws -> JSONObject
+    /// 应用图标：water 切换到 AppIconWater，其它值恢复默认图标
+    func applyIconTheme(_ value: String)
     /// 启动时按已保存状态恢复窗口配色
     func restore()
 }

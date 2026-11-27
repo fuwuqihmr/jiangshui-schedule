@@ -20,6 +20,9 @@ final class ShellModel: ObservableObject {
     let school: SchoolProvider
     let services: NativeServices
     let host: WebHost
+    // 图标校准只做一次；通知观察者要在退出时移除，避免内存泄漏。
+    private var iconCalibrationObserver: NSObjectProtocol?
+    private var iconCalibrated = false
 
     /// 按顺序创建三个对象并接好线；这里不会失败，真正出错在各自服务内部。
     init() {
@@ -34,5 +37,29 @@ final class ShellModel: ObservableObject {
         // 服务装配完成后注册后台刷新并做一次提醒对账；此时通知权限可能还没查回来，
         // ClassReminderService 会先清理过期通知、保留现有 pending，等权限回调后再补排。
         BackgroundReminderScheduler.shared.configure(services: services)
+        // 与 Android MainActivity.onCreate 一致：按已保存课表校准桌面图标。
+        // setAlternateIconName 在 App 还没 active 时可能失败，所以等 didBecomeActive 再做，
+        // 且只做一次；applyIconTheme 会先比较当前图标，相同则直接返回。
+        iconCalibrationObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.calibrateIconTheme()
+        }
+    }
+
+    deinit {
+        if let observer = iconCalibrationObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
+    /// App 变为 active 后按已保存状态校准图标；只执行一次，避免每次回前台都读盘。
+    private func calibrateIconTheme() {
+        guard iconCalibrated == false else { return }
+        iconCalibrated = true
+        let saved = services.state.load()
+        services.theme.applyIconTheme(saved?.optString("iconTheme", "whale") ?? "whale")
     }
 }

@@ -2,7 +2,9 @@ import {studyDay} from './study.mjs';
 import {holidayForDate,isRestoredDate,emptyHolidaySettings} from './holiday-settings.mjs';
 import {customCourseDay,alignCustomCoursesToSemester} from './custom-courses.mjs';
 import {courseSettingKey} from './interactions.mjs';
-import {examDay,diffExamSnapshots} from './jiaowu-exam.mjs';import {cmp} from './sort.mjs';
+import {examDay,diffExamSnapshots} from './jiaowu-exam.mjs';
+import {labDay,diffLabSnapshots} from './jiaowu-lab.mjs';
+import {cmp} from './sort.mjs';
 export const FIELDS = ['name','teacher','room','startTime','endTime','periods','cancelled'];
 export const clone = x => JSON.parse(JSON.stringify(x));
 export function latestIso(a,b){const ta=Date.parse(String(a??'')),tb=Date.parse(String(b??''));if(!Number.isFinite(ta)&&!Number.isFinite(tb))return null;if(!Number.isFinite(ta))return new Date(tb).toISOString();if(!Number.isFinite(tb)||ta>=tb)return new Date(ta).toISOString();return new Date(tb).toISOString();}
@@ -39,6 +41,20 @@ export function sourceDay(s,date) {
   }
   for(const e of s.exceptions||[]) if(e.date===date) list=list.flatMap(r=>r.ruleId===e.ruleId ? e.cancel ? [] : [{...r,...clone(e.patch||{})}] : [r]);
   return list.sort((a,b)=>a.startTime<b.startTime?-1:a.startTime>b.startTime?1:a.key<b.key?-1:a.key>b.key?1:0);// D3：码元序 tie-break（与 Java AND-171 一致，locale 无关）
+}
+export function coursePriority(r) {
+  if(r?.exam===true) return 0;
+  if(r?.lab===true) return 1;
+  if(r?.localActivity||r?.customCourse||r?.source==='local'||r?.overrideId) return 3;
+  return 2;
+}
+// 同一开始时间：考试 → 实验 → 普通学校课 → 本机活动；之后才按 key 码元序。
+export function compareCourses(a,b) {
+  const byTime=cmp(a.startTime,b.startTime); if(byTime) return byTime;
+  // 既有 D3 约定（App 与 Java 小组件逐项同序）：普通学校课/本机活动同起始时间按 key。
+  // 为不破坏该基线，只在实验课参与的冲突中启用来源优先级；考试对实验仍按 exam 0 / lab 1。
+  if(a.lab===true||b.lab===true){const byPriority=coursePriority(a)-coursePriority(b); if(byPriority) return byPriority;}
+  return cmp(a.key,b.key);
 }
 export function effectiveDay(s,date,overrides=[],localMaps=[],courseSettings={},customCourses=[],holidaySettings=null) {
   // Manual rescheduling moves a day, including entries saved by older versions.
@@ -78,10 +94,14 @@ export function effectiveDay(s,date,overrides=[],localMaps=[],courseSettings={},
   // Exams are fixed-date school events. They are merged after local edits (never moved by
   // 调休/休假) and before the evening-study yield below, so a real exam pushes study aside.
   list.push(...examDay(s,date));
+  // 实验课是按周号的学校课：不被本机调课/单日修改移动，冲突时与普通课双卡并存；
+  // 停课/节假日按“课”取消（考试不取消），晚自习由下面的让位过滤处理。
+  const labCancelled=holidayCancelled||(closed&&!restored);
+  list.push(...labDay(s,date).map(r=>({...r,cancelled:labCancelled})));
   // A real school class takes precedence over the optional locally generated study.
   list=list.filter(r=>!r.localActivity||!list.some(q=>q.key!==r.key&&!q.localActivity&&!q.cancelled&&q.startTime<r.endTime&&q.endTime>r.startTime));
   for(const r of list) r.overlap=list.some(q=>q.key!==r.key&&!q.cancelled&&!r.cancelled&&q.startTime<r.endTime&&q.endTime>r.startTime);
-  return list.sort((a,b)=>a.startTime<b.startTime?-1:a.startTime>b.startTime?1:a.key<b.key?-1:a.key>b.key?1:0);// D3：码元序 tie-break（与 Java AND-171 一致，locale 无关）
+  return list.sort(compareCourses);// D3：同一开始时间先按来源优先级，再按 key 码元序 tie-break（locale 无关）
 }
 // Grey vacancies are display records only; they never become attended courses.
 export function timetableDay(s,date,overrides=[],localMaps=[],courseSettings={},customCourses=[],holidaySettings=null) {
@@ -94,7 +114,7 @@ export function timetableDay(s,date,overrides=[],localMaps=[],courseSettings={},
     if(list.some(q=>q.key===r.key||(!q.cancelled&&q.startTime<r.endTime&&q.endTime>r.startTime))) continue;
     list.push({...r,cancelled:true,vacant:true,vacancyReason:'moved',movedTo:moved.date});
   }
-  return list.sort((a,b)=>a.startTime<b.startTime?-1:a.startTime>b.startTime?1:a.key<b.key?-1:a.key>b.key?1:0);// D3：码元序 tie-break（与 Java AND-171 一致，locale 无关）
+  return list.sort(compareCourses);// 调休日与 effectiveDay 共用同一 comparator，保留实验课优先
 }
 export function semesterOccurrences(s) {
   const result=[];
@@ -140,7 +160,9 @@ export function applySnapshot(state,snapshot,now=new Date().toISOString()) {
   // (older native build / background path) must not erase the previous exam list;
   // a different semester always drops it (examDay re-checks the semester as a guard).
   if(snapshot.exams===undefined && state.snapshot?.exams && state.snapshot.semester?.id===snapshot.semester.id && state.snapshot.semester?.startDate===snapshot.semester.startDate) snapshot={...snapshot,exams:clone(state.snapshot.exams)};
-  const changes=[...diffExamSnapshots(state.snapshot?.exams,snapshot.exams,now),...diffSnapshots(state.snapshot,snapshot,now)].sort((a,b)=>cmp(a.date,b.date));
+  // Lab data has the same independent-source rule as exams: missing in an older payload does not erase it.
+  if(snapshot.labs===undefined && state.snapshot?.labs && state.snapshot.semester?.id===snapshot.semester.id && state.snapshot.semester?.startDate===snapshot.semester.startDate) snapshot={...snapshot,labs:clone(state.snapshot.labs)};
+  const changes=[...diffExamSnapshots(state.snapshot?.exams,snapshot.exams,now),...diffLabSnapshots(state.snapshot?.labs,snapshot.labs,now),...diffSnapshots(state.snapshot,snapshot,now)].sort((a,b)=>cmp(a.date,b.date));
   return {...state,snapshot:clone(snapshot),customCourses:alignCustomCoursesToSemester(state.customCourses,snapshot.semester),events:[...changes,...events],overrides,localMaps,holidaySettings,lastSuccess:now,courseLastSuccess:now,lastAttempt:now,error:null};
 }
 export function adoptSchoolSnapshot(state,snapshot,now=new Date().toISOString()) {
@@ -149,6 +171,7 @@ export function adoptSchoolSnapshot(state,snapshot,now=new Date().toISOString())
   if(!source.studentProfile && state.snapshot?.studentProfile) source.studentProfile=clone(state.snapshot.studentProfile);
   if(!source.studyPolicy && state.snapshot?.studyPolicy) source.studyPolicy=clone(state.snapshot.studyPolicy);
   if(source.exams===undefined && state.snapshot?.exams && state.snapshot.semester?.id===source.semester.id && state.snapshot.semester?.startDate===source.semester.startDate) source.exams=clone(state.snapshot.exams);
+  if(source.labs===undefined && state.snapshot?.labs && state.snapshot.semester?.id===source.semester.id && state.snapshot.semester?.startDate===source.semester.startDate) source.labs=clone(state.snapshot.labs);
   const next=createState(source), studySetting=state.courseSettings?.['local-evening-study'];
   if(studySetting) next.courseSettings['local-evening-study']=clone(studySetting);
   next.overrides=clone((state.overrides||[]).filter(o=>o.base?.customCourse));

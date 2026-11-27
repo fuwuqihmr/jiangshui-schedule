@@ -58,8 +58,8 @@ test('pbxproj：application target 的 Debug/Release 构建设置', () => {
   assert.equal(settings.length, 2);
   for (const value of settings) {
     assert.equal(value.PRODUCT_BUNDLE_IDENTIFIER, 'cn.local.tomorrow');
-    assert.equal(value.MARKETING_VERSION, '1.5.0');
-    assert.equal(String(value.CURRENT_PROJECT_VERSION), '64');
+    assert.equal(value.MARKETING_VERSION, '1.5.2');
+    assert.equal(String(value.CURRENT_PROJECT_VERSION), '69');
     assert.equal(value.IPHONEOS_DEPLOYMENT_TARGET, '15.0');
     assert.equal(value.INFOPLIST_FILE, 'Jiangshui/Resources/Info.plist');
     assert.equal(value.GENERATE_INFOPLIST_FILE, 'NO');

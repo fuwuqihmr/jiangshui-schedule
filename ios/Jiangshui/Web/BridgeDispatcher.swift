@@ -85,12 +85,11 @@ final class BridgeDispatcher: BridgeDispatching {
                 reply(id, NSNull())
             }
         case "saveState":
-            guard let state = payload["state"] as? JSONObject else {
-                transport.replyFailure(id, message: "操作失败")
-                return
-            }
+            guard let state = payload["state"] as? JSONObject else { transport.replyFailure(id, message: "操作失败"); return }
             do {
                 let revision = try services.state.save(state, expectedRevision: int64(payload["expectedRevision"], fallback: -1))
+                // 与 Android MainActivity.java:1015 一致：payload 带 iconTheme 才切换，失败不影响保存。
+                if state.hasKey("iconTheme") { services.theme.applyIconTheme(state.optString("iconTheme", "whale")) }
                 reply(id, ["revision": revision])
             } catch {
                 fail(id, error)

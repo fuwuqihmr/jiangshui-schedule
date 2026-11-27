@@ -15,6 +15,8 @@ final class ThemeController: ThemeControlling {
     private var pendingBackground: UIColor?
     private var pendingSurface: UIColor?
     private var pendingDark: Bool?
+    /// 桌面图标切换失败时写诊断日志；由 NativeServices 接到 StateStore.log。
+    var log: ((String) -> Void)?
 
     /// 判断系统当前是不是深色模式；这里看屏幕的真实外观，不受 App 自己覆盖的影响。
     func isSystemDark() -> Bool {
@@ -41,6 +43,21 @@ final class ThemeController: ThemeControlling {
             self.applyToWindow(background: background_color, surface: surface_color, style: style)
         }
         return ["ok": true]
+    }
+
+    /// 切换桌面图标：water → AppIconWater，其它值 → 默认图标。
+    /// 只在目标与当前不同时调用系统 API，避免每次启动都重复设置/弹系统提示。
+    func applyIconTheme(_ value: String) {
+        let desired: String? = value == "water" ? "AppIconWater" : nil
+        DispatchQueue.main.async { [weak self] in
+            // 系统图标 API 只在主线程调用；目标与当前一致时不重复设置，避免多余的系统提示。
+            if UIApplication.shared.alternateIconName == desired { return }
+            UIApplication.shared.setAlternateIconName(desired, completionHandler: { error in
+                guard let error = error else { return }
+                // 失败不抛给网页，也不阻断课表保存/启动；写一行诊断日志方便排查。
+                self?.log?("icon-theme apply failed " + error.localizedDescription)
+            })
+        }
     }
 
     /// 注销或退出时恢复系统默认外观：清掉覆盖样式、背景色和根视图背景。

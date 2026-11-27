@@ -31,7 +31,7 @@ Swift 代码（`ios/Jiangshui/` 里的 .swift 文件）不画界面，它只做�
 | `ios/Jiangshui/School/` | 「学校专线」：登录学校、抄课表、请假、定位。这是整个 App 最复杂的部分。 |
 | `ios/Jiangshui/Resources/` | 不是代码的东西：图标、启动配置（Info.plist）、隐私声明。 |
 | `ios/tools/` | 检查工具：自动生成 Xcode 工程文件、自动检查代码有没有违规。 |
-| `ios/tests/` | 自动测试：83 个小检查，改完代码跑一遍就知道有没有弄坏东西。 |
+| `ios/tests/` | 自动测试：88 个小检查，改完代码跑一遍就知道有没有弄坏东西。 |
 | `ios/docs/` | 各种文档（构建记录、审计报告、路线图）。本文就是其中之一。 |
 | `web/` | **两端共用**的界面层：页面长什么样、按钮点了做什么。 |
 | `android/` | 安卓版的原生代码，改动 iOS 时一般不用碰，但可以作为「参考答案」。 |
@@ -113,7 +113,7 @@ Swift 代码（`ios/Jiangshui/` 里的 .swift 文件）不画界面，它只做�
 | 文件 | 干什么的 |
 | --- | --- |
 | `JiangshuiApp.swift` | App 的入口，程序从这里开始跑；同时注册上课提醒的 BGAppRefreshTask。 |
-| `AppEnvironment.swift` | 把各种服务组装好，统一交给界面用；启动时做一次提醒对账。 |
+| `AppEnvironment.swift` | 把各种服务组装好，统一交给界面用；启动时做一次提醒对账；回前台时按保存的 `iconTheme` 只校准一次备选图标。 |
 | `RootView.swift` | 主界面：网页 + 顶部白条 + 出错提示卡片（显示 `serverErrorTitle`，带「重试」按钮）；前后台切换时补做提醒对账。 |
 | `NotificationPresenter.swift` | App 在前台时，通知也照样弹出来（系统默认是不弹的）。 |
 
@@ -147,7 +147,7 @@ Swift 代码（`ios/Jiangshui/` 里的 .swift 文件）不画界面，它只做�
 | `DiagnosticsService.swift` | 收集排查信息，导出成文本。 |
 | `FileExchangeService.swift` | 导入/导出课表快照等文件。 |
 | `LogoutController.swift` | 注销：清数据、清凭证、清 WebView。 |
-| `ThemeController.swift` | 深浅色主题与页面背景色的同步。 |
+| `ThemeController.swift` | 深浅色主题与页面背景色的同步；`applyIconTheme` 按 `water`/其它值切换 `AppIconWater` 或默认图标。 |
 | `JSONCompat.swift` | 网页传来的数据类型和 Swift 对不上，这里统一转换。 |
 
 ### School/ —— 学校专线（最复杂的部分）
@@ -155,7 +155,7 @@ Swift 代码（`ios/Jiangshui/` 里的 .swift 文件）不画界面，它只做�
 | 文件 | 干什么的 |
 | --- | --- |
 | `SchoolProvider.swift` | 学校功能的总调度：网页点按钮最后都落到这里。 |
-| `SchoolReadController.swift` | 「自动抄课表」的流程控制器（四阶段状态机）；登录等待用 6s 呈现窗口 + 180s 前台倒计时，退后台暂停、回前台续时，落到 `xskb` 先 `leaveLogin()` 再进读取守卫。 |
+| `SchoolReadController.swift` | 「自动抄课表」的流程控制器（四阶段状态机）；登录等待用 6s 呈现窗口 + 180s 前台倒计时，退后台暂停、回前台续时，落到 `xskb` 先 `leaveLogin()` 再进读取守卫；`handleReadResult` 透传考试三字段与实验课四字段。 |
 | `SchoolWebViewHost.swift` | 藏在 App 里的第二个浏览器（可见/无头两种模式）。 |
 | `SchoolLeaveSessionController.swift` | 请假页面的流程控制（五个等待关卡）。 |
 | `LeaveRecordsService.swift` | 请假记录的读取与参数记忆。 |
@@ -179,7 +179,7 @@ Swift 代码（`ios/Jiangshui/` 里的 .swift 文件）不画界面，它只做�
 ## 8. 想改代码，先记住这 6 条规矩
 
 1. **`web/` 是和安卓共用的**。改它等于同时改两端，必须把两端测试都跑过；而且它被 `ios/tools/shared-layer-manifest.json` 逐文件锁着（E1/E2 比对 git 规范化 blob），合法升级后用 `node ios/tools/check-ios.mjs --write-shared-manifest` 重新登记。
-2. **改完 Swift 必须跑两条命令**：`node ios/tools/check-ios.mjs`（50 项静态检查）和 `cd ios && node --test ios/tests/`（83 项测试）。
+2. **改完 Swift 必须跑两条命令**：`node ios/tools/check-ios.mjs`（51 项静态检查）和 `cd ios && node --test ios/tests/`（88 项测试）。
 3. **这台 Windows 电脑编不了 iOS**。Swift 只能靠 GitHub Actions 的 Mac 编译，所以改完要推上去看流水线。
 4. **注释也算代码**：本仓库的注释要求「先讲人话，再讲术语」。
 5. **提交要一次推一条**：流水线开了「新提交取消旧运行」，连着推会把正在跑的那次取消掉。
