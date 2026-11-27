@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'cn.local.tomorrow'
     compileSdk 35
-    defaultConfig { applicationId 'cn.local.tomorrow'; minSdk 26; targetSdk 35; versionCode 70; versionName '1.6.0-rc1' }
+    defaultConfig { applicationId 'cn.local.tomorrow'; minSdk 26; targetSdk 35; versionCode 71; versionName '1.6.0' }
     sourceSets { main { assets.srcDirs = ['../../web'] } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
